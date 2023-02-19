@@ -1,0 +1,12 @@
+#filetype: yaml
+
+Diagnostics:
+  UnusedIncludes: Strict
+
+Hover:
+  ShowAKA: Yes
+
+InlayHints:
+  Enabled: No
+  ParameterNames: No
+  DeducedTypes: No

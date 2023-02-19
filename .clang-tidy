@@ -1,0 +1,15 @@
+#filetype: yaml
+
+# https://clang.llvm.org/extra/clang-tidy/
+
+# add checks to disable here
+Checks:     '*,-hicpp-uppercase-literal-suffix,-readability-uppercase-literal-suffix,
+            -fuchsia-*,-google-*,-zircon-*,-abseil-*,-modernize-use-trailing-return-type,-llvm-*,
+            -cppcoreguidelines-avoid-magic-numbers,-readability-magic-numbers,-hicpp-braces-around-statements,
+            -readability-braces-around-statements,-cppcoreguidelines-owning-memory,-llvmlibc*,-cppcoreguidelines-pro-type-vararg,
+            -hicpp-vararg,-cppcoreguidelines-pro-bounds-constant-array-index, -altera-unroll-loops,
+            -cppcoreguidelines-pro-type-reinterpret-cast,-altera-*,-bugprone-easily-swappable-parameters,
+            -readability-avoid-const-params-in-decls,-*-non-private-member-variables-in-classes,-*-pro-type-union-access'
+WarningsAsErrors: ''
+HeaderFilterRegex: '*'
+FormatStyle:     none

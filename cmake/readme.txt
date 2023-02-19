@@ -1,0 +1,1 @@
+not really robust, only handles basic cases no header only only libraries etc etc
