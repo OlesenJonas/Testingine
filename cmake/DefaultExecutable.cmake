@@ -15,9 +15,4 @@ add_compile_definitions(EXECUTABLE_NAME="${FOLDER_VAR}")
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} ${LIBS})
 
-IF(CMAKE_BUILD_TYPE MATCHES Release)
-	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD  
-		COMMAND ${CMAKE_COMMAND} -E copy_directory 		
-		"${CMAKE_SOURCE_DIR}/misc/"     
-		"$<TARGET_FILE_DIR:${PROJECT_NAME}>/misc/")
-ENDIF()
+add_dependencies(${PROJECT_NAME} Shaders)

@@ -333,8 +333,8 @@ class HelloTriangleApplication
 
     void createGraphicsPipeline()
     {
-        auto vertShaderCode = readBinaryFile("shaders/shaderVert.spv");
-        auto fragShaderCode = readBinaryFile("shaders/shaderFrag.spv");
+        auto vertShaderCode = readBinaryFile("../shaders/shader.vert.spirv");
+        auto fragShaderCode = readBinaryFile("../shaders/shader.frag.spirv");
 
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
