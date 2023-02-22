@@ -80,9 +80,9 @@ class HelloTriangleApplication
     GLFWwindow* window = nullptr;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
-    VkSurfaceKHR surface;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device;
+    VkSurfaceKHR surface;
     VkQueue graphicsQueue;
     VkQueue presentQueue;
     VkSwapchainKHR swapChain;
