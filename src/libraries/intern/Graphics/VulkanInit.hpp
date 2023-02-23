@@ -4,6 +4,8 @@
 #include <vulkan/vulkan.h>
 
 #include "Datastructures/Span.hpp"
+
+#include <optional>
 #include <vector>
 
 VkInstance createInstance(bool enableValidationLayers, Span<const char* const> validationLayers);

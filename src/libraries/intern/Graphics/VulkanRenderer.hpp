@@ -32,10 +32,21 @@ class VulkanRenderer
 #endif
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
+
+    VkSurfaceKHR surface;
+
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device;
-    VkSurfaceKHR surface;
+    QueueFamilyIndices queueFamilyIndices;
+
+    VkSwapchainKHR swapchain;
+    // On high-dpi monitors, swapChainExtent is not necessarily window extent!
+    VkExtent2D swapchainExtent{1700, 900};
+    VkFormat swapchainImageFormat;
+    std::vector<VkImage> swapchainImages;
+    std::vector<VkImageView> swapchainImageViews;
 
   private:
     void initVulkan();
+    void initSwapchain();
 };

@@ -9,7 +9,6 @@
 #include <iostream>
 #include <stdexcept>
 #include <vector>
-#include <vulkan/vulkan_core.h>
 
 VkInstance createInstance(bool enableValidationLayers, Span<const char* const> validationLayers)
 {
