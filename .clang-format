@@ -1,8 +1,9 @@
+---
 # sorted alphabetically
 AlignAfterOpenBracket: AlwaysBreak
 AllowAllParametersOfDeclarationOnNextLine: true
 AllowShortFunctionsOnASingleLine: None
-AllowShortLambdasOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: Inline
 AlwaysBreakTemplateDeclarations: 'Yes'
 BinPackArguments: false
 BinPackParameters: false
@@ -25,8 +26,8 @@ IndentPPDirectives: BeforeHash
 IndentRequiresClause: true
 IndentWidth: 4
 NamespaceIndentation: All
-PackConstructorInitializers: NextLine
 PPIndentWidth: -1
+PackConstructorInitializers: NextLine
 PointerAlignment: Left
 RequiresClausePosition: OwnLine
 SortIncludes: true

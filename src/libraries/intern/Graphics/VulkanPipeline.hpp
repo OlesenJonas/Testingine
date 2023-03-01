@@ -17,6 +17,8 @@ struct VulkanPipeline
         const Span<const ShaderStage> shaderStages;
         VkPrimitiveTopology topology;
         VkPolygonMode polygonMode;
+        // TODO: use dynamic state for viewport and scissor, dont bake into pipeline!
+        //       see HelloTriangleApplication
         VkViewport viewport;
         VkRect2D scissor;
         VkPipelineLayout pipelineLayout;

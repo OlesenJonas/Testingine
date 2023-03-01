@@ -3,6 +3,8 @@
 #include "VulkanTypes.hpp"
 #include <vulkan/vulkan_core.h>
 
+#include <intern/Datastructures/FunctionQueue.hpp>
+
 struct GLFWwindow;
 
 class VulkanRenderer
@@ -14,7 +16,7 @@ class VulkanRenderer
     // shuts down the engine
     void cleanup();
 
-    // draw loop
+    // draw function
     void draw();
 
     // run main loop
@@ -64,6 +66,8 @@ class VulkanRenderer
     // Dont like this being here, would fit better in VulkanPipeline I guess
     VkPipelineLayout trianglePipelineLayout;
     VkPipeline trianglePipeline;
+
+    FunctionQueue<> deleteQueue;
 
   private:
     void initVulkan();

@@ -88,6 +88,8 @@ void VulkanRenderer::initSwapchain()
     swapchainImageFormat = swapchainSetup.getSwapchainImageFormat();
     swapchainImages = swapchainSetup.getSwapchainImages();
     swapchainImageViews = swapchainSetup.createSwapchainImageViews();
+
+    deleteQueue.pushBack([=]() { vkDestroySwapchainKHR(device, swapchain, nullptr); });
 }
 
 void VulkanRenderer::initCommands()
@@ -112,6 +114,8 @@ void VulkanRenderer::initCommands()
     };
 
     assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &mainCommandBuffer));
+
+    deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, commandPool, nullptr); });
 }
 
 void VulkanRenderer::initDefaultRenderpass()
@@ -151,6 +155,8 @@ void VulkanRenderer::initDefaultRenderpass()
     };
 
     assertVkResult(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
+
+    deleteQueue.pushBack([=]() { vkDestroyRenderPass(device, renderPass, nullptr); });
 }
 
 void VulkanRenderer::initFramebuffers()
@@ -173,6 +179,13 @@ void VulkanRenderer::initFramebuffers()
     {
         fbInfo.pAttachments = &swapchainImageViews[i];
         assertVkResult(vkCreateFramebuffer(device, &fbInfo, nullptr, &framebuffers[i]));
+
+        deleteQueue.pushBack(
+            [=]()
+            {
+                vkDestroyFramebuffer(device, framebuffers[i], nullptr);
+                vkDestroyImageView(device, swapchainImageViews[i], nullptr);
+            });
     }
 }
 
@@ -187,6 +200,8 @@ void VulkanRenderer::initSyncStructures()
 
     assertVkResult(vkCreateFence(device, &fenceCreateInfo, nullptr, &renderFence));
 
+    deleteQueue.pushBack([=]() { vkDestroyFence(device, renderFence, nullptr); });
+
     VkSemaphoreCreateInfo semaphoreCreateInfo{
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         .pNext = nullptr,
@@ -195,6 +210,13 @@ void VulkanRenderer::initSyncStructures()
 
     assertVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &presentSemaphore));
     assertVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderSemaphore));
+
+    deleteQueue.pushBack(
+        [=]()
+        {
+            vkDestroySemaphore(device, presentSemaphore, nullptr);
+            vkDestroySemaphore(device, renderSemaphore, nullptr);
+        });
 }
 
 void VulkanRenderer::initPipelines()
@@ -242,6 +264,18 @@ void VulkanRenderer::initPipelines()
     }};
 
     trianglePipeline = trianglePipelineWrapper.createPipeline(device, renderPass);
+
+    // Destroy these here already. (dont like though since VulkanPipeline object still exists and references
+    // these!!, so could cause trouble in future when Pipeline needs to get recreated or something)
+    vkDestroyShaderModule(device, triangleFragShader, nullptr);
+    vkDestroyShaderModule(device, triangleVertShader, nullptr);
+
+    deleteQueue.pushBack(
+        [=]()
+        {
+            vkDestroyPipeline(device, trianglePipeline, nullptr);
+            vkDestroyPipelineLayout(device, trianglePipelineLayout, nullptr);
+        });
 }
 
 void VulkanRenderer::cleanup()
@@ -249,27 +283,14 @@ void VulkanRenderer::cleanup()
     if(!isInitialized)
         return;
 
-    vkDestroyCommandPool(device, commandPool, nullptr);
-
-    vkDestroySwapchainKHR(device, swapchain, nullptr);
-
-    vkDestroyRenderPass(device, renderPass, nullptr);
-
-    for(int i = 0; i < swapchainImageViews.size(); i++)
-    {
-        vkDestroyFramebuffer(device, framebuffers[i], nullptr);
-        vkDestroyImageView(device, swapchainImageViews[i], nullptr);
-    }
+    deleteQueue.flushReverse();
 
     vkDestroyDevice(device, nullptr);
-
+    vkDestroySurfaceKHR(instance, surface, nullptr);
     if(enableValidationLayers)
     {
         DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
     }
-
-    vkDestroySurfaceKHR(instance, surface, nullptr);
-
     vkDestroyInstance(instance, nullptr);
 
     glfwDestroyWindow(window);
