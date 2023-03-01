@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VulkanTypes.hpp"
+#include <vulkan/vulkan_core.h>
 
 struct GLFWwindow;
 
@@ -41,12 +42,37 @@ class VulkanRenderer
 
     VkSwapchainKHR swapchain;
     // On high-dpi monitors, swapChainExtent is not necessarily window extent!
-    VkExtent2D swapchainExtent{1700, 900};
+    VkExtent2D swapchainExtent;
     VkFormat swapchainImageFormat;
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;
 
+    VkRenderPass renderPass;
+    std::vector<VkFramebuffer> framebuffers;
+
+    VkQueue graphicsQueue;
+    uint32_t graphicsQueueFamily;
+
+    VkCommandPool commandPool;
+    VkCommandBuffer mainCommandBuffer;
+
+    // todo: rename to imageAvailable and renderFinished, think those names are clearer
+    VkSemaphore presentSemaphore;
+    VkSemaphore renderSemaphore;
+    VkFence renderFence;
+
+    // Dont like this being here, would fit better in VulkanPipeline I guess
+    VkPipelineLayout trianglePipelineLayout;
+    VkPipeline trianglePipeline;
+
   private:
     void initVulkan();
     void initSwapchain();
+    void initCommands();
+    void initDefaultRenderpass();
+    void initFramebuffers();
+    void initSyncStructures();
+    void initPipelines();
+
+    bool loadShaderModule(const char* filePath, VkShaderModule* outShaderModule);
 };

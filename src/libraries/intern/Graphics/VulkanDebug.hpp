@@ -2,6 +2,13 @@
 
 #include <vulkan/vulkan.h>
 
+#ifdef NDEBUG
+    #define assertVkResult(x) x
+#else
+    #include <cassert>
+    #define assertVkResult(x) assert(x == VK_SUCCESS);
+#endif
+
 VkDebugUtilsMessengerCreateInfoEXT createDefaultDebugUtilsMessengerCreateInfo();
 
 VKAPI_ATTR VkBool32 VKAPI_CALL defaultDebugCallback(
