@@ -4,6 +4,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <VMA/VMA.hpp>
+
 #include <optional>
 #include <vector>
 
@@ -23,4 +25,10 @@ struct QueueFamilyIndices
     {
         return graphicsFamily.has_value() && presentFamily.has_value();
     }
+};
+
+struct AllocatedBuffer
+{
+    VkBuffer buffer;
+    VmaAllocation allocation;
 };

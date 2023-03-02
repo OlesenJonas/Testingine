@@ -1,7 +1,11 @@
 #pragma once
 
-#include "VulkanTypes.hpp"
 #include <vulkan/vulkan_core.h>
+
+#include <VMA/VMA.hpp>
+
+#include "Mesh.hpp"
+#include "VulkanTypes.hpp"
 
 #include <intern/Datastructures/FunctionQueue.hpp>
 
@@ -69,6 +73,11 @@ class VulkanRenderer
 
     FunctionQueue<> deleteQueue;
 
+    VmaAllocator allocator;
+
+    VkPipeline meshPipeline;
+    Mesh triangleMesh;
+
   private:
     void initVulkan();
     void initSwapchain();
@@ -77,6 +86,9 @@ class VulkanRenderer
     void initFramebuffers();
     void initSyncStructures();
     void initPipelines();
+
+    void loadMeshes();
+    void uploadMesh(Mesh& mesh);
 
     bool loadShaderModule(const char* filePath, VkShaderModule* outShaderModule);
 };

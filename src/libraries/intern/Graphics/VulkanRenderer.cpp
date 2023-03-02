@@ -1,5 +1,5 @@
 #include "VulkanRenderer.hpp"
-#include "Graphics/VulkanDebug.hpp"
+#include "Mesh.hpp"
 #include "VulkanDebug.hpp"
 #include "VulkanDeviceFinder.hpp"
 #include "VulkanInit.hpp"
@@ -40,6 +40,8 @@ void VulkanRenderer::init()
 
     initPipelines();
 
+    loadMeshes();
+
     // everything went fine
     isInitialized = true;
 }
@@ -76,6 +78,13 @@ void VulkanRenderer::initVulkan()
 
     vkGetDeviceQueue(device, graphicsQueueFamily, 0, &graphicsQueue);
     // vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
+
+    VmaAllocatorCreateInfo vmaAllocatorCrInfo{
+        .physicalDevice = physicalDevice,
+        .device = device,
+        .instance = instance,
+    };
+    vmaCreateAllocator(&vmaAllocatorCrInfo, &allocator);
 }
 
 void VulkanRenderer::initSwapchain()
@@ -221,17 +230,6 @@ void VulkanRenderer::initSyncStructures()
 
 void VulkanRenderer::initPipelines()
 {
-    VkShaderModule triangleVertShader;
-    if(!loadShaderModule("../shaders/shader.vert.spirv", &triangleVertShader))
-    {
-        std::cout << "Error when building the triangle vertex shader module" << std::endl;
-    }
-    VkShaderModule triangleFragShader;
-    if(!loadShaderModule("../shaders/shader.frag.spirv", &triangleFragShader))
-    {
-        std::cout << "Error when building the triangle fragment shader module" << std::endl;
-    }
-
     VkPipelineLayoutCreateInfo pipelineLayoutCrInfo{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pNext = nullptr,
@@ -243,6 +241,17 @@ void VulkanRenderer::initPipelines()
         .pPushConstantRanges = nullptr,
     };
     assertVkResult(vkCreatePipelineLayout(device, &pipelineLayoutCrInfo, nullptr, &trianglePipelineLayout));
+
+    VkShaderModule triangleVertShader;
+    if(!loadShaderModule("../shaders/colored_tri.vert.spirv", &triangleVertShader))
+    {
+        std::cout << "Error when building the triangle vertex shader module" << std::endl;
+    }
+    VkShaderModule triangleFragShader;
+    if(!loadShaderModule("../shaders/colored_tri.frag.spirv", &triangleFragShader))
+    {
+        std::cout << "Error when building the triangle fragment shader module" << std::endl;
+    }
 
     VulkanPipeline trianglePipelineWrapper{VulkanPipeline::CreateInfo{
         .shaderStages =
@@ -265,15 +274,53 @@ void VulkanRenderer::initPipelines()
 
     trianglePipeline = trianglePipelineWrapper.createPipeline(device, renderPass);
 
+    // Mesh Pipeline
+    VkShaderModule meshTriVertShader;
+    if(!loadShaderModule("../shaders/tri_mesh.vert.spirv", &meshTriVertShader))
+    {
+        std::cout << "Error when building the triangle vertex shader module" << std::endl;
+    }
+
+    VertexInputDescription vertexDescription = Vertex::getVertexDescription();
+
+    VulkanPipeline meshPipelineWrapper{VulkanPipeline::CreateInfo{
+        .shaderStages =
+            {{.stage = VK_SHADER_STAGE_VERTEX_BIT, .module = meshTriVertShader},
+             {.stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = triangleFragShader}},
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .viewport =
+            {
+                .x = 0.0f,
+                .y = 0.0f,
+                .width = (float)swapchainExtent.width,
+                .height = (float)swapchainExtent.height,
+                .minDepth = 0.0f,
+                .maxDepth = 1.0f,
+            },
+        .scissor = {.offset = {0, 0}, .extent = swapchainExtent},
+        .pipelineLayout = trianglePipelineLayout,
+    }};
+    // TODO: add a nice wrapper for this to pipeline constructor!
+    meshPipelineWrapper.vertexInputStateCrInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
+    meshPipelineWrapper.vertexInputStateCrInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
+    meshPipelineWrapper.vertexInputStateCrInfo.vertexAttributeDescriptionCount =
+        vertexDescription.attributes.size();
+    meshPipelineWrapper.vertexInputStateCrInfo.pVertexAttributeDescriptions = vertexDescription.attributes.data();
+
+    meshPipeline = meshPipelineWrapper.createPipeline(device, renderPass);
+
     // Destroy these here already. (dont like though since VulkanPipeline object still exists and references
     // these!!, so could cause trouble in future when Pipeline needs to get recreated or something)
     vkDestroyShaderModule(device, triangleFragShader, nullptr);
     vkDestroyShaderModule(device, triangleVertShader, nullptr);
+    vkDestroyShaderModule(device, meshTriVertShader, nullptr);
 
     deleteQueue.pushBack(
         [=]()
         {
             vkDestroyPipeline(device, trianglePipeline, nullptr);
+            vkDestroyPipeline(device, meshPipeline, nullptr);
             vkDestroyPipelineLayout(device, trianglePipelineLayout, nullptr);
         });
 }
@@ -284,6 +331,8 @@ void VulkanRenderer::cleanup()
         return;
 
     deleteQueue.flushReverse();
+
+    vmaDestroyAllocator(allocator);
 
     vkDestroyDevice(device, nullptr);
     vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -349,8 +398,12 @@ void VulkanRenderer::draw()
 
     vkCmdBeginRenderPass(mainCommandBuffer, &renderpassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    vkCmdBindPipeline(mainCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
-    vkCmdDraw(mainCommandBuffer, 3, 1, 0, 0);
+    vkCmdBindPipeline(mainCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipeline);
+
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(mainCommandBuffer, 0, 1, &triangleMesh.vertexBuffer.buffer, &offset);
+
+    vkCmdDraw(mainCommandBuffer, triangleMesh.vertices.size(), 1, 0, 0);
 
     vkCmdEndRenderPass(mainCommandBuffer);
 
@@ -426,4 +479,56 @@ bool VulkanRenderer::loadShaderModule(const char* filePath, VkShaderModule* outS
     *outShaderModule = shaderModule;
 
     return true;
+}
+
+void VulkanRenderer::loadMeshes()
+{
+    triangleMesh.vertices.resize(3);
+
+    triangleMesh.vertices[0].position = {1.f, 1.f, 0.0f};
+    triangleMesh.vertices[1].position = {-1.f, 1.f, 0.0f};
+    triangleMesh.vertices[2].position = {0.f, -1.f, 0.0f};
+
+    triangleMesh.vertices[0].color = {0.0f, 1.0f, 0.0f};
+    triangleMesh.vertices[1].color = {0.0f, 1.0f, 0.0f};
+    triangleMesh.vertices[2].color = {0.0f, 1.0f, 0.0f};
+
+    // normals...
+
+    uploadMesh(triangleMesh);
+}
+
+void VulkanRenderer::uploadMesh(Mesh& mesh)
+{
+    VkBufferCreateInfo bufferCrInfo{
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = mesh.vertices.size() * sizeof(Vertex),
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    };
+
+    // todo: switch to correct usage of Auto + correct bitflags!
+    // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/quick_start.html#quick_start_resource_allocation:~:text=(%26allocatorCreateInfo%2C%20%26allocator)%3B-,Resource%20allocation,-When%20you%20want
+    // Flags parameter:
+    // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/group__group__alloc.html#gad9889c10c798b040d59c92f257cae597
+    // Usage parameter:
+    // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/group__group__alloc.html#gaa5846affa1e9da3800e3e78fae2305cc
+    VmaAllocationCreateInfo vmaallocCrInfo{
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+    };
+
+    assertVkResult(vmaCreateBuffer(
+        allocator,
+        &bufferCrInfo,
+        &vmaallocCrInfo,
+        &mesh.vertexBuffer.buffer,
+        &mesh.vertexBuffer.allocation,
+        nullptr));
+
+    deleteQueue.pushBack([=]()
+                         { vmaDestroyBuffer(allocator, mesh.vertexBuffer.buffer, mesh.vertexBuffer.allocation); });
+
+    void* data = nullptr;
+    vmaMapMemory(allocator, mesh.vertexBuffer.allocation, &data);
+    memcpy(data, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
+    vmaUnmapMemory(allocator, mesh.vertexBuffer.allocation);
 }
