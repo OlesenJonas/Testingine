@@ -1,4 +1,5 @@
 #include "VulkanRenderer.hpp"
+#include "Graphics/VulkanRenderer.hpp"
 #include "Mesh.hpp"
 #include "VulkanDebug.hpp"
 #include "VulkanDeviceFinder.hpp"
@@ -10,11 +11,15 @@
 #include "Datastructures/Span.hpp"
 
 #include <fstream>
+#include <glm/trigonometric.hpp>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
 #include <GLFW/glfw3.h>
+#include <glm/gtc/matrix_access.hpp>
+#include <glm/gtx/string_cast.hpp>
+#include <glm/gtx/transform.hpp>
 #include <vulkan/vulkan_core.h>
 
 void VulkanRenderer::init()
@@ -281,6 +286,23 @@ void VulkanRenderer::initPipelines()
         std::cout << "Error when building the triangle vertex shader module" << std::endl;
     }
 
+    VkPushConstantRange pushConstantRange{
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0,
+        .size = sizeof(MeshPushConstants),
+    };
+    VkPipelineLayoutCreateInfo meshPipelineLayoutCrInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
+
+        .flags = 0,
+        .setLayoutCount = 0,
+        .pSetLayouts = nullptr,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pushConstantRange,
+    };
+    assertVkResult(vkCreatePipelineLayout(device, &meshPipelineLayoutCrInfo, nullptr, &meshPipelineLayout));
+
     VertexInputDescription vertexDescription = Vertex::getVertexDescription();
 
     VulkanPipeline meshPipelineWrapper{VulkanPipeline::CreateInfo{
@@ -299,7 +321,7 @@ void VulkanRenderer::initPipelines()
                 .maxDepth = 1.0f,
             },
         .scissor = {.offset = {0, 0}, .extent = swapchainExtent},
-        .pipelineLayout = trianglePipelineLayout,
+        .pipelineLayout = meshPipelineLayout,
     }};
     // TODO: add a nice wrapper for this to pipeline constructor!
     meshPipelineWrapper.vertexInputStateCrInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
@@ -322,6 +344,7 @@ void VulkanRenderer::initPipelines()
             vkDestroyPipeline(device, trianglePipeline, nullptr);
             vkDestroyPipeline(device, meshPipeline, nullptr);
             vkDestroyPipelineLayout(device, trianglePipelineLayout, nullptr);
+            vkDestroyPipelineLayout(device, meshPipelineLayout, nullptr);
         });
 }
 
@@ -402,6 +425,26 @@ void VulkanRenderer::draw()
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(mainCommandBuffer, 0, 1, &triangleMesh.vertexBuffer.buffer, &offset);
+
+    glm::vec3 camPos{0.f, 0.f, -2.0f};
+    // glm::mat4 view = glm::translate(glm::mat4(1.0f), camPos);
+    glm::mat4 view = glm::lookAt(camPos, glm::vec3{0, 0, 0}, glm::vec3{0, 1, 0});
+    glm::mat4 projection =
+        glm::perspective(glm::radians(70.0f), float(windowExtent.width) / windowExtent.height, 0.1f, 200.0f);
+    projection[1][1] *= -1;
+    glm::mat4 model = glm::rotate(glm::radians(frameNumber * 0.114f), glm::vec3{0, 1, 0});
+    glm::mat4 transformMatrix = projection * view * model;
+
+    MeshPushConstants constants;
+    constants.transformMatrix = transformMatrix;
+
+    vkCmdPushConstants(
+        mainCommandBuffer,
+        meshPipelineLayout,
+        VK_SHADER_STAGE_VERTEX_BIT,
+        0,
+        sizeof(MeshPushConstants),
+        &constants);
 
     vkCmdDraw(mainCommandBuffer, triangleMesh.vertices.size(), 1, 0, 0);
 

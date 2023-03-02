@@ -1,8 +1,9 @@
 #pragma once
 
+#include <VMA/VMA.hpp>
 #include <vulkan/vulkan_core.h>
 
-#include <VMA/VMA.hpp>
+#include <glm/glm.hpp>
 
 #include "Mesh.hpp"
 #include "VulkanTypes.hpp"
@@ -10,6 +11,13 @@
 #include <intern/Datastructures/FunctionQueue.hpp>
 
 struct GLFWwindow;
+
+// TODO: dont like this being here
+struct MeshPushConstants
+{
+    glm::vec4 data;
+    glm::mat4 transformMatrix;
+};
 
 class VulkanRenderer
 {
@@ -75,6 +83,7 @@ class VulkanRenderer
 
     VmaAllocator allocator;
 
+    VkPipelineLayout meshPipelineLayout;
     VkPipeline meshPipeline;
     Mesh triangleMesh;
 
