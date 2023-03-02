@@ -424,7 +424,8 @@ void VulkanRenderer::draw()
     vkCmdBindPipeline(mainCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, meshPipeline);
 
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(mainCommandBuffer, 0, 1, &triangleMesh.vertexBuffer.buffer, &offset);
+    // vkCmdBindVertexBuffers(mainCommandBuffer, 0, 1, &triangleMesh.vertexBuffer.buffer, &offset);
+    vkCmdBindVertexBuffers(mainCommandBuffer, 0, 1, &monkeyMesh.vertexBuffer.buffer, &offset);
 
     glm::vec3 camPos{0.f, 0.f, -2.0f};
     // glm::mat4 view = glm::translate(glm::mat4(1.0f), camPos);
@@ -446,7 +447,8 @@ void VulkanRenderer::draw()
         sizeof(MeshPushConstants),
         &constants);
 
-    vkCmdDraw(mainCommandBuffer, triangleMesh.vertices.size(), 1, 0, 0);
+    // vkCmdDraw(mainCommandBuffer, triangleMesh.vertices.size(), 1, 0, 0);
+    vkCmdDraw(mainCommandBuffer, monkeyMesh.vertices.size(), 1, 0, 0);
 
     vkCmdEndRenderPass(mainCommandBuffer);
 
@@ -539,6 +541,11 @@ void VulkanRenderer::loadMeshes()
     // normals...
 
     uploadMesh(triangleMesh);
+
+    // load monkey mesh
+    monkeyMesh.loadFromObj(ASSETS_PATH "/vkguide/monkey_smooth.obj");
+
+    uploadMesh(monkeyMesh);
 }
 
 void VulkanRenderer::uploadMesh(Mesh& mesh)

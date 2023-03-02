@@ -86,6 +86,7 @@ class VulkanRenderer
     VkPipelineLayout meshPipelineLayout;
     VkPipeline meshPipeline;
     Mesh triangleMesh;
+    Mesh monkeyMesh;
 
   private:
     void initVulkan();

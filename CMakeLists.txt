@@ -70,8 +70,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 add_compile_definitions(
-	$<$<CONFIG:DEBUG>:MISC_PATH="${CMAKE_SOURCE_DIR}/misc">
-	$<$<CONFIG:RELEASE>:MISC_PATH="./misc">
+	$<$<CONFIG:DEBUG>:ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets">
+	$<$<CONFIG:RELEASE>:ASSETS_PATH="TODO:Decode on path and copy files there post build">
 )
 
 ##############################################################################
