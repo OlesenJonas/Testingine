@@ -21,6 +21,8 @@ struct VulkanPipeline
         //       see HelloTriangleApplication
         VkViewport viewport;
         VkRect2D scissor;
+        bool depthTest = false;
+        VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS;
         VkPipelineLayout pipelineLayout;
     };
 
@@ -38,9 +40,11 @@ struct VulkanPipeline
 
     VkPipelineRasterizationStateCreateInfo rasterizationStateCrInfo;
 
-    VkPipelineColorBlendAttachmentState colorBlendAttachmentState;
+    VkPipelineDepthStencilStateCreateInfo depthStencilStateCrInfo;
 
     VkPipelineMultisampleStateCreateInfo multisampleStateCrInfo;
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachmentState;
 
     VkPipelineLayout pipelineLayout;
 };

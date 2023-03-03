@@ -61,6 +61,10 @@ class VulkanRenderer
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;
 
+    VkImageView depthImageView;
+    AllocatedImage depthImage;
+    VkFormat depthFormat;
+
     VkRenderPass renderPass;
     std::vector<VkFramebuffer> framebuffers;
 

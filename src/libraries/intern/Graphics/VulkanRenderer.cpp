@@ -1,4 +1,5 @@
 #include "VulkanRenderer.hpp"
+#include "Graphics/VulkanDebug.hpp"
 #include "Graphics/VulkanRenderer.hpp"
 #include "Mesh.hpp"
 #include "VulkanDebug.hpp"
@@ -103,7 +104,60 @@ void VulkanRenderer::initSwapchain()
     swapchainImages = swapchainSetup.getSwapchainImages();
     swapchainImageViews = swapchainSetup.createSwapchainImageViews();
 
-    deleteQueue.pushBack([=]() { vkDestroySwapchainKHR(device, swapchain, nullptr); });
+    // Depth image
+    VkExtent3D depthImageExtent{
+        .width = swapchainExtent.width,
+        .height = swapchainExtent.height,
+        .depth = 1,
+    };
+    depthFormat = VK_FORMAT_D32_SFLOAT;
+    VkImageCreateInfo depthImgCrInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .imageType = VK_IMAGE_TYPE_2D,
+
+        .format = depthFormat,
+        .extent = depthImageExtent,
+
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    };
+    VmaAllocationCreateInfo depthImgAllocCrInfo{
+        .usage = VMA_MEMORY_USAGE_GPU_ONLY,
+        .requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+    };
+    vmaCreateImage(
+        allocator, &depthImgCrInfo, &depthImgAllocCrInfo, &depthImage.image, &depthImage.allocation, nullptr);
+    VkImageViewCreateInfo depthImgViewCrInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = nullptr,
+
+        .image = depthImage.image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = depthFormat,
+
+        .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+    };
+    assertVkResult(vkCreateImageView(device, &depthImgViewCrInfo, nullptr, &depthImageView));
+
+    deleteQueue.pushBack(
+        [=]()
+        {
+            vkDestroySwapchainKHR(device, swapchain, nullptr);
+            vkDestroyImageView(device, depthImageView, nullptr);
+            vmaDestroyImage(allocator, depthImage.image, depthImage.allocation);
+        });
 }
 
 void VulkanRenderer::initCommands()
@@ -146,26 +200,66 @@ void VulkanRenderer::initDefaultRenderpass()
 
         .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
     };
-
     VkAttachmentReference colorAttachmentRef{
         .attachment = 0,
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+
+    VkAttachmentDescription depthAttachment{
+        .flags = 0,
+        .format = depthFormat,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, // Only _DEPTH_OPTIMAL ?
+    };
+    VkAttachmentReference depthAttachmentRef{
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    };
+
+    // https://www.reddit.com/r/vulkan/comments/s80reu/comment/hth2uj9/?utm_source=share&utm_medium=web2x&context=3
+    VkSubpassDependency colorDependency{
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    };
+    VkSubpassDependency depthDependency{
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
     };
 
     VkSubpassDescription subpassDesc{
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
         .colorAttachmentCount = 1,
         .pColorAttachments = &colorAttachmentRef,
+        .pDepthStencilAttachment = &depthAttachmentRef,
     };
+
+    VkAttachmentDescription attachments[2] = {colorAttachment, depthAttachment};
+    VkSubpassDependency dependencies[2] = {colorDependency, depthDependency};
 
     VkRenderPassCreateInfo renderPassInfo{
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 
-        .attachmentCount = 1,
-        .pAttachments = &colorAttachment,
+        .attachmentCount = 2,
+        .pAttachments = &attachments[0],
 
         .subpassCount = 1,
         .pSubpasses = &subpassDesc,
+
+        .dependencyCount = 2,
+        .pDependencies = &dependencies[0],
     };
 
     assertVkResult(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
@@ -191,7 +285,10 @@ void VulkanRenderer::initFramebuffers()
 
     for(int i = 0; i < swapchainImageCount; i++)
     {
-        fbInfo.pAttachments = &swapchainImageViews[i];
+        VkImageView attachments[2] = {swapchainImageViews[i], depthImageView};
+
+        fbInfo.attachmentCount = 2;
+        fbInfo.pAttachments = &attachments[0];
         assertVkResult(vkCreateFramebuffer(device, &fbInfo, nullptr, &framebuffers[i]));
 
         deleteQueue.pushBack(
@@ -321,6 +418,8 @@ void VulkanRenderer::initPipelines()
                 .maxDepth = 1.0f,
             },
         .scissor = {.offset = {0, 0}, .extent = swapchainExtent},
+        .depthTest = true,
+        .depthCompareOp = VK_COMPARE_OP_LESS,
         .pipelineLayout = meshPipelineLayout,
     }};
     // TODO: add a nice wrapper for this to pipeline constructor!
@@ -403,6 +502,9 @@ void VulkanRenderer::draw()
 
     float flash = abs(sin(frameNumber / 120.0f));
     VkClearValue clearValue{.color = {0.0f, 0.0f, flash, 1.0f}};
+    VkClearValue depthClear{.depthStencil = {.depth = 1.0f}};
+
+    VkClearValue clearValues[2] = {clearValue, depthClear};
 
     VkRenderPassBeginInfo renderpassBeginInfo{
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -415,8 +517,8 @@ void VulkanRenderer::draw()
                 .offset = {.x = 0, .y = 0},
                 .extent = swapchainExtent,
             },
-        .clearValueCount = 1,
-        .pClearValues = &clearValue,
+        .clearValueCount = 2,
+        .pClearValues = &clearValues[0],
     };
 
     vkCmdBeginRenderPass(mainCommandBuffer, &renderpassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);

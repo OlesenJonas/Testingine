@@ -54,6 +54,19 @@ VulkanPipeline::VulkanPipeline(const CreateInfo&& info)
         .lineWidth = 1.0f,
     };
 
+    depthStencilStateCrInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .depthTestEnable = info.depthTest ? VK_TRUE : VK_FALSE,
+        .depthWriteEnable = info.depthTest ? VK_TRUE : VK_FALSE, // TODO: decouple
+        .depthCompareOp = info.depthTest ? info.depthCompareOp : VK_COMPARE_OP_ALWAYS,
+        .depthBoundsTestEnable = VK_FALSE,
+        .stencilTestEnable = VK_FALSE,
+        .minDepthBounds = 0.0f,
+        .maxDepthBounds = 1.0f,
+    };
+
     multisampleStateCrInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .pNext = nullptr,
@@ -116,6 +129,7 @@ VkPipeline VulkanPipeline::createPipeline(VkDevice device, VkRenderPass pass)
         .pViewportState = &viewportStateCrInfo,
         .pRasterizationState = &rasterizationStateCrInfo,
         .pMultisampleState = &multisampleStateCrInfo,
+        .pDepthStencilState = &depthStencilStateCrInfo,
         .pColorBlendState = &colorBlendStateCrInfo,
 
         .layout = pipelineLayout,
