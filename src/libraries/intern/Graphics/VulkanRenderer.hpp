@@ -5,10 +5,15 @@
 
 #include <glm/glm.hpp>
 
+#include "Material.hpp"
 #include "Mesh.hpp"
+#include "RenderObject.hpp"
 #include "VulkanTypes.hpp"
 
 #include <intern/Datastructures/FunctionQueue.hpp>
+
+#include <string>
+#include <unordered_map>
 
 struct GLFWwindow;
 
@@ -18,6 +23,19 @@ struct MeshPushConstants
     glm::vec4 data;
     glm::mat4 transformMatrix;
 };
+
+struct FrameData
+{
+    // TODO: rename into imageAvailable, renderFinished
+    VkSemaphore presentSemaphore;
+    VkSemaphore renderSemaphore;
+    VkFence renderFence;
+    // todo: one command buffer for offscreen and one for present
+    VkCommandPool commandPool;
+    VkCommandBuffer mainCommandBuffer;
+};
+
+constexpr int FRAMES_IN_FLIGHT = 2;
 
 class VulkanRenderer
 {
@@ -71,26 +89,26 @@ class VulkanRenderer
     VkQueue graphicsQueue;
     uint32_t graphicsQueueFamily;
 
-    VkCommandPool commandPool;
-    VkCommandBuffer mainCommandBuffer;
-
-    // todo: rename to imageAvailable and renderFinished, think those names are clearer
-    VkSemaphore presentSemaphore;
-    VkSemaphore renderSemaphore;
-    VkFence renderFence;
-
-    // Dont like this being here, would fit better in VulkanPipeline I guess
-    VkPipelineLayout trianglePipelineLayout;
-    VkPipeline trianglePipeline;
+    FrameData frames[FRAMES_IN_FLIGHT];
+    inline FrameData& getCurrentFrameData()
+    {
+        return frames[frameNumber % FRAMES_IN_FLIGHT];
+    }
 
     FunctionQueue<> deleteQueue;
 
     VmaAllocator allocator;
 
-    VkPipelineLayout meshPipelineLayout;
-    VkPipeline meshPipeline;
-    Mesh triangleMesh;
-    Mesh monkeyMesh;
+    std::vector<RenderObject> renderables;
+    std::unordered_map<std::string, Material> materials;
+    std::unordered_map<std::string, Mesh> meshes;
+
+    Material* createMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
+    Material* getMaterial(const std::string& name);
+    Mesh* getMesh(const std::string& name);
+
+    // TODO: refactor to take span
+    void drawObjects(VkCommandBuffer cmd, RenderObject* first, int count);
 
   private:
     void initVulkan();
@@ -103,6 +121,8 @@ class VulkanRenderer
 
     void loadMeshes();
     void uploadMesh(Mesh& mesh);
+
+    void initScene();
 
     bool loadShaderModule(const char* filePath, VkShaderModule* outShaderModule);
 };

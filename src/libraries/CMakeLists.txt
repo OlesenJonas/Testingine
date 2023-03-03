@@ -3,6 +3,7 @@ add_subdirectory(thirdparty)
 add_subdirectory(intern)
 
 target_compile_definitions(glm::glm INTERFACE "-DGLM_FORCE_DEPTH_ZERO_TO_ONE")
+target_compile_definitions(glm::glm INTERFACE "-DGLM_FORCE_RADIANS")
 
 # create list of all libraries that executables will link to
 set(LIBS
