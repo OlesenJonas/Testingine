@@ -44,6 +44,8 @@ void VulkanRenderer::init()
 
     initSyncStructures();
 
+    initDescriptors();
+
     initPipelines();
 
     loadMeshes();
@@ -338,6 +340,93 @@ void VulkanRenderer::initSyncStructures()
     }
 }
 
+void VulkanRenderer::initDescriptors()
+{
+    std::vector<VkDescriptorPoolSize> sizes = {
+        {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 10},
+    };
+
+    VkDescriptorPoolCreateInfo poolCrInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext = nullptr,
+
+        .flags = 0,
+        .maxSets = 10,
+        .poolSizeCount = (uint32_t)sizes.size(),
+        .pPoolSizes = sizes.data(),
+    };
+
+    vkCreateDescriptorPool(device, &poolCrInfo, nullptr, &descriptorPool);
+
+    VkDescriptorSetLayoutBinding camBufferBinding{
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+    };
+
+    VkDescriptorSetLayoutCreateInfo descrSetCrInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
+
+        .flags = 0,
+        .bindingCount = 1,
+        .pBindings = &camBufferBinding,
+    };
+
+    vkCreateDescriptorSetLayout(device, &descrSetCrInfo, nullptr, &globalSetLayout);
+
+    for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
+    {
+        frames[i].cameraBuffer =
+            createBuffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+        VkDescriptorSetAllocateInfo allocInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .pNext = nullptr,
+
+            .descriptorPool = descriptorPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &globalSetLayout,
+        };
+        vkAllocateDescriptorSets(device, &allocInfo, &frames[i].globalDescriptor);
+
+        VkDescriptorBufferInfo bufferInfo{
+            .buffer = frames[i].cameraBuffer.buffer,
+            .offset = 0,
+            .range = sizeof(GPUCameraData),
+        };
+
+        VkWriteDescriptorSet setWrite = {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+
+            .dstSet = frames[i].globalDescriptor,
+            .dstBinding = 0,
+
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pBufferInfo = &bufferInfo,
+        };
+
+        vkUpdateDescriptorSets(device, 1, &setWrite, 0, nullptr);
+    }
+
+    for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
+    {
+        deleteQueue.pushBack(
+            [=]()
+            { vmaDestroyBuffer(allocator, frames[i].cameraBuffer.buffer, frames[i].cameraBuffer.allocation); });
+    }
+
+    deleteQueue.pushBack(
+        [=]()
+        {
+            vkDestroyDescriptorSetLayout(device, globalSetLayout, nullptr);
+            vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+        });
+}
+
 void VulkanRenderer::initPipelines()
 {
     VkPipelineLayout trianglePipelineLayout;
@@ -403,8 +492,8 @@ void VulkanRenderer::initPipelines()
         .pNext = nullptr,
 
         .flags = 0,
-        .setLayoutCount = 0,
-        .pSetLayouts = nullptr,
+        .setLayoutCount = 1,
+        .pSetLayouts = &globalSetLayout,
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &pushConstantRange,
     };
@@ -731,7 +820,7 @@ Mesh* VulkanRenderer::getMesh(const std::string& name)
     return &(it->second);
 }
 
-// TODO: refactor to take span
+// TODO: refactor to take span?
 void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int count)
 {
     glm::vec3 camPos{0.f, -6.f, -10.f};
@@ -740,6 +829,17 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     glm::mat4 projection =
         glm::perspective(glm::radians(70.0f), windowExtent.width / float(windowExtent.height), 0.1f, 200.0f);
     projection[1][1] *= -1;
+
+    GPUCameraData camData;
+    camData.proj = projection;
+    camData.view = view;
+    camData.projView = projection * view;
+
+    // TODO: persistent binding
+    void* data;
+    vmaMapMemory(allocator, getCurrentFrameData().cameraBuffer.allocation, &data);
+    memcpy(data, &camData, sizeof(GPUCameraData));
+    vmaUnmapMemory(allocator, getCurrentFrameData().cameraBuffer.allocation);
 
     Mesh* lastMesh = nullptr;
     Material* lastMaterial = nullptr;
@@ -752,13 +852,22 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
         {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline);
             lastMaterial = object.material;
+
+            // Also bind necessary descriptor sets
+            // todo: global descriptor set shouldnt need to be bound for every material!
+            vkCmdBindDescriptorSets(
+                cmd,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                object.material->pipelineLayout,
+                0,
+                1,
+                &getCurrentFrameData().globalDescriptor,
+                0,
+                nullptr);
         }
 
-        glm::mat4 model = object.transformMatrix;
-        glm::mat4 meshMatrix = projection * view * model;
-
         MeshPushConstants constants;
-        constants.transformMatrix = meshMatrix;
+        constants.transformMatrix = object.transformMatrix;
 
         vkCmdPushConstants(
             cmd,
@@ -777,4 +886,27 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
 
         vkCmdDraw(cmd, object.mesh->vertices.size(), 1, 0, 0);
     }
+}
+
+AllocatedBuffer
+VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
+{
+    VkBufferCreateInfo bufferCrInfo{
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .pNext = nullptr,
+
+        .size = allocSize,
+        .usage = usage,
+    };
+
+    VmaAllocationCreateInfo vmaAllocCrInfo{
+        .usage = memoryUsage,
+    };
+
+    AllocatedBuffer newBuffer;
+
+    assertVkResult(vmaCreateBuffer(
+        allocator, &bufferCrInfo, &vmaAllocCrInfo, &newBuffer.buffer, &newBuffer.allocation, nullptr));
+
+    return newBuffer;
 }

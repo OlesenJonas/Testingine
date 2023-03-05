@@ -24,6 +24,13 @@ struct MeshPushConstants
     glm::mat4 transformMatrix;
 };
 
+struct GPUCameraData
+{
+    glm::mat4 view;
+    glm::mat4 proj;
+    glm::mat4 projView;
+};
+
 struct FrameData
 {
     // TODO: rename into imageAvailable, renderFinished
@@ -33,6 +40,9 @@ struct FrameData
     // todo: one command buffer for offscreen and one for present
     VkCommandPool commandPool;
     VkCommandBuffer mainCommandBuffer;
+
+    AllocatedBuffer cameraBuffer;
+    VkDescriptorSet globalDescriptor;
 };
 
 constexpr int FRAMES_IN_FLIGHT = 2;
@@ -89,6 +99,9 @@ class VulkanRenderer
     VkQueue graphicsQueue;
     uint32_t graphicsQueueFamily;
 
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSetLayout globalSetLayout;
+
     FrameData frames[FRAMES_IN_FLIGHT];
     inline FrameData& getCurrentFrameData()
     {
@@ -110,6 +123,8 @@ class VulkanRenderer
     // TODO: refactor to take span
     void drawObjects(VkCommandBuffer cmd, RenderObject* first, int count);
 
+    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+
   private:
     void initVulkan();
     void initSwapchain();
@@ -117,6 +132,7 @@ class VulkanRenderer
     void initDefaultRenderpass();
     void initFramebuffers();
     void initSyncStructures();
+    void initDescriptors();
     void initPipelines();
 
     void loadMeshes();
