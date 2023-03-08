@@ -31,6 +31,20 @@ struct GPUCameraData
     glm::mat4 projView;
 };
 
+struct GPUSceneData
+{
+    glm::vec4 fogColor;
+    glm::vec4 fogDistances;
+    glm::vec4 ambientColor;
+    glm::vec4 sunlightDirection;
+    glm::vec4 sunlightColor;
+};
+
+struct GPUObjectData
+{
+    glm::mat4 modelMatrix;
+};
+
 struct FrameData
 {
     // TODO: rename into imageAvailable, renderFinished
@@ -43,6 +57,9 @@ struct FrameData
 
     AllocatedBuffer cameraBuffer;
     VkDescriptorSet globalDescriptor;
+
+    AllocatedBuffer objectBuffer;
+    VkDescriptorSet objectDescriptor;
 };
 
 constexpr int FRAMES_IN_FLIGHT = 2;
@@ -79,6 +96,7 @@ class VulkanRenderer
     VkSurfaceKHR surface;
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    VkPhysicalDeviceProperties physicalDeviceProperties;
     VkDevice device;
     QueueFamilyIndices queueFamilyIndices;
 
@@ -101,12 +119,16 @@ class VulkanRenderer
 
     VkDescriptorPool descriptorPool;
     VkDescriptorSetLayout globalSetLayout;
+    VkDescriptorSetLayout objectSetLayout;
 
     FrameData frames[FRAMES_IN_FLIGHT];
     inline FrameData& getCurrentFrameData()
     {
         return frames[frameNumber % FRAMES_IN_FLIGHT];
     }
+
+    GPUSceneData sceneParameters;
+    AllocatedBuffer sceneParameterBuffer; // Holds FRAMES_IN_FLIGHT * aligned(GPUSceneData)
 
     FunctionQueue<> deleteQueue;
 
@@ -141,4 +163,6 @@ class VulkanRenderer
     void initScene();
 
     bool loadShaderModule(const char* filePath, VkShaderModule* outShaderModule);
+
+    size_t padUniformBufferSize(size_t originalSize);
 };

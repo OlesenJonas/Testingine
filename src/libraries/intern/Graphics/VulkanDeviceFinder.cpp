@@ -4,6 +4,7 @@
 
 #include <set>
 #include <stdexcept>
+#include <vulkan/vulkan_core.h>
 
 VulkanDeviceFinder::VulkanDeviceFinder(VkInstance instance) : instance(instance)
 {
@@ -74,8 +75,16 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
 
     VkPhysicalDeviceFeatures deviceFeatures{};
 
+    // Shader Draw Parameters are always needed
+    VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParamFeatures = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES,
+        .pNext = nullptr,
+        .shaderDrawParameters = VK_TRUE,
+    };
+
     VkDeviceCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = &shaderDrawParamFeatures,
     };
     createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
