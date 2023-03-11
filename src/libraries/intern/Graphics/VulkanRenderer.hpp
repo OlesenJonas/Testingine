@@ -8,6 +8,7 @@
 #include "Material.hpp"
 #include "Mesh.hpp"
 #include "RenderObject.hpp"
+#include "Texture.hpp"
 #include "VulkanTypes.hpp"
 
 #include <intern/Datastructures/FunctionQueue.hpp>
@@ -43,6 +44,13 @@ struct GPUSceneData
 struct GPUObjectData
 {
     glm::mat4 modelMatrix;
+};
+
+struct UploadContext
+{
+    VkFence uploadFence;
+    VkCommandPool commandPool;
+    VkCommandBuffer commandBuffer;
 };
 
 struct FrameData
@@ -120,12 +128,14 @@ class VulkanRenderer
     VkDescriptorPool descriptorPool;
     VkDescriptorSetLayout globalSetLayout;
     VkDescriptorSetLayout objectSetLayout;
+    VkDescriptorSetLayout singleTextureSetLayout;
 
     FrameData frames[FRAMES_IN_FLIGHT];
     inline FrameData& getCurrentFrameData()
     {
         return frames[frameNumber % FRAMES_IN_FLIGHT];
     }
+    UploadContext uploadContext;
 
     GPUSceneData sceneParameters;
     AllocatedBuffer sceneParameterBuffer; // Holds FRAMES_IN_FLIGHT * aligned(GPUSceneData)
@@ -137,6 +147,7 @@ class VulkanRenderer
     std::vector<RenderObject> renderables;
     std::unordered_map<std::string, Material> materials;
     std::unordered_map<std::string, Mesh> meshes;
+    std::unordered_map<std::string, Texture> loadedTextures;
 
     Material* createMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
     Material* getMaterial(const std::string& name);
@@ -146,6 +157,8 @@ class VulkanRenderer
     void drawObjects(VkCommandBuffer cmd, RenderObject* first, int count);
 
     AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+
+    void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 
   private:
     void initVulkan();
@@ -159,6 +172,7 @@ class VulkanRenderer
 
     void loadMeshes();
     void uploadMesh(Mesh& mesh);
+    void loadImages();
 
     void initScene();
 

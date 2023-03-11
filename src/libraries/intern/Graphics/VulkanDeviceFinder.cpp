@@ -75,7 +75,8 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
 
     VkPhysicalDeviceFeatures deviceFeatures{};
 
-    // Shader Draw Parameters are always needed
+    // Shader Draw Parameters are always needed, but core in 1.1, so dont think I need to request this?
+    //  just check if the feature is enabled (which it needs to be!)
     VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParamFeatures = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES,
         .pNext = nullptr,
