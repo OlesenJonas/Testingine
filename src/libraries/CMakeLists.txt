@@ -7,5 +7,5 @@ target_compile_definitions(glm::glm INTERFACE "-DGLM_FORCE_RADIANS")
 
 # create list of all libraries that executables will link to
 set(LIBS
-    Vulkan::Vulkan glfw glm::glm VMA TinyOBJ stb intern
+    Vulkan::Vulkan glfw glm::glm VMA TinyOBJ stb ImGui intern
     PARENT_SCOPE)

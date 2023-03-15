@@ -156,7 +156,11 @@ class VulkanRenderer
     // TODO: refactor to take span
     void drawObjects(VkCommandBuffer cmd, RenderObject* first, int count);
 
-    AllocatedBuffer createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+    AllocatedBuffer createBuffer(
+        size_t allocSize,
+        VkBufferUsageFlags usage,
+        VmaAllocationCreateFlags flags,
+        VkMemoryPropertyFlags requiredFlags);
 
     void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 
@@ -169,6 +173,8 @@ class VulkanRenderer
     void initSyncStructures();
     void initDescriptors();
     void initPipelines();
+
+    void initImGui();
 
     void loadMeshes();
     void uploadMesh(Mesh& mesh);

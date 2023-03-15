@@ -24,8 +24,11 @@ bool loadImageFromFile(VulkanRenderer& renderer, const char* file, AllocatedImag
 
     VkFormat imageFormat = VK_FORMAT_R8G8B8A8_SRGB;
 
-    AllocatedBuffer stagingBuffer =
-        renderer.createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+    AllocatedBuffer stagingBuffer = renderer.createBuffer(
+        imageSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     void* data;
     vmaMapMemory(renderer.allocator, stagingBuffer.allocation, &data);
@@ -57,7 +60,8 @@ bool loadImageFromFile(VulkanRenderer& renderer, const char* file, AllocatedImag
 
     AllocatedImage newImage;
     VmaAllocationCreateInfo imgAllocInfo{
-        .usage = VMA_MEMORY_USAGE_GPU_ONLY,
+        .usage = VMA_MEMORY_USAGE_AUTO,
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
     };
     vmaCreateImage(
         renderer.allocator, &imageCrInfo, &imgAllocInfo, &newImage.image, &newImage.allocation, nullptr);

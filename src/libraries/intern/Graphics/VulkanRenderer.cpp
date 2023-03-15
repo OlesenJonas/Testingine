@@ -15,15 +15,18 @@
 #include "Datastructures/Span.hpp"
 
 #include <fstream>
-#include <glm/trigonometric.hpp>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
+#include "ImGui/imgui.h"
+#include "ImGui/imgui_impl_glfw.h"
+#include "ImGui/imgui_impl_vulkan.h"
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_access.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
+#include <glm/trigonometric.hpp>
 #include <vulkan/vulkan_core.h>
 
 void VulkanRenderer::init()
@@ -50,6 +53,8 @@ void VulkanRenderer::init()
     initDescriptors();
 
     initPipelines();
+
+    initImGui();
 
     loadMeshes();
 
@@ -140,8 +145,8 @@ void VulkanRenderer::initSwapchain()
         .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
     };
     VmaAllocationCreateInfo depthImgAllocCrInfo{
-        .usage = VMA_MEMORY_USAGE_GPU_ONLY,
-        .requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+        .usage = VMA_MEMORY_USAGE_AUTO,
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
     };
     vmaCreateImage(
         allocator, &depthImgCrInfo, &depthImgAllocCrInfo, &depthImage.image, &depthImage.allocation, nullptr);
@@ -456,17 +461,30 @@ void VulkanRenderer::initDescriptors()
     vkCreateDescriptorSetLayout(device, &textureDescrSetLayoutCrInfo, nullptr, &singleTextureSetLayout);
 
     const size_t sceneParamBufferSize = FRAMES_IN_FLIGHT * padUniformBufferSize(sizeof(GPUSceneData));
-    sceneParameterBuffer =
-        createBuffer(sceneParamBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+    // pretty sure this is overkill (combining Vma and Vk flags, but better safe than sorry )
+    sceneParameterBuffer = createBuffer(
+        sceneParamBufferSize,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
     {
-        frames[i].cameraBuffer =
-            createBuffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+        frames[i].cameraBuffer = createBuffer(
+            sizeof(GPUCameraData),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
         const int MAX_OBJECTS = 10000;
         frames[i].objectBuffer = createBuffer(
-            sizeof(GPUObjectData) * MAX_OBJECTS, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+            sizeof(GPUObjectData) * MAX_OBJECTS,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
         VkDescriptorSetAllocateInfo allocInfo = {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -704,6 +722,69 @@ void VulkanRenderer::initPipelines()
         });
 }
 
+void VulkanRenderer::initImGui()
+{
+    // 1: create descriptor pool for IMGUI
+    //  the size of the pool is very oversize, but it's copied from imgui demo itself.
+    VkDescriptorPoolSize poolSizes[] = {
+        {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000},
+    };
+
+    VkDescriptorPoolCreateInfo descrPoolCrInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+        .maxSets = 1000,
+        .poolSizeCount = std::size(poolSizes),
+        .pPoolSizes = poolSizes,
+    };
+
+    VkDescriptorPool imguiPool;
+    assertVkResult(vkCreateDescriptorPool(device, &descrPoolCrInfo, nullptr, &imguiPool));
+
+    // 2: initialize the library
+    ImGui::CreateContext();
+    // init imgui for Glfw
+    ImGui_ImplGlfw_InitForVulkan(window, true);
+    // init imgui for Vulkan
+    ImGui_ImplVulkan_InitInfo initInfo = {
+        .Instance = instance,
+        .PhysicalDevice = physicalDevice,
+        .Device = device,
+        .QueueFamily = graphicsQueueFamily,
+        .Queue = graphicsQueue,
+        .DescriptorPool = imguiPool,
+        // todo: dont hardcode these, retrieve from swapchain creation
+        .MinImageCount = 2,
+        .ImageCount = 3,
+        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+    };
+
+    ImGui_ImplVulkan_Init(&initInfo, renderPass);
+
+    // upload imgui font textures
+    immediateSubmit([&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
+    // clear font textures from cpu data
+    ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+    // add imgui stuff to deletion queue
+    deleteQueue.pushBack(
+        [=]()
+        {
+            vkDestroyDescriptorPool(device, imguiPool, nullptr);
+            ImGui_ImplVulkan_Shutdown();
+        });
+}
+
 void VulkanRenderer::cleanup()
 {
     if(!isInitialized)
@@ -730,6 +811,16 @@ void VulkanRenderer::run()
     while(!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
+
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+
+        // Not sure about the order of UI & engine code
+
+        ImGui::NewFrame();
+        ImGui::ShowDemoWindow();
+        ImGui::Render();
+
         draw();
     }
 
@@ -783,6 +874,8 @@ void VulkanRenderer::draw()
 
     // todo: sort before
     drawObjects(curFrameData.mainCommandBuffer, renderables.data(), renderables.size());
+
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), curFrameData.mainCommandBuffer);
 
     vkCmdEndRenderPass(curFrameData.mainCommandBuffer);
 
@@ -894,13 +987,6 @@ void VulkanRenderer::loadMeshes()
 
 void VulkanRenderer::uploadMesh(Mesh& mesh)
 {
-    // todo: switch to correct usage of Auto + correct bitflags!
-    // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/quick_start.html#quick_start_resource_allocation:~:text=(%26allocatorCreateInfo%2C%20%26allocator)%3B-,Resource%20allocation,-When%20you%20want
-    // Flags parameter:
-    // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/group__group__alloc.html#gad9889c10c798b040d59c92f257cae597
-    // Usage parameter:
-    // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/group__group__alloc.html#gaa5846affa1e9da3800e3e78fae2305cc
-
     const size_t bufferSize = mesh.vertices.size() * sizeof(Vertex);
     // allocate staging buffer
     VkBufferCreateInfo stagingBufferInfo = {
@@ -910,7 +996,9 @@ void VulkanRenderer::uploadMesh(Mesh& mesh)
         .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
     };
     VmaAllocationCreateInfo vmaallocCrInfo = {
-        .usage = VMA_MEMORY_USAGE_CPU_ONLY,
+        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+        .usage = VMA_MEMORY_USAGE_AUTO,
+        .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
     };
     AllocatedBuffer stagingBuffer;
     assertVkResult(vmaCreateBuffer(
@@ -919,7 +1007,7 @@ void VulkanRenderer::uploadMesh(Mesh& mesh)
         &vmaallocCrInfo,
         &stagingBuffer.buffer,
         &stagingBuffer.allocation,
-        nullptr));
+        &stagingBuffer.allocInfo));
 
     void* data = nullptr;
     vmaMapMemory(allocator, stagingBuffer.allocation, &data);
@@ -934,7 +1022,9 @@ void VulkanRenderer::uploadMesh(Mesh& mesh)
         .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
     };
     vmaallocCrInfo = {
-        .usage = VMA_MEMORY_USAGE_GPU_ONLY,
+        .flags = 0,
+        .usage = VMA_MEMORY_USAGE_AUTO,
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
     };
 
     assertVkResult(vmaCreateBuffer(
@@ -1100,12 +1190,13 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
 {
     float framed = (frameNumber / 120.0f);
     sceneParameters.ambientColor = {sin(framed), 0, cos(framed), 1};
-    char* sceneData; // char so can increment in single bytes
-    vmaMapMemory(allocator, sceneParameterBuffer.allocation, (void**)&sceneData);
+    char* sceneData = reinterpret_cast<char*>(
+        sceneParameterBuffer.allocInfo.pMappedData); // char so can increment in single bytes
+    // dont need to map, was requested to be persistently mapped
     int frameIndex = frameNumber % FRAMES_IN_FLIGHT;
     sceneData += padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
     memcpy(sceneData, &sceneParameters, sizeof(GPUSceneData));
-    vmaUnmapMemory(allocator, sceneParameterBuffer.allocation);
+    // dont need to unmap, was requested to be coherent
 
     glm::vec3 camPos{0.f, -6.f, -10.f};
     // todo: replace with lookat
@@ -1119,21 +1210,16 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     camData.view = view;
     camData.projView = projection * view;
 
-    // TODO: persistent binding
-    void* data;
-    vmaMapMemory(allocator, getCurrentFrameData().cameraBuffer.allocation, &data);
+    void* data = getCurrentFrameData().cameraBuffer.allocInfo.pMappedData;
     memcpy(data, &camData, sizeof(GPUCameraData));
-    vmaUnmapMemory(allocator, getCurrentFrameData().cameraBuffer.allocation);
 
-    void* objectData;
-    vmaMapMemory(allocator, getCurrentFrameData().objectBuffer.allocation, &objectData);
+    void* objectData = getCurrentFrameData().objectBuffer.allocInfo.pMappedData;
     GPUObjectData* objectSSBO = (GPUObjectData*)objectData;
     for(int i = 0; i < count; i++)
     {
         const RenderObject& object = first[i];
         objectSSBO[i].modelMatrix = object.transformMatrix;
     }
-    vmaUnmapMemory(allocator, getCurrentFrameData().objectBuffer.allocation);
 
     Mesh* lastMesh = nullptr;
     Material* lastMaterial = nullptr;
@@ -1207,8 +1293,11 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     }
 }
 
-AllocatedBuffer
-VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
+AllocatedBuffer VulkanRenderer::createBuffer(
+    size_t allocSize,
+    VkBufferUsageFlags usage,
+    VmaAllocationCreateFlags flags,
+    VkMemoryPropertyFlags requiredFlags)
 {
     VkBufferCreateInfo bufferCrInfo{
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -1219,13 +1308,20 @@ VulkanRenderer::createBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemo
     };
 
     VmaAllocationCreateInfo vmaAllocCrInfo{
-        .usage = memoryUsage,
+        .flags = flags,
+        .usage = VMA_MEMORY_USAGE_AUTO,
+        .requiredFlags = requiredFlags,
     };
 
     AllocatedBuffer newBuffer;
 
     assertVkResult(vmaCreateBuffer(
-        allocator, &bufferCrInfo, &vmaAllocCrInfo, &newBuffer.buffer, &newBuffer.allocation, nullptr));
+        allocator,
+        &bufferCrInfo,
+        &vmaAllocCrInfo,
+        &newBuffer.buffer,
+        &newBuffer.allocation,
+        &newBuffer.allocInfo));
 
     return newBuffer;
 }
