@@ -71,7 +71,7 @@ endif()
 
 add_compile_definitions(
 	$<$<CONFIG:DEBUG>:ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets">
-	$<$<CONFIG:RELEASE>:ASSETS_PATH="TODO:Decode on path and copy files there post build">
+	$<$<CONFIG:RELEASE>:ASSETS_PATH="TODO:Decide on path and copy files there post build">
 )
 
 ##############################################################################

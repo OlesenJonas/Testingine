@@ -93,10 +93,10 @@ class VulkanRenderer
     GLFWwindow* window = nullptr;
     VkExtent2D windowExtent{1700, 900};
 
-#ifdef NDEBUG
-    bool enableValidationLayers = false;
-#else
+#ifdef ENABLE_VULKAN_VALIDATION
     bool enableValidationLayers = true;
+#else
+    bool enableValidationLayers = false;
 #endif
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;

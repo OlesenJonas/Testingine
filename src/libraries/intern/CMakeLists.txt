@@ -5,3 +5,8 @@ target_link_libraries(intern PUBLIC Vulkan::Vulkan)
 target_link_libraries(intern PUBLIC glfw)
 target_link_libraries(intern PUBLIC glm::glm)
 target_link_libraries(intern PUBLIC VMA)
+
+IF(VULKAN_ENABLE_VALIDATION)
+    message(STATUS "Compiling with vulkan validation enabled")
+    target_compile_definitions(intern PUBLIC ENABLE_VULKAN_VALIDATION)
+ENDIF()

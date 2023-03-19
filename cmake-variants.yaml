@@ -1,0 +1,35 @@
+buildType:
+    default: debug
+    description: Build Type
+    choices:
+        debug:
+            short: Debug
+            buildType: Debug
+        release:
+            short: Release
+            buildType: Release
+
+VulkanValidationSettings:
+    default: Disabled
+    choices:
+        Disabled:
+            short: Vk No Validation
+            settings:
+                VULKAN_ENABLE_VALIDATION: False
+                VULKAN_VALIDATION_FILE: ""
+        Standard:
+            short: Vk Standard Validation
+            settings:
+                VULKAN_ENABLE_VALIDATION: True
+                VULKAN_VALIDATION_FILE: vk_layer_settings_standard.txt
+        Synchronization:
+            short: Vk Synchronization Validation
+            settings:
+                VULKAN_ENABLE_VALIDATION: True
+                VULKAN_VALIDATION_FILE: vk_layer_settings_synchronization.txt
+        BestPractices:
+            short: Vk Best Practices Validation
+            settings:
+                VULKAN_ENABLE_VALIDATION: True
+                VULKAN_VALIDATION_FILE: vk_layer_settings_best_practices.txt
+                
