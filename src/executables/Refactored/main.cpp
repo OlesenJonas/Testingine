@@ -1,14 +1,10 @@
-#include <intern/Graphics/VulkanRenderer.hpp>
+#include <intern/Engine/Engine.hpp>
 
 int main()
 {
-    VulkanRenderer renderer;
+    Engine engine;
 
-    renderer.init();
-
-    renderer.run();
-
-    renderer.cleanup();
+    engine.run();
 
     return 0;
 }

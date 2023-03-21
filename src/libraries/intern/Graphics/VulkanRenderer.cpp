@@ -1,4 +1,5 @@
 #include "VulkanRenderer.hpp"
+#include "../Engine/Engine.hpp"
 #include "Graphics/Mesh.hpp"
 #include "Graphics/RenderObject.hpp"
 #include "Graphics/Texture.hpp"
@@ -37,6 +38,7 @@ void VulkanRenderer::init()
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     window = glfwCreateWindow(windowExtent.width, windowExtent.height, "Vulkan Test", nullptr, nullptr);
     glfwSetWindowUserPointer(window, this);
+    *Engine::ptr->getMainWindow() = window;
 
     initVulkan();
 
@@ -808,6 +810,9 @@ void VulkanRenderer::cleanup()
 
 void VulkanRenderer::run()
 {
+    glfwSetTime(0.0);
+    Engine::ptr->getInputManager()->resetTime();
+
     while(!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
@@ -815,6 +820,11 @@ void VulkanRenderer::run()
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
 
+        Engine::ptr->getInputManager()->update();
+        if(!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
+        {
+            Engine::ptr->getCamera()->update();
+        }
         // Not sure about the order of UI & engine code
 
         ImGui::NewFrame();
@@ -1198,17 +1208,13 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     memcpy(sceneData, &sceneParameters, sizeof(GPUSceneData));
     // dont need to unmap, was requested to be coherent
 
-    glm::vec3 camPos{0.f, -6.f, -10.f};
-    // todo: replace with lookat
-    glm::mat4 view = glm::translate(camPos);
-    glm::mat4 projection =
-        glm::perspective(glm::radians(70.0f), windowExtent.width / float(windowExtent.height), 0.1f, 200.0f);
-    projection[1][1] *= -1;
-
+    Camera* mainCamera = Engine::ptr->getCamera();
+    // todo: resize GPUCameraData to use all matrices Camera stores and then simply memcpy from
+    // mainCamera.getMatrices directly
     GPUCameraData camData;
-    camData.proj = projection;
-    camData.view = view;
-    camData.projView = projection * view;
+    camData.proj = mainCamera->getProj();
+    camData.view = mainCamera->getView();
+    camData.projView = mainCamera->getProjView();
 
     void* data = getCurrentFrameData().cameraBuffer.allocInfo.pMappedData;
     memcpy(data, &camData, sizeof(GPUCameraData));
