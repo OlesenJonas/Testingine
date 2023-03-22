@@ -28,7 +28,11 @@ struct VulkanPipeline
 
     VulkanPipeline(const CreateInfo&& info);
 
-    VkPipeline createPipeline(VkDevice device, VkRenderPass pass);
+    VkPipeline createPipeline(
+        VkDevice device,
+        const Span<const VkFormat> colorAttachmentFormats,
+        VkFormat depthAttachmentFormat = VK_FORMAT_UNDEFINED,
+        VkFormat stencilAttachmentFormat = VK_FORMAT_UNDEFINED);
 
     std::vector<VkPipelineShaderStageCreateInfo> shaderStageCrInfos;
 

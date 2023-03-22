@@ -93,7 +93,11 @@ VulkanPipeline::VulkanPipeline(const CreateInfo&& info)
     pipelineLayout = info.pipelineLayout;
 }
 
-VkPipeline VulkanPipeline::createPipeline(VkDevice device, VkRenderPass pass)
+VkPipeline VulkanPipeline::createPipeline(
+    VkDevice device,
+    const Span<const VkFormat> colorAttachmentFormats,
+    VkFormat depthAttachmentFormat,
+    VkFormat stencilAttachmentFormat)
 {
     VkPipelineViewportStateCreateInfo viewportStateCrInfo{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -118,9 +122,18 @@ VkPipeline VulkanPipeline::createPipeline(VkDevice device, VkRenderPass pass)
 
     // finally create pipeline
 
+    VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+        .pNext = nullptr,
+        .colorAttachmentCount = static_cast<uint32_t>(colorAttachmentFormats.size()),
+        .pColorAttachmentFormats = colorAttachmentFormats.constData(),
+        .depthAttachmentFormat = depthAttachmentFormat,
+        .stencilAttachmentFormat = stencilAttachmentFormat,
+    };
+
     VkGraphicsPipelineCreateInfo pipelineCrInfo{
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .pNext = nullptr,
+        .pNext = &pipelineRenderingCreateInfo,
 
         .stageCount = (uint32_t)shaderStageCrInfos.size(),
         .pStages = shaderStageCrInfos.data(),
@@ -133,7 +146,7 @@ VkPipeline VulkanPipeline::createPipeline(VkDevice device, VkRenderPass pass)
         .pColorBlendState = &colorBlendStateCrInfo,
 
         .layout = pipelineLayout,
-        .renderPass = pass,
+        .renderPass = VK_NULL_HANDLE,
         .subpass = 0,
         .basePipelineHandle = VK_NULL_HANDLE,
     };

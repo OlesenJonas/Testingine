@@ -13,7 +13,7 @@
 #include "VulkanSwapchainSetup.hpp"
 #include "VulkanTypes.hpp"
 
-#include "Datastructures/Span.hpp"
+#include <intern/Datastructures/Span.hpp>
 
 #include <fstream>
 #include <iostream>
@@ -671,7 +671,7 @@ void VulkanRenderer::initPipelines()
         vertexDescription.attributes.size();
     meshPipelineWrapper.vertexInputStateCrInfo.pVertexAttributeDescriptions = vertexDescription.attributes.data();
 
-    VkPipeline meshPipeline = meshPipelineWrapper.createPipeline(device, renderPass);
+    VkPipeline meshPipeline = meshPipelineWrapper.createPipeline(device, {swapchainImageFormat}, depthFormat);
 
     createMaterial(meshPipeline, meshPipelineLayout, "defaultMesh");
 
@@ -704,7 +704,8 @@ void VulkanRenderer::initPipelines()
     texturedPipelineWrapper.vertexInputStateCrInfo.pVertexAttributeDescriptions =
         vertexDescription.attributes.data();
 
-    VkPipeline texturedPipeline = texturedPipelineWrapper.createPipeline(device, renderPass);
+    VkPipeline texturedPipeline =
+        texturedPipelineWrapper.createPipeline(device, {swapchainImageFormat}, depthFormat);
 
     createMaterial(texturedPipeline, texturedPipelineLayout, "texturedMesh");
 
@@ -817,8 +818,8 @@ void VulkanRenderer::run()
     {
         glfwPollEvents();
 
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
+        // ImGui_ImplVulkan_NewFrame();
+        // ImGui_ImplGlfw_NewFrame();
 
         Engine::ptr->getInputManager()->update();
         if(!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
@@ -827,9 +828,9 @@ void VulkanRenderer::run()
         }
         // Not sure about the order of UI & engine code
 
-        ImGui::NewFrame();
-        ImGui::ShowDemoWindow();
-        ImGui::Render();
+        // ImGui::NewFrame();
+        // ImGui::ShowDemoWindow();
+        // ImGui::Render();
 
         draw();
     }
@@ -859,35 +860,160 @@ void VulkanRenderer::draw()
 
     assertVkResult(vkBeginCommandBuffer(curFrameData.mainCommandBuffer, &cmdBeginInfo));
 
+    const VkImageMemoryBarrier colorImageMemoryBarrierToRender{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .image = swapchainImages[swapchainImageIndex],
+        .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+    };
+    // Only using a single depth buffer, so have to ensure that previous frames depth writes are complete
+    // todo: and reads and anything else that uses depth for that matter (but thats not happening yet)
+    const VkImageMemoryBarrier depthImageMemoryBarrierToRender{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        // TODO: dynamic rendering demo uses empty srcAccessMask, not sure which correct / better.
+        //      to me this makes more sense, since this *is* how the depth is accessed
+        .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask =
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .image = depthImage.image,
+        .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+    };
+    vkCmdPipelineBarrier(
+        curFrameData.mainCommandBuffer,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0,
+        0,
+        nullptr,
+        0,
+        nullptr,
+        1,
+        &colorImageMemoryBarrierToRender);
+    vkCmdPipelineBarrier(
+        curFrameData.mainCommandBuffer,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        0,
+        0,
+        nullptr,
+        0,
+        nullptr,
+        1,
+        &depthImageMemoryBarrierToRender);
+
     float flash = abs(sin(frameNumber / 120.0f));
     VkClearValue clearValue{.color = {0.0f, 0.0f, flash, 1.0f}};
     VkClearValue depthClear{.depthStencil = {.depth = 1.0f}};
 
     VkClearValue clearValues[2] = {clearValue, depthClear};
 
-    VkRenderPassBeginInfo renderpassBeginInfo{
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+    VkRenderingAttachmentInfo colorAttachmentInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
+        .imageView = swapchainImageViews[swapchainImageIndex],
+        .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = clearValue,
+    };
 
-        .renderPass = renderPass,
-        .framebuffer = framebuffers[swapchainImageIndex],
+    VkRenderingAttachmentInfo depthAttachmentInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = nullptr,
+        .imageView = depthImageView,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = depthClear,
+    };
+
+    VkRenderingInfo renderingInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = nullptr,
         .renderArea =
             {
                 .offset = {.x = 0, .y = 0},
                 .extent = swapchainExtent,
             },
-        .clearValueCount = 2,
-        .pClearValues = &clearValues[0],
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentInfo,
+        .pDepthAttachment = &depthAttachmentInfo,
     };
 
-    vkCmdBeginRenderPass(curFrameData.mainCommandBuffer, &renderpassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginRendering(curFrameData.mainCommandBuffer, &renderingInfo);
 
     // todo: sort before
     drawObjects(curFrameData.mainCommandBuffer, renderables.data(), renderables.size());
 
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), curFrameData.mainCommandBuffer);
+    vkCmdEndRendering(curFrameData.mainCommandBuffer);
 
-    vkCmdEndRenderPass(curFrameData.mainCommandBuffer);
+    const VkImageMemoryBarrier imageMemoryBarrierToPresent{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .image = swapchainImages[swapchainImageIndex],
+        .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+    };
+    vkCmdPipelineBarrier(
+        curFrameData.mainCommandBuffer,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        0,
+        0,
+        nullptr,
+        0,
+        nullptr,
+        1,
+        &imageMemoryBarrierToPresent);
+
+    // VkRenderPassBeginInfo renderpassBeginInfo{
+    //     .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+    //     .pNext = nullptr,
+
+    //     .renderPass = renderPass,
+    //     .framebuffer = framebuffers[swapchainImageIndex],
+    //     .renderArea =
+    //         {
+    //             .offset = {.x = 0, .y = 0},
+    //             .extent = swapchainExtent,
+    //         },
+    //     .clearValueCount = 2,
+    //     .pClearValues = &clearValues[0],
+    // };
+
+    // vkCmdBeginRenderPass(curFrameData.mainCommandBuffer, &renderpassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    // ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), curFrameData.mainCommandBuffer);
+
+    // vkCmdEndRenderPass(curFrameData.mainCommandBuffer);
 
     assertVkResult(vkEndCommandBuffer(curFrameData.mainCommandBuffer));
 

@@ -1,5 +1,7 @@
 #include "VulkanDebug.hpp"
 
+#include <intern/Misc/Macros.hpp>
+
 #include <iostream>
 
 VkDebugUtilsMessengerCreateInfoEXT createDefaultDebugUtilsMessengerCreateInfo()
@@ -22,10 +24,13 @@ VKAPI_ATTR VkBool32 VKAPI_CALL defaultDebugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData)
 {
-    (void)messageSeverity;
     (void)messageType;
     (void)pCallbackData;
     (void)pUserData;
+    if(messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+    {
+        BREAKPOINT;
+    }
     // if(messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT){
     // if(messageType != VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT){
     std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;

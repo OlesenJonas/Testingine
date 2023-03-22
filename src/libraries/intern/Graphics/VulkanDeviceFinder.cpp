@@ -75,11 +75,19 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
 
     VkPhysicalDeviceFeatures deviceFeatures{};
 
-    // Shader Draw Parameters are always needed, but core in 1.1, so dont think I need to request this?
-    //  just check if the feature is enabled (which it needs to be!)
+    // TODO: if the amount of requested core features grows switch to
+    //   https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkPhysicalDeviceVulkan13Features.html
+    //   and similar Vulkan11-/Vulkan12Features
+
+    VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+        .pNext = nullptr,
+        .dynamicRendering = VK_TRUE,
+    };
+
     VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParamFeatures = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES,
-        .pNext = nullptr,
+        .pNext = &dynamicRenderingFeatures,
         .shaderDrawParameters = VK_TRUE,
     };
 
