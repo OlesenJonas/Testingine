@@ -772,7 +772,7 @@ void VulkanRenderer::initImGui()
         .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
     };
 
-    ImGui_ImplVulkan_Init(&initInfo, renderPass);
+    ImGui_ImplVulkan_Init(&initInfo, swapchainImageFormat);
 
     // upload imgui font textures
     immediateSubmit([&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
@@ -818,8 +818,8 @@ void VulkanRenderer::run()
     {
         glfwPollEvents();
 
-        // ImGui_ImplVulkan_NewFrame();
-        // ImGui_ImplGlfw_NewFrame();
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
 
         Engine::ptr->getInputManager()->update();
         if(!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
@@ -828,9 +828,9 @@ void VulkanRenderer::run()
         }
         // Not sure about the order of UI & engine code
 
-        // ImGui::NewFrame();
-        // ImGui::ShowDemoWindow();
-        // ImGui::Render();
+        ImGui::NewFrame();
+        ImGui::ShowDemoWindow();
+        ImGui::Render();
 
         draw();
     }
@@ -967,6 +967,36 @@ void VulkanRenderer::draw()
 
     vkCmdEndRendering(curFrameData.mainCommandBuffer);
 
+    // UI Rendering
+
+    VkRenderingAttachmentInfo uiColorAttachmentInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = nullptr,
+        .imageView = swapchainImageViews[swapchainImageIndex],
+        .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    };
+
+    VkRenderingInfo uiRenderingInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = nullptr,
+        .renderArea =
+            {
+                .offset = {.x = 0, .y = 0},
+                .extent = swapchainExtent,
+            },
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &uiColorAttachmentInfo,
+    };
+
+    vkCmdBeginRendering(curFrameData.mainCommandBuffer, &uiRenderingInfo);
+
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), curFrameData.mainCommandBuffer);
+
+    vkCmdEndRendering(curFrameData.mainCommandBuffer);
+
     const VkImageMemoryBarrier imageMemoryBarrierToPresent{
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
@@ -993,27 +1023,6 @@ void VulkanRenderer::draw()
         nullptr,
         1,
         &imageMemoryBarrierToPresent);
-
-    // VkRenderPassBeginInfo renderpassBeginInfo{
-    //     .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-    //     .pNext = nullptr,
-
-    //     .renderPass = renderPass,
-    //     .framebuffer = framebuffers[swapchainImageIndex],
-    //     .renderArea =
-    //         {
-    //             .offset = {.x = 0, .y = 0},
-    //             .extent = swapchainExtent,
-    //         },
-    //     .clearValueCount = 2,
-    //     .pClearValues = &clearValues[0],
-    // };
-
-    // vkCmdBeginRenderPass(curFrameData.mainCommandBuffer, &renderpassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-    // ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), curFrameData.mainCommandBuffer);
-
-    // vkCmdEndRenderPass(curFrameData.mainCommandBuffer);
 
     assertVkResult(vkEndCommandBuffer(curFrameData.mainCommandBuffer));
 
