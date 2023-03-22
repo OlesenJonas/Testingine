@@ -119,9 +119,6 @@ class VulkanRenderer
     AllocatedImage depthImage;
     VkFormat depthFormat;
 
-    VkRenderPass renderPass;
-    std::vector<VkFramebuffer> framebuffers;
-
     VkQueue graphicsQueue;
     uint32_t graphicsQueueFamily;
 
@@ -168,8 +165,6 @@ class VulkanRenderer
     void initVulkan();
     void initSwapchain();
     void initCommands();
-    void initDefaultRenderpass();
-    void initFramebuffers();
     void initSyncStructures();
     void initDescriptors();
     void initPipelines();

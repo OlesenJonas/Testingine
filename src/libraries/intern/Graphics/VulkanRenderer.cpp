@@ -46,10 +46,6 @@ void VulkanRenderer::init()
 
     initCommands();
 
-    initDefaultRenderpass();
-
-    initFramebuffers();
-
     initSyncStructures();
 
     initDescriptors();
@@ -227,120 +223,6 @@ void VulkanRenderer::initCommands()
         .commandBufferCount = 1,
     };
     assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &uploadContext.commandBuffer));
-}
-
-void VulkanRenderer::initDefaultRenderpass()
-{
-    VkAttachmentDescription colorAttachment{
-        .format = swapchainImageFormat,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-
-        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-    };
-    VkAttachmentReference colorAttachmentRef{
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    };
-
-    VkAttachmentDescription depthAttachment{
-        .flags = 0,
-        .format = depthFormat,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, // Only _DEPTH_OPTIMAL ?
-    };
-    VkAttachmentReference depthAttachmentRef{
-        .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    };
-
-    // https://www.reddit.com/r/vulkan/comments/s80reu/comment/hth2uj9/?utm_source=share&utm_medium=web2x&context=3
-    VkSubpassDependency colorDependency{
-        .srcSubpass = VK_SUBPASS_EXTERNAL,
-        .dstSubpass = 0,
-        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .srcAccessMask = 0,
-        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-    };
-    VkSubpassDependency depthDependency{
-        .srcSubpass = VK_SUBPASS_EXTERNAL,
-        .dstSubpass = 0,
-        .srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        .srcAccessMask = 0,
-        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-    };
-
-    VkSubpassDescription subpassDesc{
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachmentRef,
-        .pDepthStencilAttachment = &depthAttachmentRef,
-    };
-
-    VkAttachmentDescription attachments[2] = {colorAttachment, depthAttachment};
-    VkSubpassDependency dependencies[2] = {colorDependency, depthDependency};
-
-    VkRenderPassCreateInfo renderPassInfo{
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-
-        .attachmentCount = 2,
-        .pAttachments = &attachments[0],
-
-        .subpassCount = 1,
-        .pSubpasses = &subpassDesc,
-
-        .dependencyCount = 2,
-        .pDependencies = &dependencies[0],
-    };
-
-    assertVkResult(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
-
-    deleteQueue.pushBack([=]() { vkDestroyRenderPass(device, renderPass, nullptr); });
-}
-
-void VulkanRenderer::initFramebuffers()
-{
-    VkFramebufferCreateInfo fbInfo{
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .pNext = nullptr,
-
-        .renderPass = renderPass,
-        .attachmentCount = 1,
-        .width = swapchainExtent.width,
-        .height = swapchainExtent.height,
-        .layers = 1,
-    };
-
-    const uint32_t swapchainImageCount = swapchainImages.size();
-    framebuffers.resize(swapchainImageCount);
-
-    for(int i = 0; i < swapchainImageCount; i++)
-    {
-        VkImageView attachments[2] = {swapchainImageViews[i], depthImageView};
-
-        fbInfo.attachmentCount = 2;
-        fbInfo.pAttachments = &attachments[0];
-        assertVkResult(vkCreateFramebuffer(device, &fbInfo, nullptr, &framebuffers[i]));
-
-        deleteQueue.pushBack(
-            [=]()
-            {
-                vkDestroyFramebuffer(device, framebuffers[i], nullptr);
-                vkDestroyImageView(device, swapchainImageViews[i], nullptr);
-            });
-    }
 }
 
 void VulkanRenderer::initSyncStructures()
