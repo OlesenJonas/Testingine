@@ -33,7 +33,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL defaultDebugCallback(
     }
     // if(messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT){
     // if(messageType != VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT){
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+    std::cerr << "validation layer: " << pCallbackData->pMessage << "\n" << std::endl;
     //}
 
     return VK_FALSE;
