@@ -1,10 +1,10 @@
-#include "VulkanPipeline.hpp"
+#include "VulkanPipelineBuilder.hpp"
 #include <vulkan/vulkan_core.h>
 
 // :/
 #include <iostream>
 
-VulkanPipeline::VulkanPipeline(const CreateInfo&& info)
+VulkanPipelineBuilder::VulkanPipelineBuilder(const CreateInfo&& info)
 {
     for(const auto& stage : info.shaderStages)
     {
@@ -87,13 +87,10 @@ VulkanPipeline::VulkanPipeline(const CreateInfo&& info)
                           VK_COLOR_COMPONENT_A_BIT,
     };
 
-    viewport = info.viewport;
-    scisscor = info.scissor;
-
     pipelineLayout = info.pipelineLayout;
 }
 
-VkPipeline VulkanPipeline::createPipeline(
+VkPipeline VulkanPipelineBuilder::createPipeline(
     VkDevice device,
     const Span<const VkFormat> colorAttachmentFormats,
     VkFormat depthAttachmentFormat,
@@ -104,9 +101,7 @@ VkPipeline VulkanPipeline::createPipeline(
         .pNext = nullptr,
 
         .viewportCount = 1,
-        .pViewports = &viewport,
         .scissorCount = 1,
-        .pScissors = &scisscor,
     };
 
     VkPipelineColorBlendStateCreateInfo colorBlendStateCrInfo{
@@ -118,6 +113,13 @@ VkPipeline VulkanPipeline::createPipeline(
 
         .attachmentCount = 1,
         .pAttachments = &colorBlendAttachmentState,
+    };
+
+    std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamicState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = (uint32_t)dynamicStates.size(),
+        .pDynamicStates = dynamicStates.data(),
     };
 
     // finally create pipeline
@@ -144,6 +146,7 @@ VkPipeline VulkanPipeline::createPipeline(
         .pMultisampleState = &multisampleStateCrInfo,
         .pDepthStencilState = &depthStencilStateCrInfo,
         .pColorBlendState = &colorBlendStateCrInfo,
+        .pDynamicState = &dynamicState,
 
         .layout = pipelineLayout,
         .renderPass = VK_NULL_HANDLE,

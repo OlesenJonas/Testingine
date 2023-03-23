@@ -4,10 +4,11 @@
 #include "../RenderObject/RenderObject.hpp"
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
+#include "Graphics/Renderer/Init/VulkanPipelineBuilder.hpp"
 #include "VulkanDebug.hpp"
 #include "init/VulkanDeviceFinder.hpp"
 #include "init/VulkanInit.hpp"
-#include "init/VulkanPipeline.hpp"
+#include "init/VulkanPipelineBuilder.hpp"
 #include "init/VulkanSwapchainSetup.hpp"
 
 #include <intern/Datastructures/Span.hpp>
@@ -526,68 +527,48 @@ void VulkanRenderer::initPipelines()
 
     VertexInputDescription vertexDescription = Vertex::getVertexDescription();
 
-    VulkanPipeline meshPipelineWrapper{VulkanPipeline::CreateInfo{
+    VulkanPipelineBuilder meshPipelineBuilder{VulkanPipelineBuilder::CreateInfo{
         .shaderStages =
             {{.stage = VK_SHADER_STAGE_VERTEX_BIT, .module = meshTriVertShader},
              {.stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fragShader}},
         .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .polygonMode = VK_POLYGON_MODE_FILL,
-        .viewport =
-            {
-                .x = 0.0f,
-                .y = 0.0f,
-                .width = (float)swapchainExtent.width,
-                .height = (float)swapchainExtent.height,
-                .minDepth = 0.0f,
-                .maxDepth = 1.0f,
-            },
-        .scissor = {.offset = {0, 0}, .extent = swapchainExtent},
         .depthTest = true,
         .depthCompareOp = VK_COMPARE_OP_LESS,
         .pipelineLayout = meshPipelineLayout,
     }};
     // TODO: add a nice wrapper for this to pipeline constructor!
-    meshPipelineWrapper.vertexInputStateCrInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
-    meshPipelineWrapper.vertexInputStateCrInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
-    meshPipelineWrapper.vertexInputStateCrInfo.vertexAttributeDescriptionCount =
+    meshPipelineBuilder.vertexInputStateCrInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
+    meshPipelineBuilder.vertexInputStateCrInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
+    meshPipelineBuilder.vertexInputStateCrInfo.vertexAttributeDescriptionCount =
         vertexDescription.attributes.size();
-    meshPipelineWrapper.vertexInputStateCrInfo.pVertexAttributeDescriptions = vertexDescription.attributes.data();
+    meshPipelineBuilder.vertexInputStateCrInfo.pVertexAttributeDescriptions = vertexDescription.attributes.data();
 
-    VkPipeline meshPipeline = meshPipelineWrapper.createPipeline(device, {swapchainImageFormat}, depthFormat);
+    VkPipeline meshPipeline = meshPipelineBuilder.createPipeline(device, {swapchainImageFormat}, depthFormat);
 
     createMaterial(meshPipeline, meshPipelineLayout, "defaultMesh");
 
-    VulkanPipeline texturedPipelineWrapper{VulkanPipeline::CreateInfo{
+    VulkanPipelineBuilder texturedPipelineBuilder{VulkanPipelineBuilder::CreateInfo{
         .shaderStages =
             {{.stage = VK_SHADER_STAGE_VERTEX_BIT, .module = meshTriVertShader},
              {.stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = texturedFragShader}},
         .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .polygonMode = VK_POLYGON_MODE_FILL,
-        .viewport =
-            {
-                .x = 0.0f,
-                .y = 0.0f,
-                .width = (float)swapchainExtent.width,
-                .height = (float)swapchainExtent.height,
-                .minDepth = 0.0f,
-                .maxDepth = 1.0f,
-            },
-        .scissor = {.offset = {0, 0}, .extent = swapchainExtent},
         .depthTest = true,
         .depthCompareOp = VK_COMPARE_OP_LESS,
         .pipelineLayout = texturedPipelineLayout,
     }};
     // TODO: add a nice wrapper for this to pipeline constructor!
-    texturedPipelineWrapper.vertexInputStateCrInfo.vertexBindingDescriptionCount =
+    texturedPipelineBuilder.vertexInputStateCrInfo.vertexBindingDescriptionCount =
         vertexDescription.bindings.size();
-    texturedPipelineWrapper.vertexInputStateCrInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
-    texturedPipelineWrapper.vertexInputStateCrInfo.vertexAttributeDescriptionCount =
+    texturedPipelineBuilder.vertexInputStateCrInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
+    texturedPipelineBuilder.vertexInputStateCrInfo.vertexAttributeDescriptionCount =
         vertexDescription.attributes.size();
-    texturedPipelineWrapper.vertexInputStateCrInfo.pVertexAttributeDescriptions =
+    texturedPipelineBuilder.vertexInputStateCrInfo.pVertexAttributeDescriptions =
         vertexDescription.attributes.data();
 
     VkPipeline texturedPipeline =
-        texturedPipelineWrapper.createPipeline(device, {swapchainImageFormat}, depthFormat);
+        texturedPipelineBuilder.createPipeline(device, {swapchainImageFormat}, depthFormat);
 
     createMaterial(texturedPipeline, texturedPipelineLayout, "texturedMesh");
 
@@ -833,6 +814,19 @@ void VulkanRenderer::draw()
     };
 
     vkCmdBeginRendering(curFrameData.mainCommandBuffer, &renderingInfo);
+
+    VkViewport viewport{
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = (float)swapchainExtent.width,
+        .height = (float)swapchainExtent.height,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    vkCmdSetViewport(curFrameData.mainCommandBuffer, 0, 1, &viewport);
+
+    VkRect2D scissor{.offset = {0, 0}, .extent = swapchainExtent};
+    vkCmdSetScissor(curFrameData.mainCommandBuffer, 0, 1, &scissor);
 
     // todo: sort before
     drawObjects(curFrameData.mainCommandBuffer, renderables.data(), renderables.size());

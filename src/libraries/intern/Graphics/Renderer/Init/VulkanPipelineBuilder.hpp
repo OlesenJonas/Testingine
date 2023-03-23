@@ -5,7 +5,7 @@
 #include <Datastructures/Span.hpp>
 #include <vulkan/vulkan_core.h>
 
-struct VulkanPipeline
+struct VulkanPipelineBuilder
 {
     struct CreateInfo
     {
@@ -17,16 +17,12 @@ struct VulkanPipeline
         const Span<const ShaderStage> shaderStages;
         VkPrimitiveTopology topology;
         VkPolygonMode polygonMode;
-        // TODO: use dynamic state for viewport and scissor, dont bake into pipeline!
-        //       see HelloTriangleApplication
-        VkViewport viewport;
-        VkRect2D scissor;
         bool depthTest = false;
         VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS;
         VkPipelineLayout pipelineLayout;
     };
 
-    VulkanPipeline(const CreateInfo&& info);
+    VulkanPipelineBuilder(const CreateInfo&& info);
 
     VkPipeline createPipeline(
         VkDevice device,
@@ -38,9 +34,6 @@ struct VulkanPipeline
 
     VkPipelineVertexInputStateCreateInfo vertexInputStateCrInfo;
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCrInfo;
-
-    VkViewport viewport;
-    VkRect2D scisscor;
 
     VkPipelineRasterizationStateCreateInfo rasterizationStateCrInfo;
 
