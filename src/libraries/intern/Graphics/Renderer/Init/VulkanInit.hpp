@@ -1,6 +1,5 @@
 #pragma once
 
-#include "VulkanTypes.hpp"
 #include <vulkan/vulkan.h>
 
 #include "Datastructures/Span.hpp"

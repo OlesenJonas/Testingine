@@ -1,6 +1,6 @@
 #pragma once
 
-#include "VulkanTypes.hpp"
+#include "../../VulkanTypes.hpp"
 #include <vulkan/vulkan.h>
 
 #include <vector>

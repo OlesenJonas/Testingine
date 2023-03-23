@@ -5,11 +5,11 @@
 
 #include <glm/glm.hpp>
 
-#include "Material.hpp"
-#include "Mesh.hpp"
-#include "RenderObject.hpp"
-#include "Texture.hpp"
-#include "VulkanTypes.hpp"
+#include "../Material/Material.hpp"
+#include "../Mesh/Mesh.hpp"
+#include "../RenderObject/RenderObject.hpp"
+#include "../Texture/Texture.hpp"
+#include "../VulkanTypes.hpp"
 
 #include <intern/Datastructures/FunctionQueue.hpp>
 

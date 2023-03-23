@@ -2,8 +2,8 @@
 
 #include <glm/glm.hpp>
 
-#include "Material.hpp"
-#include "Mesh.hpp"
+#include "../Material/Material.hpp"
+#include "../Mesh/Mesh.hpp"
 
 struct RenderObject
 {

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "../../VulkanTypes.hpp"
 #include "Graphics/VulkanTypes.hpp"
-#include "VulkanTypes.hpp"
 #include <vulkan/vulkan.h>
 
 #include "Datastructures/Span.hpp"

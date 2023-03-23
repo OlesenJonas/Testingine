@@ -1,20 +1,17 @@
 #include "VulkanRenderer.hpp"
-#include "../Engine/Engine.hpp"
-#include "Graphics/Barrier.hpp"
-#include "Graphics/Mesh.hpp"
-#include "Graphics/RenderObject.hpp"
-#include "Graphics/Texture.hpp"
-#include "Graphics/VulkanDebug.hpp"
-#include "Graphics/VulkanRenderer.hpp"
-#include "Mesh.hpp"
+#include "../Barriers/Barrier.hpp"
+#include "../Mesh/Mesh.hpp"
+#include "../RenderObject/RenderObject.hpp"
+#include "../Texture/Texture.hpp"
+#include "../VulkanTypes.hpp"
 #include "VulkanDebug.hpp"
-#include "VulkanDeviceFinder.hpp"
-#include "VulkanInit.hpp"
-#include "VulkanPipeline.hpp"
-#include "VulkanSwapchainSetup.hpp"
-#include "VulkanTypes.hpp"
+#include "init/VulkanDeviceFinder.hpp"
+#include "init/VulkanInit.hpp"
+#include "init/VulkanPipeline.hpp"
+#include "init/VulkanSwapchainSetup.hpp"
 
 #include <intern/Datastructures/Span.hpp>
+#include <intern/Engine/Engine.hpp>
 
 #include <fstream>
 #include <iostream>

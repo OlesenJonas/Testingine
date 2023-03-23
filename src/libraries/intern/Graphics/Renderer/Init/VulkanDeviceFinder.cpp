@@ -1,6 +1,5 @@
 #include "VulkanDeviceFinder.hpp"
-#include "Graphics/VulkanDeviceFinder.hpp"
-#include "Graphics/VulkanTypes.hpp"
+#include "../../VulkanTypes.hpp"
 
 #include <set>
 #include <stdexcept>

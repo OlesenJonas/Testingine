@@ -1,5 +1,5 @@
 #include "Texture.hpp"
-#include "VulkanRenderer.hpp"
+#include "../Renderer/VulkanRenderer.hpp"
 
 #include <iostream>
 #include <stb/stb_image.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "VulkanTypes.hpp"
+#include "../VulkanTypes.hpp"
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>

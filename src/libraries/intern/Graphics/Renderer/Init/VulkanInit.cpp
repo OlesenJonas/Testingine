@@ -1,5 +1,5 @@
 #include "VulkanInit.hpp"
-#include "VulkanDebug.hpp"
+#include "../VulkanDebug.hpp"
 
 #include <initializer_list>
 #include <vulkan/vulkan.h>

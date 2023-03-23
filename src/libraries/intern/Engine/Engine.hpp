@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../Camera/Camera.hpp"
-#include "../Graphics/VulkanRenderer.hpp"
-#include "../InputManager/InputManager.hpp"
+#include <intern/Camera/Camera.hpp>
+#include <intern/Graphics/Renderer/VulkanRenderer.hpp>
+#include <intern/InputManager/InputManager.hpp>
 
 struct GLFWwindow;
 
