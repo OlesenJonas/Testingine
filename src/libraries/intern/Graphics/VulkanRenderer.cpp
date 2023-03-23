@@ -247,14 +247,16 @@ void VulkanRenderer::initSyncStructures()
 
         deleteQueue.pushBack([=]() { vkDestroyFence(device, frames[i].renderFence, nullptr); });
 
-        assertVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &frames[i].presentSemaphore));
-        assertVkResult(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &frames[i].renderSemaphore));
+        assertVkResult(
+            vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &frames[i].imageAvailableSemaphore));
+        assertVkResult(
+            vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &frames[i].renderFinishedSemaphore));
 
         deleteQueue.pushBack(
             [=]()
             {
-                vkDestroySemaphore(device, frames[i].presentSemaphore, nullptr);
-                vkDestroySemaphore(device, frames[i].renderSemaphore, nullptr);
+                vkDestroySemaphore(device, frames[i].imageAvailableSemaphore, nullptr);
+                vkDestroySemaphore(device, frames[i].renderFinishedSemaphore, nullptr);
             });
     }
 
@@ -729,7 +731,7 @@ void VulkanRenderer::draw()
 
     uint32_t swapchainImageIndex;
     assertVkResult(vkAcquireNextImageKHR(
-        device, swapchain, UINT64_MAX, curFrameData.presentSemaphore, nullptr, &swapchainImageIndex));
+        device, swapchain, UINT64_MAX, curFrameData.imageAvailableSemaphore, nullptr, &swapchainImageIndex));
 
     assertVkResult(vkResetCommandBuffer(curFrameData.mainCommandBuffer, 0));
 
@@ -901,14 +903,14 @@ void VulkanRenderer::draw()
         .pNext = nullptr,
 
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &curFrameData.presentSemaphore,
+        .pWaitSemaphores = &curFrameData.imageAvailableSemaphore,
         .pWaitDstStageMask = &waitStage,
 
         .commandBufferCount = 1,
         .pCommandBuffers = &curFrameData.mainCommandBuffer,
 
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &curFrameData.renderSemaphore,
+        .pSignalSemaphores = &curFrameData.renderFinishedSemaphore,
     };
 
     assertVkResult(vkQueueSubmit(graphicsQueue, 1, &submitInfo, curFrameData.renderFence));
@@ -918,7 +920,7 @@ void VulkanRenderer::draw()
         .pNext = nullptr,
 
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &curFrameData.renderSemaphore,
+        .pWaitSemaphores = &curFrameData.renderFinishedSemaphore,
 
         .swapchainCount = 1,
         .pSwapchains = &swapchain,

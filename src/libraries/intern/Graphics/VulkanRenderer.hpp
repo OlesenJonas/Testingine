@@ -55,9 +55,8 @@ struct UploadContext
 
 struct FrameData
 {
-    // TODO: rename into imageAvailable, renderFinished
-    VkSemaphore presentSemaphore;
-    VkSemaphore renderSemaphore;
+    VkSemaphore imageAvailableSemaphore;
+    VkSemaphore renderFinishedSemaphore;
     VkFence renderFence;
     // todo: one command buffer for offscreen and one for present
     VkCommandPool commandPool;
