@@ -79,9 +79,15 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
     //   https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkPhysicalDeviceVulkan13Features.html
     //   and similar Vulkan11-/Vulkan12Features
 
+    VkPhysicalDeviceSynchronization2Features synch2Features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+        .pNext = nullptr,
+        .synchronization2 = VK_TRUE,
+    };
+
     VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-        .pNext = nullptr,
+        .pNext = &synch2Features,
         .dynamicRendering = VK_TRUE,
     };
 
