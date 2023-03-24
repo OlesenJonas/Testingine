@@ -22,7 +22,6 @@
 #include "ImGui/imgui.h"
 #include "ImGui/imgui_impl_glfw.h"
 #include "ImGui/imgui_impl_vulkan.h"
-#include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_access.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
@@ -31,14 +30,6 @@
 
 void VulkanRenderer::init()
 {
-    // Init window
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    window = glfwCreateWindow(windowExtent.width, windowExtent.height, "Vulkan Test", nullptr, nullptr);
-    glfwSetWindowUserPointer(window, this);
-    *Engine::ptr->getMainWindow() = window;
-
     initVulkan();
 
     initSwapchain();
@@ -77,7 +68,8 @@ void VulkanRenderer::initVulkan()
     if(enableValidationLayers)
         debugMessenger = setupDebugMessenger(instance);
 
-    if(glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
+    if(glfwCreateWindowSurface(instance, Engine::ptr->getMainWindow()->glfwWindow, nullptr, &surface) !=
+       VK_SUCCESS)
     {
         throw std::runtime_error("failed to create window surface!");
     }
@@ -110,7 +102,7 @@ void VulkanRenderer::initVulkan()
 
 void VulkanRenderer::initSwapchain()
 {
-    VulkanSwapchainSetup swapchainSetup(physicalDevice, device, window, surface);
+    VulkanSwapchainSetup swapchainSetup(physicalDevice, device, Engine::ptr->getMainWindow()->glfwWindow, surface);
     swapchainSetup.setup(queueFamilyIndices.graphicsFamily.value(), queueFamilyIndices.presentFamily.value());
 
     swapchain = swapchainSetup.getSwapchain();
@@ -620,7 +612,7 @@ void VulkanRenderer::initImGui()
     // 2: initialize the library
     ImGui::CreateContext();
     // init imgui for Glfw
-    ImGui_ImplGlfw_InitForVulkan(window, true);
+    ImGui_ImplGlfw_InitForVulkan(Engine::ptr->getMainWindow()->glfwWindow, true);
     // init imgui for Vulkan
     ImGui_ImplVulkan_InitInfo initInfo = {
         .Instance = instance,
@@ -668,7 +660,7 @@ void VulkanRenderer::cleanup()
     }
     vkDestroyInstance(instance, nullptr);
 
-    glfwDestroyWindow(window);
+    glfwDestroyWindow(Engine::ptr->getMainWindow()->glfwWindow);
     glfwTerminate();
 }
 
@@ -677,7 +669,7 @@ void VulkanRenderer::run()
     glfwSetTime(0.0);
     Engine::ptr->getInputManager()->resetTime();
 
-    while(!glfwWindowShouldClose(window))
+    while(!glfwWindowShouldClose(Engine::ptr->getMainWindow()->glfwWindow))
     {
         glfwPollEvents();
 

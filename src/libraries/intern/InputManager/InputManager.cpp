@@ -7,7 +7,7 @@
 
 void InputManager::init()
 {
-    glfwGetCursorPos(*Engine::ptr->getMainWindow(), &mouseX, &mouseY);
+    glfwGetCursorPos(Engine::ptr->getMainWindow()->glfwWindow, &mouseX, &mouseY);
     oldMouseX = mouseX; // NOLINT
     oldMouseY = mouseY; // NOLINT
     setupCallbacks();
@@ -39,7 +39,7 @@ void InputManager::update()
 
     simulationTime += useFixedTimestep ? fixedDeltaTime : deltaTime;
 
-    glfwGetCursorPos(*Engine::ptr->getMainWindow(), &mouseX, &mouseY);
+    glfwGetCursorPos(Engine::ptr->getMainWindow()->glfwWindow, &mouseX, &mouseY);
     mouseDelta = {mouseX - oldMouseX, mouseY - oldMouseY};
     oldMouseX = mouseX;
     oldMouseY = mouseY;
@@ -51,7 +51,7 @@ void InputManager::setupCallbacks(
     GLFWscrollfun scrollCallback,
     GLFWframebuffersizefun resizeCallback)
 {
-    GLFWwindow* window = *Engine::ptr->getMainWindow();
+    GLFWwindow* window = Engine::ptr->getMainWindow()->glfwWindow;
     if(keyCallback != nullptr)
         glfwSetKeyCallback(window, keyCallback);
     else

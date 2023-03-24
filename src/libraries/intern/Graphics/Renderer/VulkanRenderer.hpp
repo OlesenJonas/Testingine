@@ -16,8 +16,6 @@
 #include <string>
 #include <unordered_map>
 
-struct GLFWwindow;
-
 // TODO: dont like this being here
 struct MeshPushConstants
 {
@@ -89,8 +87,6 @@ class VulkanRenderer
     bool isInitialized{false};
 
     int frameNumber{0};
-    GLFWwindow* window = nullptr;
-    VkExtent2D windowExtent{1700, 900};
 
 #ifdef ENABLE_VULKAN_VALIDATION
     bool enableValidationLayers = true;

@@ -3,8 +3,7 @@
 #include <intern/Camera/Camera.hpp>
 #include <intern/Graphics/Renderer/VulkanRenderer.hpp>
 #include <intern/InputManager/InputManager.hpp>
-
-struct GLFWwindow;
+#include <intern/Window/Window.hpp>
 
 class Engine
 {
@@ -23,7 +22,7 @@ class Engine
     {
         return &inputManager;
     }
-    inline GLFWwindow** getMainWindow()
+    inline Window* getMainWindow()
     {
         return &mainWindow;
     }
@@ -31,7 +30,6 @@ class Engine
   private:
     InputManager inputManager;
     Camera mainCamera;
-    // todo: abstract into window class that stores width, height, amount of images, etc aswell
-    GLFWwindow* mainWindow = nullptr;
+    Window mainWindow;
     VulkanRenderer renderer;
 };
