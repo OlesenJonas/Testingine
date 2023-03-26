@@ -10,7 +10,7 @@ void insertImageMemoryBarriers(VkCommandBuffer cmd, const Span<const VkImageMemo
         .bufferMemoryBarrierCount = 0,
         .pBufferMemoryBarriers = nullptr,
         .imageMemoryBarrierCount = uint32_t(imageMemoryBarriers.size()),
-        .pImageMemoryBarriers = imageMemoryBarriers.constData(),
+        .pImageMemoryBarriers = imageMemoryBarriers.data(),
     };
 
     vkCmdPipelineBarrier2(cmd, &dependencyInfo);

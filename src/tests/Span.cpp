@@ -31,6 +31,21 @@ int main()
         abandonIfFalse(s.size() == 0);
     }
 
+    {
+        struct Info
+        {
+            struct Stage
+            {
+                Stage(int s) : stage(s){};
+                int stage;
+            };
+            const Span<const Stage> stages;
+        };
+
+        Info i{.stages = std::initializer_list<Info::Stage>{1, 2, 3}};
+        Info i2{.stages = {1, 2, 3}};
+    }
+
     // from initializer list
     {
         // this must _not_ work, but no setup currently to explicitly test for compiler failure
@@ -50,6 +65,20 @@ int main()
         S s3;
         S s4;
         processSpan<const S>({s3, s4});
+    }
+
+    {
+        // const span from non-const span
+        auto func2 = [](Span<const int> span) {
+        };
+        auto func = [&](Span<int> span)
+        {
+            func2(span);
+        };
+
+        std::vector<int> v{1, 2, 3, 4};
+        func(v);
+        func2(v);
     }
 
     //  from ptr + size
@@ -86,12 +115,22 @@ int main()
         static_assert(std::is_same_v<decltype(vp[0]), decltype(sp[0])>);
         abandonIfFalse(vp.data() == sp.data());
         processSpan<const char*>({vp.data(), vp.size()});
+
+        std::vector<int> vec2{1, 2, 3};
+        Span<int> s2{vec2};
+
+        std::vector<int> vec3{1, 2, 3};
+        Span<const int> s3{vec3};
+
+        const std::vector<int> vec4{1, 2, 3};
+        Span<const int> s4{vec4};
     }
 
     //  from ptr + ptr
     {
         std::vector<double> v{1, 2, 3, 4};
         Span s{&v[0], &v[3]};
+        assert(s.size() == 4);
         static_assert(std::is_same_v<decltype(v[0]), decltype(s[0])>);
         abandonIfFalse(v.data() == s.data());
         abandonIfFalse(v.size() == s.size());
@@ -115,7 +154,7 @@ int main()
     //  from vector
     {
         std::vector<std::string> v{"1", "2", "3", "4"};
-        auto s = makeSpan(v);
+        Span<std::string> s{v};
         static_assert(std::is_same_v<decltype(v[0]), decltype(s[0])>);
         abandonIfFalse(v.data() == s.data());
         static_assert(std::is_same_v<decltype(v.data()), decltype(s.data())>);
@@ -130,37 +169,28 @@ int main()
             // pointing to same memory, should still be the same!
             abandonIfFalse(v[i] == s[i]);
         }
-        Span s2{v};
+        Span<std::string> s2{v};
         Span<std::string> s3{v};
         Span<std::string> s4 = v;
         processSpan<std::string>(v);
         Span<const std::string> s5{v};
         processSpan<const std::string>(v);
-        Span<const std::string> cs = makeConstSpan(v);
-        processSpan<const std::string>(makeConstSpan(v));
-
-        processSpan(makeSpan(v));
-        processSpan<std::string>(makeSpan(v));
-        // todo: this should work aswell!
-        // processSpan<const int>(makeSpan(v));
-
-        std::vector<std::string*> vp{&v[0], &v[1]};
-        auto s6 = makeSpan(vp);
     }
     {
         const std::vector<int> v{1, 2, 3};
         static_assert(std::is_const<decltype(v)>::value);
-        auto s = makeSpan(v);
-        static_assert(std::is_same_v<decltype(v[0]), decltype(s[0])>);
-        abandonIfFalse(v.data() == s.data());
-        static_assert(std::is_same_v<decltype(v.data()), decltype(s.data())>);
-        processSpan<const int>(makeSpan(v));
+        Span<const int> s{v};
+
+        std::vector<int> v2{1, 2, 3};
+        Span<const int> s2{v2};
+        Span<int> s22{v2};
     }
 
     // from std::array
     {
         std::array<int, 4> v{1, 2, 3, 4};
-        auto s = makeSpan(v);
+        Span<const int> s1{v};
+        Span<int> s{v};
         static_assert(std::is_same_v<decltype(v[0]), decltype(s[0])>);
         abandonIfFalse(v.data() == s.data());
         static_assert(std::is_same_v<decltype(v.data()), decltype(s.data())>);
@@ -177,16 +207,8 @@ int main()
         }
     }
     {
-        const std::array<int, 3> v{1, 2, 3};
-        auto s = makeSpan(v);
-        static_assert(std::is_same_v<decltype(v[0]), decltype(s[0])>);
-        abandonIfFalse(v.data() == s.data());
-        static_assert(std::is_same_v<decltype(v.data()), decltype(s.data())>);
-    }
-    {
         std::array<const int, 3> v{1, 2, 3};
-        // Span<const int> s{v};
-        auto s = makeSpan(v);
+        Span<const int> s{v};
         static_assert(std::is_same_v<decltype(v[0]), decltype(s[0])>);
         abandonIfFalse(v.data() == s.data());
         static_assert(std::is_same_v<decltype(v.data()), decltype(s.data())>);

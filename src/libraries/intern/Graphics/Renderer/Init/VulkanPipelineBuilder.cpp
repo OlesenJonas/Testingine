@@ -128,7 +128,7 @@ VkPipeline VulkanPipelineBuilder::createPipeline(
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .pNext = nullptr,
         .colorAttachmentCount = static_cast<uint32_t>(colorAttachmentFormats.size()),
-        .pColorAttachmentFormats = colorAttachmentFormats.constData(),
+        .pColorAttachmentFormats = colorAttachmentFormats.data(),
         .depthAttachmentFormat = depthAttachmentFormat,
         .stencilAttachmentFormat = stencilAttachmentFormat,
     };

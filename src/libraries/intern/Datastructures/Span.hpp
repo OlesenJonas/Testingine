@@ -11,42 +11,51 @@ template <typename T>
 class Span
 {
   public:
-    using size_type = std::size_t;
-    using element_type = T;
-    using value_type = std::remove_cv_t<T>;
-    using ptr_type = T*;
-    using ref_type = T&;
-    using iterator = T*;
-    using const_iterator = const T*;
+    using size_t = std::size_t;
+    using value_type = std::remove_const_t<T>;
+
+    // Constructors ----------------------------
 
     Span() : _data(nullptr), _length(0){};
 
-    Span(ptr_type ptr, size_type size) : _data(ptr), _length(size){};
+    Span(T* ptr, size_t size) : _data(ptr), _length(size){};
 
-    Span(ptr_type first, ptr_type last) : _data(first), _length(last - first + 1){};
+    Span(T* first, T* last) : _data(first), _length(last - first + 1){};
 
-    // construct const Span from non-const span, not sure how robust. Test more when needed
-    // template <
-    //     typename V, typename U = T, std::enable_if_t<std::is_const_v<U>, bool> = true,
-    //     std::enable_if_t<!std::is_const_v<V>, bool> = true>
-    // explicit Span(const Span<V>& s) : _data(s._data), _length(s._length){};
+    friend Span<const T>;
+    Span(Span<value_type> span)
+        requires std::is_const_v<T>
+        : _data(span._data), _length(span._length){};
 
-    template <typename U = T, std::enable_if_t<std::is_const_v<U>, bool> = true>
-    Span(std::initializer_list<T> l) : _data(l.begin()), _length(l.size()){};
+    Span(std::initializer_list<value_type> list)
+        requires std::is_const_v<T>
+        : _data(list.begin()), _length(list.size()){};
 
-    Span(std::vector<T>& c) : _data(c.data()), _length(c.size()){};
+    Span(const std::vector<value_type>& vec)
+        requires std::is_const_v<T>
+        : _data(vec.data()), _length(vec.size()){};
 
-    template <typename U = std::remove_const<T>>
-    Span(const std::vector<U>& c) : _data(c.data()), _length(c.size()){};
+    Span(std::vector<T>& vec) : _data(vec.data()), _length(vec.size()){};
+
+    template <std::size_t N>
+    Span(std::array<T, N>& vec) : _data(vec.data()), _length(vec.size()){};
+
+    // Member functions ----------------------------
 
     // inline?
-    ref_type operator[](size_type i) const
+    T& operator[](size_t index)
     {
-        assert(_data != nullptr && i < _length && "Accesing element outside of span");
-        return _data[i]; // NOLINT
+        assert(_data != nullptr && index < _length && "Accesing element outside of span");
+        return _data[index]; // NOLINT
     }
 
-    [[nodiscard]] size_type size() const
+    const T& operator[](size_t index) const
+    {
+        assert(_data != nullptr && index < _length && "Accesing element outside of span");
+        return _data[index]; // NOLINT
+    }
+
+    [[nodiscard]] size_t size() const
     {
         return _length;
     }
@@ -56,12 +65,12 @@ class Span
         return _length == 0;
     }
 
-    ptr_type data()
+    T* data()
     {
         return _data;
     }
 
-    ptr_type constData() const
+    T* data() const
     {
         return _data;
     }
@@ -71,49 +80,24 @@ class Span
         return _data == rhs._data && _length == rhs._length;
     }
 
-    iterator begin()
+    T* begin()
     {
         return &_data[0];
     }
-    const_iterator begin() const
+    const T* begin() const
     {
         return &_data[0];
     }
-    iterator end()
+    T* end()
     {
         return &_data[_length];
     }
-    const_iterator end() const
+    const T* end() const
     {
         return &_data[_length];
     }
 
   private:
-    ptr_type _data = nullptr;
-    size_type _length = size_type(0);
+    T* _data = nullptr;
+    size_t _length = size_type(0);
 };
-
-// Container -> Span conversions
-// template stuff waay easier this way
-//     template <typename Container>
-//     auto makeSpan(Container& v)
-//         -> decltype(Span(std::declval<Container&>().data(), std::declval<Container&>().size()))
-// {
-//     return Span(v.data(), v.size());
-// }
-
-template <typename C>
-using GetElementType = std::remove_reference_t<decltype(std::declval<C&>()[0])>;
-
-template <typename Container>
-auto makeSpan(Container& v) -> Span<GetElementType<Container>>
-{
-    return Span(v.data(), v.size());
-}
-template <typename Container>
-auto makeConstSpan(const Container& v) -> Span<const GetElementType<Container>>
-{
-    return Span(v.data(), v.size());
-}
-
-// for everything else just construct from ptr+size
