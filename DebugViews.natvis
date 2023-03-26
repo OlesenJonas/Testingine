@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <Type Name="MyArray">
+    <DisplayString>{{size={size}}}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size</Item>
+      <ArrayItems>
+        <Size>size</Size>
+        <ValuePointer>ptr</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="DynamicBitset">
+    <DisplayString>{{size={size}}}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size</Item>
+      <CustomListItems>
+
+        <Variable Name="intIndex" InitialValue="0" />
+        <Variable Name="bitIndex" InitialValue="0" />
+        <Variable Name="BitValue" InitialValue="0" />
+
+        <Size>size</Size>
+
+        <Loop>
+          <Exec>BitValue = ((internal[intIndex] >> bitIndex) % 2) != 0 ? 1 : 0</Exec>
+          <Item>BitValue</Item>
+          <Exec>bitIndex++</Exec>
+          <If Condition="bitIndex == 32">
+            <Exec>intIndex++</Exec>
+            <Exec>bitIndex = 0</Exec>
+          </If>
+        </Loop>
+
+      </CustomListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="Pool&lt;*&gt;">
+    <DisplayString>{{capacity={capacity}}}</DisplayString>
+    <Expand>
+
+      <Item Name="[capacity]">capacity</Item>
+
+      <Synthetic Name="Entries">
+        <Expand>
+          <ArrayItems>
+            <Size>capacity</Size>
+            <ValuePointer>storage</ValuePointer>
+          </ArrayItems>
+        </Expand>
+      </Synthetic>
+
+      <Synthetic Name="Generations">
+        <Expand>
+          <ArrayItems>
+            <Size>capacity</Size>
+            <ValuePointer>generations</ValuePointer>
+          </ArrayItems>
+        </Expand>
+      </Synthetic>
+
+      <Item Name="Free Array">freeArray</Item>
+
+    </Expand>
+  </Type>
+
+</AutoVisualizer>
