@@ -157,4 +157,49 @@ int main()
             assert(!bitset.getBit(i));
         }
     }
+    {
+        int c = 133;
+        int a = 32;
+        int b = 95;
+        DynamicBitset bitset{static_cast<uint32_t>(c)};
+        assert(bitset.getSize() == c);
+        assert(bitset.anyBitSet() == false);
+
+        bitset.fill(0, a - 1);
+        bitset.fill(b + 1, c - 1);
+        for(int i = a; i <= b; i++)
+        {
+            assert(bitset.getFirstBitClear() == i);
+            bitset.setBit(i);
+        }
+    }
+    {
+        DynamicBitset bitset{32};
+        bitset.fill();
+        assert(bitset.getFirstBitClear() == 0xFFFFFFFF);
+        for(int i = 31; i >= 0; i--)
+        {
+            bitset.clearBit(i);
+            assert(bitset.getFirstBitClear() == i);
+        }
+    }
+    {
+        DynamicBitset bitset{96};
+        bitset.fill();
+        assert(bitset.getFirstBitClear() == 0xFFFFFFFF);
+        for(int i = 95; i >= 0; i--)
+        {
+            bitset.clearBit(i);
+            assert(bitset.getFirstBitClear() == i);
+        }
+    }
+    {
+        DynamicBitset bitset{36};
+        bitset.fill();
+        assert(bitset.getFirstBitClear() == 0xFFFFFFFF);
+        bitset.clearBit(35);
+        assert(bitset.getFirstBitClear() == 35);
+        bitset.clearBit(32);
+        assert(bitset.getFirstBitClear() == 32);
+    }
 }

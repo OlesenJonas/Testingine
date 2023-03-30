@@ -3,6 +3,13 @@
 #include <cstdint>
 #include <vector>
 
+// todo: for bigger sizes looping over all internal ints can become problematic,
+//       idea: template an amount of levels N, where each level is another DynamicBitset, with each bit
+//       indicating if one of X integers in the level below has a bit set
+//       eg: A 2nd level could be a single uint32_t where each bit indicates if the corresponding full uint at
+//       level 0 has any bit set so testing for firstBitSet, anyBitSet in 1024 bits would require just checking the
+//       2nd level int first to see which integer contains the bit and then just a single check inside that
+//       integer, instead of looping over 1024/32 ints
 class DynamicBitset
 {
   public:
@@ -18,9 +25,12 @@ class DynamicBitset
     void fill();
     void fill(uint32_t firstBit, uint32_t lastBit);
 
+    bool anyBitClear() const;
     bool anyBitSet() const;
-    // returns 0xffffffff is no bit was set
+    // returns 0xffffffff is no bit is set
     [[nodiscard]] uint32_t getFirstBitSet() const;
+    // returns 0xffffffff is no bit is cleared
+    [[nodiscard]] uint32_t getFirstBitClear() const;
 
     [[nodiscard]] uint32_t getSize() const;
     void resize(uint32_t newSize);

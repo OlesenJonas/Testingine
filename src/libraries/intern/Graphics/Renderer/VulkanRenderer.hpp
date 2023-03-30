@@ -137,13 +137,11 @@ class VulkanRenderer
     VmaAllocator allocator;
 
     std::vector<RenderObject> renderables;
-    std::unordered_map<std::string, Material> materials;
-    std::unordered_map<std::string, Mesh> meshes;
     std::unordered_map<std::string, Texture> loadedTextures;
 
-    Material* createMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
-    Material* getMaterial(const std::string& name);
-    Mesh* getMesh(const std::string& name);
+    // Material* createMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);//TODO:
+    // REMOVE Material* getMaterial(const std::string& name);//TODO: REMOVE Mesh* getMesh(const std::string& name);
+    // //TODO: REMOVE
 
     // TODO: refactor to take span
     void drawObjects(VkCommandBuffer cmd, RenderObject* first, int count);
@@ -167,7 +165,7 @@ class VulkanRenderer
     void initImGui();
 
     void loadMeshes();
-    void uploadMesh(Mesh& mesh);
+    // void uploadMesh(Mesh& mesh);
     void loadImages();
 
     void initScene();

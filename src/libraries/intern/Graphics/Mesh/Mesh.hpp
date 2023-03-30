@@ -1,11 +1,15 @@
 #pragma once
 
-#include "../VulkanTypes.hpp"
+#include "../Buffer/Buffer.hpp"
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <intern/Datastructures/Pool.hpp>
+#include <string>
 #include <vector>
 #include <vulkan/vulkan_core.h>
+
+// todo: just contain two/three Handle<Buffer> for index + position/(position+attributes) !!
 
 struct VertexInputDescription
 {
@@ -27,9 +31,16 @@ struct Vertex
 
 struct Mesh
 {
-    std::vector<Vertex> vertices;
+    // std::vector<Vertex> vertices;
 
-    AllocatedBuffer vertexBuffer;
+    // todo: does this need to be here?
+    //  I feel like the actual GPU sided stuff, ie vertexcount, buffer handles etc should be seperate from the
+    //  scene management realted stuff like name, parent, children etc
+    std::string name{};
 
-    bool loadFromObj(const char* filename);
+    uint32_t vertexCount = 0;
+
+    Handle<Buffer> vertexBuffer;
+
+    // bool loadFromObj(const char* filename);
 };

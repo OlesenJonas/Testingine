@@ -7,7 +7,7 @@
 
 void InputManager::init()
 {
-    glfwGetCursorPos(Engine::ptr->getMainWindow()->glfwWindow, &mouseX, &mouseY);
+    glfwGetCursorPos(Engine::get()->getMainWindow()->glfwWindow, &mouseX, &mouseY);
     oldMouseX = mouseX; // NOLINT
     oldMouseY = mouseY; // NOLINT
     setupCallbacks();
@@ -39,7 +39,7 @@ void InputManager::update()
 
     simulationTime += useFixedTimestep ? fixedDeltaTime : deltaTime;
 
-    glfwGetCursorPos(Engine::ptr->getMainWindow()->glfwWindow, &mouseX, &mouseY);
+    glfwGetCursorPos(Engine::get()->getMainWindow()->glfwWindow, &mouseX, &mouseY);
     mouseDelta = {mouseX - oldMouseX, mouseY - oldMouseY};
     oldMouseX = mouseX;
     oldMouseY = mouseY;
@@ -51,7 +51,7 @@ void InputManager::setupCallbacks(
     GLFWscrollfun scrollCallback,
     GLFWframebuffersizefun resizeCallback)
 {
-    GLFWwindow* window = Engine::ptr->getMainWindow()->glfwWindow;
+    GLFWwindow* window = Engine::get()->getMainWindow()->glfwWindow;
     if(keyCallback != nullptr)
         glfwSetKeyCallback(window, keyCallback);
     else
@@ -72,7 +72,7 @@ void InputManager::setupCallbacks(
     else
         glfwSetFramebufferSizeCallback(window, defaultResizeCallback);
 
-    glfwSetWindowUserPointer(window, reinterpret_cast<void*>(Engine::ptr));
+    glfwSetWindowUserPointer(window, reinterpret_cast<void*>(Engine::get()));
 }
 
 //// STATIC FUNCTIONS ////
@@ -92,12 +92,12 @@ void InputManager::defaultMouseButtonCallback(GLFWwindow* window, int button, in
     if(button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
     {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        Engine::ptr->getCamera()->setMode(Camera::Mode::FLY);
+        Engine::get()->getCamera()->setMode(Camera::Mode::FLY);
     }
     if(button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
     {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-        Engine::ptr->getCamera()->setMode(Camera::Mode::ORBIT);
+        Engine::get()->getCamera()->setMode(Camera::Mode::ORBIT);
     }
     if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
@@ -121,7 +121,7 @@ void InputManager::defaultScrollCallback(GLFWwindow* window, double xoffset, dou
     if(!ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow))
     {
         // Camera* cam = ctx.getCamera();
-        Camera* cam = Engine::ptr->getCamera();
+        Camera* cam = Engine::get()->getCamera();
         if(cam->getMode() == Camera::Mode::ORBIT)
         {
             cam->changeRadius(yoffset < 0);

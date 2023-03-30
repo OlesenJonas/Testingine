@@ -27,15 +27,15 @@ struct QueueFamilyIndices
     }
 };
 
+struct AllocatedImage
+{
+    VkImage image;
+    VmaAllocation allocation;
+};
+
 struct AllocatedBuffer
 {
     VkBuffer buffer;
     VmaAllocation allocation;
     VmaAllocationInfo allocInfo;
-};
-
-struct AllocatedImage
-{
-    VkImage image;
-    VmaAllocation allocation;
 };

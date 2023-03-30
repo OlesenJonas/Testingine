@@ -22,6 +22,25 @@ bool DynamicBitset::anyBitSet() const
     return false;
 }
 
+bool DynamicBitset::anyBitClear() const
+{
+    for(auto i = 0; i < internal.size() - 1; i++)
+    {
+        if(internal[i] != 0xFFFFFFFF)
+        {
+            return true;
+        }
+    }
+    uint32_t lastInt = internal[internal.size() - 1];
+    const uint32_t ones = 0xFFFFFFFF;
+    const uint32_t bitsInLastInt = size % 32u;
+    const uint32_t mask = ~(ones >> (32u - bitsInLastInt));
+    // set all bits in the last int beyond "size" to 1
+    lastInt |= mask;
+    // if the whole int is now 111....111 then there was also no 0 in the first part of the int
+    return !(lastInt == ones);
+}
+
 void DynamicBitset::setBit(uint32_t index)
 {
     assert(index < size);
@@ -130,6 +149,25 @@ uint32_t DynamicBitset::getFirstBitSet() const
         return 0xFFFFFFFF;
     }
     return 32u * (internal.size() - 1) + std::countr_zero(internal[internal.size() - 1]);
+}
+
+uint32_t DynamicBitset::getFirstBitClear() const
+{
+    // todo: I feel like there must be simpler logic for this
+    for(auto i = 0; i < internal.size() - 1; i++)
+    {
+        if(internal[i] != 0xFFFFFFFF)
+        {
+            return 32u * i + std::countr_one(internal[i]);
+        }
+    }
+    uint32_t consecOnesInLastInt = std::countr_one(internal[internal.size() - 1]);
+    if(size % 32u == 0u)
+    {
+        return internal[internal.size() - 1] == 0xFFFFFFFF ? 0xFFFFFFFF
+                                                           : 32u * (internal.size() - 1) + consecOnesInLastInt;
+    }
+    return (consecOnesInLastInt == size % 32u) ? 0xFFFFFFFF : 32u * (internal.size() - 1) + consecOnesInLastInt;
 }
 
 uint32_t DynamicBitset::getSize() const

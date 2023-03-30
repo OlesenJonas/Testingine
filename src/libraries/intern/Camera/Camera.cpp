@@ -26,8 +26,8 @@ Camera::Camera(float aspect, float nearDistance, float farDistance) : cam_near(n
 
 void Camera::update()
 {
-    auto* window = Engine::ptr->getMainWindow()->glfwWindow;
-    auto* inputManager = Engine::ptr->getInputManager();
+    auto* window = Engine::get()->getMainWindow()->glfwWindow;
+    auto* inputManager = Engine::get()->getInputManager();
     const glm::vec2 mouseDelta = inputManager->getMouseDelta();
 
     // todo: how much should be part of this, and how much should be inside InputManager?

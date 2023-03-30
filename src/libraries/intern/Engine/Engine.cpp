@@ -14,6 +14,7 @@ Engine::Engine() : mainWindow(1200, 800, "Vulkan Test", {{GLFW_MAXIMIZED, GLFW_T
 
 Engine::~Engine()
 {
+    resourceManager.cleanup();
     renderer.cleanup();
 }
 

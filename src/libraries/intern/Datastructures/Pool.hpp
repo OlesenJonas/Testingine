@@ -35,6 +35,14 @@ class Handle
     {
         return generation != 0u;
     }
+    bool operator==(const Handle<T>& other) const
+    {
+        return index == other.index && generation == other.generation;
+    }
+    bool operator!=(const Handle<T>& other) const
+    {
+        return index != other.index || generation != other.generation;
+    }
 
   private:
     uint32_t index = 0;
@@ -99,11 +107,21 @@ class Pool
         freeArray.setBit(handle.index);
     }
 
-    T* get(Handle<T> handle)
+    inline T* get(Handle<T> handle)
     {
         if(!isHandleValid(handle))
             return nullptr;
-        return storage[handle.index];
+        return &storage[handle.index];
+    }
+
+    Handle<T> getFirst()
+    {
+        if(!freeArray.anyBitClear())
+            return {0, 0};
+
+        uint32_t index = freeArray.getFirstBitClear();
+
+        return {index, generations[index]};
     }
 
   private:

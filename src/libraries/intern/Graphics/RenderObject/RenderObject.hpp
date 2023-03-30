@@ -2,14 +2,16 @@
 
 #include <glm/glm.hpp>
 
+#include <intern/Datastructures/Pool.hpp>
+
 #include "../Material/Material.hpp"
 #include "../Mesh/Mesh.hpp"
 
 struct RenderObject
 {
-    Mesh* mesh;
+    Handle<Mesh> mesh;
 
-    Material* material;
+    Handle<Material> material;
 
     glm::mat4 transformMatrix;
 };

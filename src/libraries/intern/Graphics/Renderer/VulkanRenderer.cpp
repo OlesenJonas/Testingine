@@ -5,6 +5,7 @@
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
 #include "Graphics/Renderer/Init/VulkanPipelineBuilder.hpp"
+#include "ResourceManager/ResourceManager.hpp"
 #include "VulkanDebug.hpp"
 #include "init/VulkanDeviceFinder.hpp"
 #include "init/VulkanInit.hpp"
@@ -68,7 +69,7 @@ void VulkanRenderer::initVulkan()
     if(enableValidationLayers)
         debugMessenger = setupDebugMessenger(instance);
 
-    if(glfwCreateWindowSurface(instance, Engine::ptr->getMainWindow()->glfwWindow, nullptr, &surface) !=
+    if(glfwCreateWindowSurface(instance, Engine::get()->getMainWindow()->glfwWindow, nullptr, &surface) !=
        VK_SUCCESS)
     {
         throw std::runtime_error("failed to create window surface!");
@@ -102,7 +103,8 @@ void VulkanRenderer::initVulkan()
 
 void VulkanRenderer::initSwapchain()
 {
-    VulkanSwapchainSetup swapchainSetup(physicalDevice, device, Engine::ptr->getMainWindow()->glfwWindow, surface);
+    VulkanSwapchainSetup swapchainSetup(
+        physicalDevice, device, Engine::get()->getMainWindow()->glfwWindow, surface);
     swapchainSetup.setup(queueFamilyIndices.graphicsFamily.value(), queueFamilyIndices.presentFamily.value());
 
     swapchain = swapchainSetup.getSwapchain();
@@ -538,7 +540,13 @@ void VulkanRenderer::initPipelines()
 
     VkPipeline meshPipeline = meshPipelineBuilder.createPipeline(device, {swapchainImageFormat}, depthFormat);
 
-    createMaterial(meshPipeline, meshPipelineLayout, "defaultMesh");
+    auto& rsrcMngr = *Engine::get()->getResourceManager();
+    rsrcMngr.createMaterial(
+        {
+            .pipeline = meshPipeline,
+            .pipelineLayout = meshPipelineLayout,
+        },
+        "defaultMesh");
 
     VulkanPipelineBuilder texturedPipelineBuilder{VulkanPipelineBuilder::CreateInfo{
         .shaderStages =
@@ -562,7 +570,12 @@ void VulkanRenderer::initPipelines()
     VkPipeline texturedPipeline =
         texturedPipelineBuilder.createPipeline(device, {swapchainImageFormat}, depthFormat);
 
-    createMaterial(texturedPipeline, texturedPipelineLayout, "texturedMesh");
+    rsrcMngr.createMaterial(
+        {
+            .pipeline = texturedPipeline,
+            .pipelineLayout = texturedPipelineLayout,
+        },
+        "texturedMesh");
 
     // Destroy these here already. (dont like though since VulkanPipeline object still exists and references
     // these!!, so could cause trouble in future when Pipeline needs to get recreated or something)
@@ -612,7 +625,7 @@ void VulkanRenderer::initImGui()
     // 2: initialize the library
     ImGui::CreateContext();
     // init imgui for Glfw
-    ImGui_ImplGlfw_InitForVulkan(Engine::ptr->getMainWindow()->glfwWindow, true);
+    ImGui_ImplGlfw_InitForVulkan(Engine::get()->getMainWindow()->glfwWindow, true);
     // init imgui for Vulkan
     ImGui_ImplVulkan_InitInfo initInfo = {
         .Instance = instance,
@@ -660,26 +673,26 @@ void VulkanRenderer::cleanup()
     }
     vkDestroyInstance(instance, nullptr);
 
-    glfwDestroyWindow(Engine::ptr->getMainWindow()->glfwWindow);
+    glfwDestroyWindow(Engine::get()->getMainWindow()->glfwWindow);
     glfwTerminate();
 }
 
 void VulkanRenderer::run()
 {
     glfwSetTime(0.0);
-    Engine::ptr->getInputManager()->resetTime();
+    Engine::get()->getInputManager()->resetTime();
 
-    while(!glfwWindowShouldClose(Engine::ptr->getMainWindow()->glfwWindow))
+    while(!glfwWindowShouldClose(Engine::get()->getMainWindow()->glfwWindow))
     {
         glfwPollEvents();
 
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
 
-        Engine::ptr->getInputManager()->update();
+        Engine::get()->getInputManager()->update();
         if(!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
         {
-            Engine::ptr->getCamera()->update();
+            Engine::get()->getCamera()->update();
         }
         // Not sure about the order of UI & engine code
 
@@ -954,104 +967,97 @@ bool VulkanRenderer::loadShaderModule(const char* filePath, VkShaderModule* outS
 
 void VulkanRenderer::loadMeshes()
 {
-    Mesh triangleMesh;
-    triangleMesh.vertices.resize(3);
+    std::vector<Vertex> triangleVertices;
+    triangleVertices.resize(3);
 
-    triangleMesh.vertices[0].position = {1.f, 1.f, 0.0f};
-    triangleMesh.vertices[1].position = {-1.f, 1.f, 0.0f};
-    triangleMesh.vertices[2].position = {0.f, -1.f, 0.0f};
+    triangleVertices[0].position = {1.f, 1.f, 0.0f};
+    triangleVertices[1].position = {-1.f, 1.f, 0.0f};
+    triangleVertices[2].position = {0.f, -1.f, 0.0f};
 
-    triangleMesh.vertices[0].color = {0.0f, 1.0f, 0.0f};
-    triangleMesh.vertices[1].color = {0.0f, 1.0f, 0.0f};
-    triangleMesh.vertices[2].color = {0.0f, 1.0f, 0.0f};
+    triangleVertices[0].color = {0.0f, 1.0f, 0.0f};
+    triangleVertices[1].color = {0.0f, 1.0f, 0.0f};
+    triangleVertices[2].color = {0.0f, 1.0f, 0.0f};
 
-    // normals...
-
-    uploadMesh(triangleMesh);
+    auto triangleMesh = Engine::get()->getResourceManager()->createMesh(triangleVertices, "triangle");
 
     // load monkey mesh
-    Mesh monkeyMesh;
-    monkeyMesh.loadFromObj(ASSETS_PATH "/vkguide/monkey_smooth.obj");
+    auto monkeyMesh =
+        Engine::get()->getResourceManager()->createMesh(ASSETS_PATH "/vkguide/monkey_smooth.obj", "monkey");
 
-    uploadMesh(monkeyMesh);
-
-    meshes["monkey"] = monkeyMesh;
-    meshes["triangle"] = triangleMesh;
-
-    Mesh lostEmpire{};
-    lostEmpire.loadFromObj(ASSETS_PATH "/vkguide/lost_empire.obj");
-    uploadMesh(lostEmpire);
-    meshes["empire"] = lostEmpire;
+    auto lostEmpire =
+        Engine::get()->getResourceManager()->createMesh(ASSETS_PATH "/vkguide/lost_empire.obj", "empire");
 }
 
-void VulkanRenderer::uploadMesh(Mesh& mesh)
-{
-    const size_t bufferSize = mesh.vertices.size() * sizeof(Vertex);
-    // allocate staging buffer
-    VkBufferCreateInfo stagingBufferInfo = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .pNext = nullptr,
-        .size = bufferSize,
-        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-    };
-    VmaAllocationCreateInfo vmaallocCrInfo = {
-        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        .usage = VMA_MEMORY_USAGE_AUTO,
-        .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-    };
-    AllocatedBuffer stagingBuffer;
-    assertVkResult(vmaCreateBuffer(
-        allocator,
-        &stagingBufferInfo,
-        &vmaallocCrInfo,
-        &stagingBuffer.buffer,
-        &stagingBuffer.allocation,
-        &stagingBuffer.allocInfo));
+// void VulkanRenderer::uploadMesh(Mesh& mesh)
+// {
+//     const size_t bufferSize = mesh.vertices.size() * sizeof(Vertex);
+//     // allocate staging buffer
+//     VkBufferCreateInfo stagingBufferInfo = {
+//         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+//         .pNext = nullptr,
+//         .size = bufferSize,
+//         .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+//     };
+//     VmaAllocationCreateInfo vmaallocCrInfo = {
+//         .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+//         .usage = VMA_MEMORY_USAGE_AUTO,
+//         .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+//     };
+//     AllocatedBuffer stagingBuffer;
+//     assertVkResult(vmaCreateBuffer(
+//         allocator,
+//         &stagingBufferInfo,
+//         &vmaallocCrInfo,
+//         &stagingBuffer.buffer,
+//         &stagingBuffer.allocation,
+//         &stagingBuffer.allocInfo));
 
-    void* data = nullptr;
-    vmaMapMemory(allocator, stagingBuffer.allocation, &data);
-    memcpy(data, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
-    vmaUnmapMemory(allocator, stagingBuffer.allocation);
+//     void* data = nullptr;
+//     vmaMapMemory(allocator, stagingBuffer.allocation, &data);
+//     memcpy(data, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
+//     vmaUnmapMemory(allocator, stagingBuffer.allocation);
 
-    // GPU side buffer
-    VkBufferCreateInfo vertexBufferCrInfo{
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .pNext = nullptr,
-        .size = bufferSize,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-    };
-    vmaallocCrInfo = {
-        .flags = 0,
-        .usage = VMA_MEMORY_USAGE_AUTO,
-        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-    };
+//     // GPU side buffer
+//     VkBufferCreateInfo vertexBufferCrInfo{
+//         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+//         .pNext = nullptr,
+//         .size = bufferSize,
+//         .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+//     };
+//     vmaallocCrInfo = {
+//         .flags = 0,
+//         .usage = VMA_MEMORY_USAGE_AUTO,
+//         .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+//     };
 
-    assertVkResult(vmaCreateBuffer(
-        allocator,
-        &vertexBufferCrInfo,
-        &vmaallocCrInfo,
-        &mesh.vertexBuffer.buffer,
-        &mesh.vertexBuffer.allocation,
-        nullptr));
+//     assertVkResult(vmaCreateBuffer(
+//         allocator,
+//         &vertexBufferCrInfo,
+//         &vmaallocCrInfo,
+//         &mesh.vertexBuffer.buffer,
+//         &mesh.vertexBuffer.allocation,
+//         nullptr));
 
-    immediateSubmit(
-        [=](VkCommandBuffer cmd)
-        {
-            VkBufferCopy copy{
-                .srcOffset = 0,
-                .dstOffset = 0,
-                .size = bufferSize,
-            };
-            vkCmdCopyBuffer(cmd, stagingBuffer.buffer, mesh.vertexBuffer.buffer, 1, &copy);
-        });
+//     immediateSubmit(
+//         [=](VkCommandBuffer cmd)
+//         {
+//             VkBufferCopy copy{
+//                 .srcOffset = 0,
+//                 .dstOffset = 0,
+//                 .size = bufferSize,
+//             };
+//             vkCmdCopyBuffer(cmd, stagingBuffer.buffer, mesh.vertexBuffer.buffer, 1, &copy);
+//         });
 
-    deleteQueue.pushBack([=]()
-                         { vmaDestroyBuffer(allocator, mesh.vertexBuffer.buffer, mesh.vertexBuffer.allocation); });
+//     deleteQueue.pushBack([=]()
+//                          { vmaDestroyBuffer(allocator, mesh.vertexBuffer.buffer, mesh.vertexBuffer.allocation);
+//                          });
 
-    // since immediateSubmit also waits until the commands have executed, we can safely delete the staging buffer
-    // immediately here
-    vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
-}
+//     // since immediateSubmit also waits until the commands have executed, we can safely delete the staging
+//     buffer
+//     // immediately here
+//     vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+// }
 
 void VulkanRenderer::loadImages()
 {
@@ -1083,13 +1089,15 @@ void VulkanRenderer::loadImages()
 
 void VulkanRenderer::initScene()
 {
+    auto& rsrcManager = *Engine::get()->getResourceManager();
+
     const auto& newRenderable = renderables.emplace_back(RenderObject{
-        .mesh = getMesh("monkey"),
-        .material = getMaterial("defaultMesh"),
+        .mesh = rsrcManager.getMesh("monkey"),
+        .material = rsrcManager.getMaterial("defaultMesh"),
         .transformMatrix = glm::mat4{1.0f},
     });
-    assert(newRenderable.mesh != nullptr);
-    assert(newRenderable.material != nullptr);
+    assert(newRenderable.mesh.isValid());
+    assert(newRenderable.material.isValid());
 
     for(int x = -20; x <= 20; x++)
     {
@@ -1099,18 +1107,18 @@ void VulkanRenderer::initScene()
             glm::mat4 scale = glm::scale(glm::vec3{0.2f});
 
             const auto& newRenderable = renderables.emplace_back(RenderObject{
-                .mesh = getMesh("triangle"),
-                .material = getMaterial("defaultMesh"),
+                .mesh = rsrcManager.getMesh("triangle"),
+                .material = rsrcManager.getMaterial("defaultMesh"),
                 .transformMatrix = translation * scale,
             });
-            assert(newRenderable.mesh != nullptr);
-            assert(newRenderable.material != nullptr);
+            assert(newRenderable.mesh.isValid());
+            assert(newRenderable.material.isValid());
         }
     }
 
     RenderObject map;
-    map.mesh = getMesh("empire");
-    map.material = getMaterial("texturedMesh");
+    map.mesh = rsrcManager.getMesh("empire");
+    map.material = rsrcManager.getMaterial("texturedMesh");
     map.transformMatrix = glm::translate(glm::vec3{5.0f, -10.0f, 0.0f});
     renderables.push_back(map);
 
@@ -1129,7 +1137,7 @@ void VulkanRenderer::initScene()
     VkSampler blockySampler;
     vkCreateSampler(device, &samplerInfo, nullptr, &blockySampler);
 
-    Material* texturedMat = getMaterial("texturedMesh");
+    Material* texturedMat = rsrcManager.get(rsrcManager.getMaterial("texturedMesh"));
 
     VkDescriptorSetAllocateInfo descSetAllocInfo{
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -1158,31 +1166,16 @@ void VulkanRenderer::initScene()
     vkUpdateDescriptorSets(device, 1, &texture1Write, 0, nullptr);
 }
 
-Material* VulkanRenderer::createMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name)
-{
-    Material mat{
-        .pipeline = pipeline,
-        .pipelineLayout = layout,
-    };
-    materials[name] = mat;
-    return &materials[name];
-}
-
-Material* VulkanRenderer::getMaterial(const std::string& name)
-{
-    auto it = materials.find(name);
-    if(it == materials.end())
-        return nullptr;
-    return &(it->second);
-}
-
-Mesh* VulkanRenderer::getMesh(const std::string& name)
-{
-    auto it = meshes.find(name);
-    if(it == meshes.end())
-        return nullptr;
-    return &(it->second);
-}
+// TODO: REMOVE
+//  Material* VulkanRenderer::createMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name)
+//  {
+//      Material mat{
+//          .pipeline = pipeline,
+//          .pipelineLayout = layout,
+//      };
+//      materials[name] = mat;
+//      return &materials[name];
+//  }
 
 // TODO: refactor to take span?
 void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int count)
@@ -1197,7 +1190,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     memcpy(sceneData, &sceneParameters, sizeof(GPUSceneData));
     // dont need to unmap, was requested to be coherent
 
-    Camera* mainCamera = Engine::ptr->getCamera();
+    Camera* mainCamera = Engine::get()->getCamera();
     // todo: resize GPUCameraData to use all matrices Camera stores and then simply memcpy from
     // mainCamera.getMatrices directly
     GPUCameraData camData;
@@ -1216,17 +1209,21 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
         objectSSBO[i].modelMatrix = object.transformMatrix;
     }
 
-    Mesh* lastMesh = nullptr;
-    Material* lastMaterial = nullptr;
+    auto& rsrcManager = *Engine::get()->getResourceManager();
+
+    Mesh* lastMesh;
+    Material* lastMaterial;
 
     for(int i = 0; i < count; i++)
     {
         RenderObject& object = first[i];
+        Mesh* objectMesh = rsrcManager.get(object.mesh);
+        Material* objectMaterial = rsrcManager.get(object.material);
 
-        if(object.material != lastMaterial)
+        if(objectMaterial != lastMaterial)
         {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, object.material->pipeline);
-            lastMaterial = object.material;
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, objectMaterial->pipeline);
+            lastMaterial = objectMaterial;
 
             uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
             // Also bind necessary descriptor sets
@@ -1234,7 +1231,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
             vkCmdBindDescriptorSets(
                 cmd,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
-                object.material->pipelineLayout,
+                objectMaterial->pipelineLayout,
                 0,
                 1,
                 &getCurrentFrameData().globalDescriptor,
@@ -1245,22 +1242,22 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
             vkCmdBindDescriptorSets(
                 cmd,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
-                object.material->pipelineLayout,
+                objectMaterial->pipelineLayout,
                 1,
                 1,
                 &getCurrentFrameData().objectDescriptor,
                 0,
                 nullptr);
 
-            if(object.material->textureSet != VK_NULL_HANDLE)
+            if(objectMaterial->textureSet != VK_NULL_HANDLE)
             {
                 vkCmdBindDescriptorSets(
                     cmd,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    object.material->pipelineLayout,
+                    objectMaterial->pipelineLayout,
                     2,
                     1,
-                    &object.material->textureSet,
+                    &objectMaterial->textureSet,
                     0,
                     nullptr);
             }
@@ -1271,20 +1268,21 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
 
         vkCmdPushConstants(
             cmd,
-            object.material->pipelineLayout,
+            objectMaterial->pipelineLayout,
             VK_SHADER_STAGE_VERTEX_BIT,
             0,
             sizeof(MeshPushConstants),
             &constants);
 
-        if(object.mesh != lastMesh)
+        if(objectMesh != lastMesh)
         {
+            Buffer* vertexBuffer = rsrcManager.get(objectMesh->vertexBuffer);
             VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers(cmd, 0, 1, &object.mesh->vertexBuffer.buffer, &offset);
-            lastMesh = object.mesh;
+            vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer->buffer, &offset);
+            lastMesh = objectMesh;
         }
 
-        vkCmdDraw(cmd, object.mesh->vertices.size(), 1, 0, i);
+        vkCmdDraw(cmd, objectMesh->vertexCount, 1, 0, i);
     }
 }
 
