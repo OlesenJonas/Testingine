@@ -239,8 +239,17 @@ void ResourceManager::deleteBuffer(Handle<Buffer> handle)
             current frame!
     */
     const Buffer* buffer = bufferPool.get(handle);
-    Engine::get()->getRenderer()->deleteQueue.pushBack(
-        [=]() { vmaDestroyBuffer(Engine::get()->getRenderer()->allocator, buffer->buffer, buffer->allocation); });
+    // its possible that this handle is outdated
+    //   eg: if this buffer belonged to a mesh which has already been deleted (and during that deleted its buffers)
+    if(buffer == nullptr)
+    {
+        return;
+    }
+    const VmaAllocator* allocator = &Engine::get()->getRenderer()->allocator;
+    const VkBuffer vkBuffer = buffer->buffer;
+    const VmaAllocation vmaAllocation = buffer->allocation;
+    Engine::get()->getRenderer()->deleteQueue.pushBack([=]()
+                                                       { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
     bufferPool.remove(handle);
 }
 
