@@ -1,10 +1,6 @@
-#include <basetsd.h>
-#include <vulkan/vulkan_core.h>
-
 #include "Mesh.hpp"
-
 #include <TinyOBJ/tiny_obj_loader.h>
-
+#include <intern/ResourceManager/ResourceManager.hpp>
 #include <iostream>
 
 VertexInputDescription Vertex::getVertexDescription()
@@ -54,66 +50,134 @@ VertexInputDescription Vertex::getVertexDescription()
     return description;
 }
 
-// bool Mesh::loadFromObj(const char* filename)
-// {
-//     tinyobj::attrib_t attrib;
-//     std::vector<tinyobj::shape_t> shapes;
-//     std::vector<tinyobj::material_t> materials;
+Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name)
+{
+    std::string_view fileView{file};
+    auto lastDirSep = fileView.find_last_of("/\\");
+    auto extensionStart = fileView.find_last_of('.');
+    std::string_view meshName =
+        name.empty() ? fileView.substr(lastDirSep + 1, extensionStart - lastDirSep - 1) : name;
 
-//     std::string warn;
-//     std::string err;
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
 
-//     tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename, nullptr);
-//     if(!warn.empty())
-//     {
-//         std::cout << "TinyOBJ WARN: " << warn << std::endl;
-//     }
+    std::string warn;
+    std::string err;
 
-//     if(!err.empty())
-//     {
-//         std::cout << "TinyOBJ ERR: " << err << std::endl;
-//         return false;
-//     }
+    tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, file, nullptr);
+    if(!warn.empty())
+    {
+        std::cout << "TinyOBJ WARN: " << warn << std::endl;
+    }
 
-//     // TODO: **VERY** unoptimized, barebones
-//     for(size_t s = 0; s < shapes.size(); s++)
-//     {
-//         size_t indexOffset = 0;
-//         for(size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++)
-//         {
-//             int fv = 3;
+    if(!err.empty())
+    {
+        std::cout << "TinyOBJ ERR: " << err << std::endl;
+        return {};
+    }
 
-//             for(size_t v = 0; v < fv; v++)
-//             {
-//                 tinyobj::index_t idx = shapes[s].mesh.indices[indexOffset + v];
+    std::vector<Vertex> vertices;
 
-//                 // position
-//                 tinyobj::real_t vx = attrib.vertices[3 * idx.vertex_index + 0];
-//                 tinyobj::real_t vy = attrib.vertices[3 * idx.vertex_index + 1];
-//                 tinyobj::real_t vz = attrib.vertices[3 * idx.vertex_index + 2];
+    // TODO: **VERY** unoptimized, barebones
+    for(size_t s = 0; s < shapes.size(); s++)
+    {
+        size_t indexOffset = 0;
+        for(size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++)
+        {
+            int fv = 3;
 
-//                 // normal
-//                 tinyobj::real_t nx = attrib.normals[3 * idx.normal_index + 0];
-//                 tinyobj::real_t ny = attrib.normals[3 * idx.normal_index + 1];
-//                 tinyobj::real_t nz = attrib.normals[3 * idx.normal_index + 2];
+            for(size_t v = 0; v < fv; v++)
+            {
+                tinyobj::index_t idx = shapes[s].mesh.indices[indexOffset + v];
 
-//                 // uv
-//                 tinyobj::real_t uvx = attrib.texcoords[2 * idx.texcoord_index + 0];
-//                 tinyobj::real_t uvy = attrib.texcoords[2 * idx.texcoord_index + 1];
+                // position
+                tinyobj::real_t vx = attrib.vertices[3 * idx.vertex_index + 0];
+                tinyobj::real_t vy = attrib.vertices[3 * idx.vertex_index + 1];
+                tinyobj::real_t vz = attrib.vertices[3 * idx.vertex_index + 2];
 
-//                 Vertex newVert{
-//                     .position = {vx, vy, vz},
-//                     .normal = {nx, ny, nz},
-//                     .color = {nx, ny, nz},
-//                     // todo: parameterize UV-y flip
-//                     .uv = {uvx, 1.0 - uvy},
-//                 };
+                // normal
+                tinyobj::real_t nx = attrib.normals[3 * idx.normal_index + 0];
+                tinyobj::real_t ny = attrib.normals[3 * idx.normal_index + 1];
+                tinyobj::real_t nz = attrib.normals[3 * idx.normal_index + 2];
 
-//                 vertices.push_back(newVert);
-//             }
-//             indexOffset += fv;
-//         }
-//     }
+                // uv
+                tinyobj::real_t uvx = attrib.texcoords[2 * idx.texcoord_index + 0];
+                tinyobj::real_t uvy = attrib.texcoords[2 * idx.texcoord_index + 1];
 
-//     return true;
-// }
+                vertices.push_back({
+                    .position = {vx, vy, vz},
+                    .normal = {nx, ny, nz},
+                    .color = {nx, ny, nz},
+                    // todo: parameterize UV-y flip
+                    .uv = {uvx, 1.0 - uvy},
+                });
+            }
+            indexOffset += fv;
+        }
+    }
+
+    Handle<Buffer> vertexBufferHandle = createBuffer({
+        .info =
+            {
+                .size = vertices.size() * sizeof(Vertex),
+                .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .memoryAllocationInfo =
+                    {
+                        .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                    },
+            },
+        .initialData = vertices.data(),
+    });
+
+    // todo: handle naming collisions
+    auto iterator = nameToMeshLUT.find(name);
+    assert(iterator == nameToMeshLUT.end());
+
+    Handle<Mesh> newMeshHandle = meshPool.insert(
+        Mesh{.name{meshName}, .vertexCount = uint32_t(vertices.size()), .vertexBuffer = vertexBufferHandle});
+
+    nameToMeshLUT.insert({std::string{name}, newMeshHandle});
+
+    return newMeshHandle;
+}
+
+Handle<Mesh> ResourceManager::createMesh(Span<Vertex> vertices, std::string_view name)
+{
+    // todo: handle naming collisions
+    auto iterator = nameToMeshLUT.find(name);
+    assert(iterator == nameToMeshLUT.end());
+
+    Handle<Buffer> vertexBufferHandle = createBuffer({
+        .info =
+            {
+                .size = vertices.size() * sizeof(Vertex),
+                .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .memoryAllocationInfo =
+                    {
+                        .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                    },
+            },
+        .initialData = vertices.data(),
+    });
+
+    Handle<Mesh> newMeshHandle = meshPool.insert(
+        Mesh{.name{name}, .vertexCount = uint32_t(vertices.size()), .vertexBuffer = vertexBufferHandle});
+
+    nameToMeshLUT.insert({std::string{name}, newMeshHandle});
+
+    return newMeshHandle;
+}
+
+void ResourceManager::deleteMesh(Handle<Mesh> handle)
+{
+    /*
+        todo:
+        Enqueue into a per frame queue
+        also need to ensure renderer deletes !all! objects from per frame queue during shutdown, ignoring the
+            current frame!
+    */
+    // currently doesnt own any data, so only need to remove the vertex buffers it points to
+    deleteBuffer(get(handle)->vertexBuffer);
+    meshPool.remove(handle);
+}
