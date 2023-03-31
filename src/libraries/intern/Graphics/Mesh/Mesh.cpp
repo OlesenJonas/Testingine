@@ -131,13 +131,13 @@ Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name
     });
 
     // todo: handle naming collisions
-    auto iterator = nameToMeshLUT.find(name);
+    auto iterator = nameToMeshLUT.find(meshName);
     assert(iterator == nameToMeshLUT.end());
 
     Handle<Mesh> newMeshHandle = meshPool.insert(
         Mesh{.name{meshName}, .vertexCount = uint32_t(vertices.size()), .vertexBuffer = vertexBufferHandle});
 
-    nameToMeshLUT.insert({std::string{name}, newMeshHandle});
+    nameToMeshLUT.insert({std::string{meshName}, newMeshHandle});
 
     return newMeshHandle;
 }

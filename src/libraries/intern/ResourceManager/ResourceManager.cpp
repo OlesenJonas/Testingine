@@ -11,7 +11,15 @@
 
 void ResourceManager::cleanup()
 {
-    // I dont like this way of "clearing" the pools...
+    // I dont like this way of "clearing" the pools, but works for now...
+
+    Handle<Texture> texHandle = texturePool.getFirst();
+    while(texHandle.isValid())
+    {
+        deleteTexture(texHandle);
+        texHandle = texturePool.getFirst();
+    }
+
     Handle<Buffer> bufferHandle = bufferPool.getFirst();
     while(bufferHandle.isValid())
     {

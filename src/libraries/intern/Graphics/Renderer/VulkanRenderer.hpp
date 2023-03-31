@@ -60,10 +60,10 @@ struct FrameData
     VkCommandPool commandPool;
     VkCommandBuffer mainCommandBuffer;
 
-    AllocatedBuffer cameraBuffer;
+    Handle<Buffer> cameraBuffer;
     VkDescriptorSet globalDescriptor;
 
-    AllocatedBuffer objectBuffer;
+    Handle<Buffer> objectBuffer;
     VkDescriptorSet objectDescriptor;
 };
 
@@ -130,14 +130,13 @@ class VulkanRenderer
     UploadContext uploadContext;
 
     GPUSceneData sceneParameters;
-    AllocatedBuffer sceneParameterBuffer; // Holds FRAMES_IN_FLIGHT * aligned(GPUSceneData)
+    Handle<Buffer> sceneParameterBuffer; // Holds FRAMES_IN_FLIGHT * aligned(GPUSceneData)
 
     FunctionQueue<> deleteQueue;
 
     VmaAllocator allocator;
 
     std::vector<RenderObject> renderables;
-    std::unordered_map<std::string, Texture> loadedTextures;
 
     // Material* createMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);//TODO:
     // REMOVE Material* getMaterial(const std::string& name);//TODO: REMOVE Mesh* getMesh(const std::string& name);
@@ -145,12 +144,6 @@ class VulkanRenderer
 
     // TODO: refactor to take span
     void drawObjects(VkCommandBuffer cmd, RenderObject* first, int count);
-
-    AllocatedBuffer createBuffer(
-        size_t allocSize,
-        VkBufferUsageFlags usage,
-        VmaAllocationCreateFlags flags,
-        VkMemoryPropertyFlags requiredFlags);
 
     void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 
