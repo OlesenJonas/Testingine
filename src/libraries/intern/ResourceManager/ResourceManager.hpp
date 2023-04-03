@@ -6,6 +6,7 @@
 #include <intern/Graphics/Material/Material.hpp>
 #include <intern/Graphics/Mesh/Mesh.hpp>
 #include <intern/Graphics/Texture/Texture.hpp>
+#include <intern/Graphics/Texture/TextureView.hpp>
 #include <intern/Misc/StringHash.hpp>
 #include <unordered_map>
 
@@ -16,10 +17,15 @@
 class ResourceManager
 {
   public:
-    Handle<Buffer> createBuffer(Buffer::CreateInfo desc);
+    Handle<Buffer> createBuffer(Buffer::CreateInfo info);
+
     Handle<Mesh> createMesh(const char* file, std::string_view name = "");
     Handle<Mesh> createMesh(Span<Vertex> vertices, std::string_view name);
+
     Handle<Texture> createTexture(const char* file, VkImageUsageFlags usage, std::string_view name = "");
+    Handle<Texture> createTexture(Texture::Info info, std::string_view name);
+    // Handle<Texture> createTextureView(Handle<Texture> texture, TextureView::Info info, std::string_view name);
+
     // todo: only takes material by value atm because theres nothing really stored atm
     Handle<Material> createMaterial(Material mat, std::string_view name);
 

@@ -110,9 +110,10 @@ class VulkanRenderer
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;
 
-    VkImageView depthImageView;
-    AllocatedImage depthImage;
-    VkFormat depthFormat;
+    VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
+    Handle<Texture> depthTexture;
+    // VkImageView depthImageView;
+    // AllocatedImage depthImage;
 
     VkQueue graphicsQueue;
     uint32_t graphicsQueueFamily;

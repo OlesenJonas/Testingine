@@ -111,62 +111,24 @@ void VulkanRenderer::initSwapchain()
     swapchainExtent = swapchainSetup.getSwapchainExtent();
     swapchainImageFormat = swapchainSetup.getSwapchainImageFormat();
     swapchainImages = swapchainSetup.getSwapchainImages();
+
     swapchainImageViews = swapchainSetup.createSwapchainImageViews();
 
-    // Depth image
-    VkExtent3D depthImageExtent{
-        .width = swapchainExtent.width,
-        .height = swapchainExtent.height,
-        .depth = 1,
-    };
-    depthFormat = VK_FORMAT_D32_SFLOAT;
-    VkImageCreateInfo depthImgCrInfo{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .pNext = nullptr,
+    ResourceManager& rsrcManager = *Engine::get()->getResourceManager();
+    depthTexture = rsrcManager.createTexture(
+        Texture::Info{
+            .size = {swapchainExtent.width, swapchainExtent.height, 1},
+            .format = depthFormat,
+            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            .viewAspect = VK_IMAGE_ASPECT_DEPTH_BIT,
+        },
+        "Depth texture");
 
-        .imageType = VK_IMAGE_TYPE_2D,
-
-        .format = depthFormat,
-        .extent = depthImageExtent,
-
-        .mipLevels = 1,
-        .arrayLayers = 1,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-    };
-    VmaAllocationCreateInfo depthImgAllocCrInfo{
-        .usage = VMA_MEMORY_USAGE_AUTO,
-        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-    };
-    vmaCreateImage(
-        allocator, &depthImgCrInfo, &depthImgAllocCrInfo, &depthImage.image, &depthImage.allocation, nullptr);
-    VkImageViewCreateInfo depthImgViewCrInfo{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .pNext = nullptr,
-
-        .image = depthImage.image,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = depthFormat,
-
-        .subresourceRange =
-            {
-                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-    };
-    assertVkResult(vkCreateImageView(device, &depthImgViewCrInfo, nullptr, &depthImageView));
-
-    deleteQueue.pushBack(
-        [=]()
-        {
-            vkDestroySwapchainKHR(device, swapchain, nullptr);
-            vkDestroyImageView(device, depthImageView, nullptr);
-            vmaDestroyImage(allocator, depthImage.image, depthImage.allocation);
-        });
+    deleteQueue.pushBack([=]() { vkDestroySwapchainKHR(device, swapchain, nullptr); });
+    for(VkImageView view : swapchainImageViews)
+    {
+        deleteQueue.pushBack([=]() { vkDestroyImageView(device, view, nullptr); });
+    }
 }
 
 void VulkanRenderer::initCommands()
@@ -744,6 +706,10 @@ void VulkanRenderer::draw()
 
     assertVkResult(vkBeginCommandBuffer(curFrameData.mainCommandBuffer, &cmdBeginInfo));
 
+    auto& rsrcManager = *Engine::get()->getResourceManager();
+    Texture* depthTexture = rsrcManager.get(this->depthTexture);
+    assert(depthTexture);
+
     insertImageMemoryBarriers(
         curFrameData.mainCommandBuffer,
         {
@@ -782,7 +748,7 @@ void VulkanRenderer::draw()
                 .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                 .srcQueueFamilyIndex = graphicsQueueFamily,
                 .dstQueueFamilyIndex = graphicsQueueFamily,
-                .image = depthImage.image,
+                .image = depthTexture->image,
                 .subresourceRange =
                     {
                         .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -813,7 +779,7 @@ void VulkanRenderer::draw()
     VkRenderingAttachmentInfo depthAttachmentInfo{
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = depthImageView,
+        .imageView = depthTexture->imageView,
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,

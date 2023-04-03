@@ -7,14 +7,21 @@ struct Texture
 {
     struct Info
     {
-        // Doesnt really have any options atm since most stuff is still hardcoded
         VkExtent3D size = {1, 1, 1};
+        VkFormat format;
+        VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
         VkImageUsageFlags usage = 0;
-    };
-    struct CreateInfo
-    {
-        Info info;
-        void* initialData = nullptr;
+
+        // todo: maybe create Texture3D, TextureArray etc C++ classes
+        //       and only store the relevant fields in those
+        VkImageType imageType = VK_IMAGE_TYPE_2D;
+        uint32_t mipLevels = 1;
+        uint32_t arrayLayers = 1;
+
+        VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
+
+        // TODO: split completly, have image view as seperate object!
+        VkImageAspectFlags viewAspect = VK_IMAGE_ASPECT_COLOR_BIT;
     };
 
     // todo: should be private and no setter available

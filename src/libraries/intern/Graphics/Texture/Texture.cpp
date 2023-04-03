@@ -176,6 +176,13 @@ Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFla
         .image = tex->image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
         .format = VK_FORMAT_R8G8B8A8_SRGB,
+        .components =
+            VkComponentMapping{
+                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+            },
         .subresourceRange =
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -189,6 +196,68 @@ Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFla
     vkCreateImageView(Engine::get()->getRenderer()->device, &imageInfo, nullptr, &tex->imageView);
 
     std::cout << "Texture loaded successfully " << file << std::endl;
+
+    return newTextureHandle;
+}
+
+Handle<Texture> ResourceManager::createTexture(Texture::Info info, std::string_view name)
+{
+    // todo: handle naming collisions
+    auto iterator = nameToMeshLUT.find(name);
+    assert(iterator == nameToMeshLUT.end());
+
+    Handle<Texture> newTextureHandle = texturePool.insert(Texture{.info = info});
+    Texture* tex = texturePool.get(newTextureHandle);
+    assert(tex);
+
+    VkImageCreateInfo imageCrInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .imageType = info.imageType,
+        .format = info.format,
+        .extent = info.size,
+
+        .mipLevels = info.mipLevels,
+        .arrayLayers = info.arrayLayers,
+        .samples = info.samples,
+        .tiling = info.tiling,
+        .usage = info.usage,
+    };
+    VmaAllocationCreateInfo imgAllocInfo{
+        .usage = VMA_MEMORY_USAGE_AUTO,
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    };
+    VmaAllocator& allocator = Engine::get()->getRenderer()->allocator;
+    vmaCreateImage(allocator, &imageCrInfo, &imgAllocInfo, &tex->image, &tex->allocation, nullptr);
+
+    nameToTextureLUT.insert({std::string{name}, newTextureHandle});
+
+    // create an image view covering the whole image
+    VkImageViewCreateInfo imageViewCrInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = nullptr,
+        .image = tex->image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = info.format,
+        .components =
+            VkComponentMapping{
+                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+            },
+        .subresourceRange =
+            {
+                .aspectMask = info.viewAspect,
+                .baseMipLevel = 0,
+                .levelCount = info.mipLevels,
+                .baseArrayLayer = 0,
+                .layerCount = info.arrayLayers,
+            },
+    };
+
+    vkCreateImageView(Engine::get()->getRenderer()->device, &imageViewCrInfo, nullptr, &tex->imageView);
 
     return newTextureHandle;
 }
