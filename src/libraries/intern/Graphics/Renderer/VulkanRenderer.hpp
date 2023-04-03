@@ -139,10 +139,6 @@ class VulkanRenderer
 
     std::vector<RenderObject> renderables;
 
-    // Material* createMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);//TODO:
-    // REMOVE Material* getMaterial(const std::string& name);//TODO: REMOVE Mesh* getMesh(const std::string& name);
-    // //TODO: REMOVE
-
     // TODO: refactor to take span
     void drawObjects(VkCommandBuffer cmd, RenderObject* first, int count);
 

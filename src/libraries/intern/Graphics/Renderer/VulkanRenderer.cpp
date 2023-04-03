@@ -1056,17 +1056,6 @@ void VulkanRenderer::initScene()
     vkUpdateDescriptorSets(device, 1, &texture1Write, 0, nullptr);
 }
 
-// TODO: REMOVE
-//  Material* VulkanRenderer::createMaterial(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name)
-//  {
-//      Material mat{
-//          .pipeline = pipeline,
-//          .pipelineLayout = layout,
-//      };
-//      materials[name] = mat;
-//      return &materials[name];
-//  }
-
 // TODO: refactor to take span?
 void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int count)
 {
