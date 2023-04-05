@@ -5,8 +5,6 @@
 
 #include <glm/glm.hpp>
 
-#include "../Material/Material.hpp"
-#include "../Mesh/Mesh.hpp"
 #include "../RenderObject/RenderObject.hpp"
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
@@ -81,9 +79,6 @@ class VulkanRenderer
     // draw function
     void draw();
 
-    // run main loop
-    void run();
-
     bool isInitialized{false};
 
     int frameNumber{0};
@@ -100,7 +95,8 @@ class VulkanRenderer
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties physicalDeviceProperties;
-    VkDevice device;
+    VkDevice device = VK_NULL_HANDLE;
+
     QueueFamilyIndices queueFamilyIndices;
 
     VkSwapchainKHR swapchain;
@@ -139,6 +135,9 @@ class VulkanRenderer
 
     std::vector<RenderObject> renderables;
 
+    // Wait until all currently submitted GPU commands are executed
+    void waitForWorkFinished();
+
     // TODO: refactor to take span
     void drawObjects(VkCommandBuffer cmd, RenderObject* first, int count);
 
@@ -150,14 +149,15 @@ class VulkanRenderer
     void initCommands();
     void initSyncStructures();
     void initDescriptors();
-    void initPipelines();
-
     void initImGui();
 
+    void initDefaultDescriptorSets();
+    // todo: remove from here!
+    //       these should be part of the executable!
+    //       (the logic, the actual uploading etc should still be part of the engine of course)
+    void initPipelines();
     void loadMeshes();
-    // void uploadMesh(Mesh& mesh);
     void loadImages();
-
     void initScene();
 
     bool loadShaderModule(const char* filePath, VkShaderModule* outShaderModule);

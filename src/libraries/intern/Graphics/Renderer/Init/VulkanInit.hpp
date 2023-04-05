@@ -7,10 +7,13 @@
 #include <optional>
 #include <vector>
 
-VkInstance createInstance(bool enableValidationLayers, Span<const char* const> validationLayers);
+VkInstance createInstance(
+    bool enableValidationLayers,
+    Span<const char* const> validationLayers,
+    Span<const char* const> requiredExtensions);
 
 bool checkValidationLayerSupport(Span<const char* const> validationLayers);
 
-std::vector<const char*> getRequiredExtensions(bool enableValidationLayers);
+std::vector<const char*> getRequiredSurfaceExtensions(bool enableValidationLayers);
 
 VkDebugUtilsMessengerEXT setupDebugMessenger(VkInstance instance);

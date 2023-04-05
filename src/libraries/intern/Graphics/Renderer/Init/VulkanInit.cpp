@@ -10,7 +10,10 @@
 #include <stdexcept>
 #include <vector>
 
-VkInstance createInstance(bool enableValidationLayers, Span<const char* const> validationLayers)
+VkInstance createInstance(
+    bool enableValidationLayers,
+    Span<const char* const> validationLayers,
+    Span<const char* const> requiredExtensions)
 {
     if(enableValidationLayers && !checkValidationLayerSupport(validationLayers))
     {
@@ -19,13 +22,18 @@ VkInstance createInstance(bool enableValidationLayers, Span<const char* const> v
 
     VkApplicationInfo appInfo{
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .pNext = nullptr,
         .pApplicationName = "Hello Triangle",
         .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
         .pEngineName = "No Engine",
         .engineVersion = VK_MAKE_VERSION(1, 0, 0),
         .apiVersion = VK_API_VERSION_1_3};
 
-    auto extensions = getRequiredExtensions(enableValidationLayers);
+    auto extensions = getRequiredSurfaceExtensions(enableValidationLayers);
+    for(const char* extension : requiredExtensions)
+    {
+        extensions.push_back(extension);
+    }
     VkInstanceCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &appInfo,
@@ -70,7 +78,7 @@ bool checkValidationLayerSupport(Span<const char* const> validationLayers)
         bool layerFound = false;
         for(const auto& layerProperties : availableLayers)
         {
-            if(strcmp(layerName, layerProperties.layerName) == 0)
+            if(strcmp(layerName, &layerProperties.layerName[0]) == 0)
             {
                 layerFound = true;
                 break;
@@ -85,28 +93,24 @@ bool checkValidationLayerSupport(Span<const char* const> validationLayers)
     return true;
 }
 
-std::vector<const char*> getRequiredExtensions(bool enableValidationLayers)
+std::vector<const char*> getRequiredSurfaceExtensions(bool enableValidationLayers)
 {
-    uint32_t availExtensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &availExtensionCount, nullptr);
-    std::vector<VkExtensionProperties> availExtensions(availExtensionCount);
-    vkEnumerateInstanceExtensionProperties(nullptr, &availExtensionCount, availExtensions.data());
-    std::cout << "Available extensions: \n";
-    for(const auto& extension : availExtensions)
-    {
-        std::cout << "\t" << extension.extensionName << "\n";
-    }
+    // // Logging all available extensions
+    // uint32_t availExtensionCount = 0;
+    // vkEnumerateInstanceExtensionProperties(nullptr, &availExtensionCount, nullptr);
+    // std::vector<VkExtensionProperties> availExtensions(availExtensionCount);
+    // vkEnumerateInstanceExtensionProperties(nullptr, &availExtensionCount, availExtensions.data());
+    // std::cout << "Available extensions: \n";
+    // for(const auto& extension : availExtensions)
+    // {
+    //     std::cout << "\t" << extension.extensionName << "\n";
+    // }
 
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
     std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-    if(enableValidationLayers)
-    {
-        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
 
     return extensions;
 }

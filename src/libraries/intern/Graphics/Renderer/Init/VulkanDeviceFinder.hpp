@@ -1,12 +1,11 @@
 #pragma once
 
 #include "../../VulkanTypes.hpp"
-#include "Graphics/VulkanTypes.hpp"
-#include <vulkan/vulkan.h>
 
-#include "Datastructures/Span.hpp"
-
+#include <intern/Datastructures/Span.hpp>
 #include <vector>
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 struct VulkanDeviceFinder
 {
@@ -26,12 +25,12 @@ struct VulkanDeviceFinder
     SwapchainSupportDetails querySwapchainSupport(VkPhysicalDevice device);
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 
-    VkInstance instance;
-    VkSurfaceKHR surface;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
     bool enableValidationLayers = false;
-    std::vector<const char*> validationLayers;
-    std::vector<const char*> deviceExtensions;
-    VkPhysicalDevice physicalDevice;
-    VkDevice device;
+    Span<const char* const> validationLayers;
+    Span<const char* const> deviceExtensions;
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
     QueueFamilyIndices queueFamilyIndices;
 };

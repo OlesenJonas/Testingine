@@ -5,12 +5,14 @@
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
 #include "Graphics/Renderer/Init/VulkanPipelineBuilder.hpp"
+#include "Graphics/Renderer/VulkanDebug.hpp"
+#include "Graphics/Renderer/VulkanRenderer.hpp"
+#include "Init/VulkanDeviceFinder.hpp"
+#include "Init/VulkanInit.hpp"
+#include "Init/VulkanPipelineBuilder.hpp"
+#include "Init/VulkanSwapchainSetup.hpp"
 #include "ResourceManager/ResourceManager.hpp"
 #include "VulkanDebug.hpp"
-#include "init/VulkanDeviceFinder.hpp"
-#include "init/VulkanInit.hpp"
-#include "init/VulkanPipelineBuilder.hpp"
-#include "init/VulkanSwapchainSetup.hpp"
 
 #include <intern/Datastructures/Span.hpp>
 #include <intern/Engine/Engine.hpp>
@@ -32,23 +34,16 @@
 void VulkanRenderer::init()
 {
     initVulkan();
-
     initSwapchain();
-
     initCommands();
-
     initSyncStructures();
-
     initDescriptors();
-
-    initPipelines();
-
     initImGui();
 
+    initDefaultDescriptorSets();
+    initPipelines();
     loadMeshes();
-
     loadImages();
-
     initScene();
 
     // everything went fine
@@ -60,11 +55,12 @@ void VulkanRenderer::initVulkan()
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_KHRONOS_validation",
     };
-    const std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    const std::vector<const char*> instanceExtensions = {
+        // Need this for debug markers, not just for layers
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
     };
 
-    instance = createInstance(enableValidationLayers, validationLayers);
+    instance = createInstance(enableValidationLayers, validationLayers, instanceExtensions);
 
     if(enableValidationLayers)
         debugMessenger = setupDebugMessenger(instance);
@@ -74,6 +70,10 @@ void VulkanRenderer::initVulkan()
     {
         throw std::runtime_error("failed to create window surface!");
     }
+
+    const std::vector<const char*> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    };
 
     VulkanDeviceFinder deviceFinder(instance);
     deviceFinder.setSurface(surface);
@@ -225,22 +225,96 @@ void VulkanRenderer::initSyncStructures()
 void VulkanRenderer::initDescriptors()
 {
     std::vector<VkDescriptorPoolSize> sizes = {
-        {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 10},
-        {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .descriptorCount = 10},
-        {.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 10},
-        {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 10},
+        {.type = VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = 128},
+        {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 128},
+        {.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .descriptorCount = 128},
+        {.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = 128},
+        {.type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, .descriptorCount = 128},
+        {.type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, .descriptorCount = 128},
+        {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 128},
+        {.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 128},
+        {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .descriptorCount = 128},
+        {.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, .descriptorCount = 128},
     };
     VkDescriptorPoolCreateInfo poolCrInfo{
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .pNext = nullptr,
 
         .flags = 0,
-        .maxSets = 10,
+        .maxSets = 128,
         .poolSizeCount = (uint32_t)sizes.size(),
         .pPoolSizes = sizes.data(),
     };
-    vkCreateDescriptorPool(device, &poolCrInfo, nullptr, &descriptorPool);
+    assertVkResult(vkCreateDescriptorPool(device, &poolCrInfo, nullptr, &descriptorPool));
 
+    deleteQueue.pushBack([=]() { vkDestroyDescriptorPool(device, descriptorPool, nullptr); });
+}
+
+void VulkanRenderer::initImGui()
+{
+    // 1: create descriptor pool for IMGUI
+    //  the size of the pool is very oversize, but it's copied from imgui demo itself.
+    VkDescriptorPoolSize poolSizes[] = {
+        {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000},
+    };
+
+    VkDescriptorPoolCreateInfo descrPoolCrInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+        .maxSets = 1000,
+        .poolSizeCount = std::size(poolSizes),
+        .pPoolSizes = poolSizes,
+    };
+
+    VkDescriptorPool imguiPool;
+    assertVkResult(vkCreateDescriptorPool(device, &descrPoolCrInfo, nullptr, &imguiPool));
+
+    // 2: initialize the library
+    ImGui::CreateContext();
+    // init imgui for Glfw
+    ImGui_ImplGlfw_InitForVulkan(Engine::get()->getMainWindow()->glfwWindow, true);
+    // init imgui for Vulkan
+    ImGui_ImplVulkan_InitInfo initInfo = {
+        .Instance = instance,
+        .PhysicalDevice = physicalDevice,
+        .Device = device,
+        .QueueFamily = graphicsQueueFamily,
+        .Queue = graphicsQueue,
+        .DescriptorPool = imguiPool,
+        // todo: dont hardcode these, retrieve from swapchain creation
+        .MinImageCount = 2,
+        .ImageCount = 3,
+        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+    };
+
+    ImGui_ImplVulkan_Init(&initInfo, swapchainImageFormat);
+
+    // upload imgui font textures
+    immediateSubmit([&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
+    // clear font textures from cpu data
+    ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+    // add imgui stuff to deletion queue
+    deleteQueue.pushBack(
+        [=]()
+        {
+            vkDestroyDescriptorPool(device, imguiPool, nullptr);
+            ImGui_ImplVulkan_Shutdown();
+        });
+}
+
+void VulkanRenderer::initDefaultDescriptorSets()
+{
     VkDescriptorSetLayoutBinding camBufferBinding{
         .binding = 0,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -441,7 +515,6 @@ void VulkanRenderer::initDescriptors()
         {
             vkDestroyDescriptorSetLayout(device, globalSetLayout, nullptr);
             vkDestroyDescriptorSetLayout(device, objectSetLayout, nullptr);
-            vkDestroyDescriptorPool(device, descriptorPool, nullptr);
         });
 }
 
@@ -571,69 +644,6 @@ void VulkanRenderer::initPipelines()
         });
 }
 
-void VulkanRenderer::initImGui()
-{
-    // 1: create descriptor pool for IMGUI
-    //  the size of the pool is very oversize, but it's copied from imgui demo itself.
-    VkDescriptorPoolSize poolSizes[] = {
-        {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
-        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
-        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
-        {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
-        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000},
-    };
-
-    VkDescriptorPoolCreateInfo descrPoolCrInfo{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-        .maxSets = 1000,
-        .poolSizeCount = std::size(poolSizes),
-        .pPoolSizes = poolSizes,
-    };
-
-    VkDescriptorPool imguiPool;
-    assertVkResult(vkCreateDescriptorPool(device, &descrPoolCrInfo, nullptr, &imguiPool));
-
-    // 2: initialize the library
-    ImGui::CreateContext();
-    // init imgui for Glfw
-    ImGui_ImplGlfw_InitForVulkan(Engine::get()->getMainWindow()->glfwWindow, true);
-    // init imgui for Vulkan
-    ImGui_ImplVulkan_InitInfo initInfo = {
-        .Instance = instance,
-        .PhysicalDevice = physicalDevice,
-        .Device = device,
-        .QueueFamily = graphicsQueueFamily,
-        .Queue = graphicsQueue,
-        .DescriptorPool = imguiPool,
-        // todo: dont hardcode these, retrieve from swapchain creation
-        .MinImageCount = 2,
-        .ImageCount = 3,
-        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
-    };
-
-    ImGui_ImplVulkan_Init(&initInfo, swapchainImageFormat);
-
-    // upload imgui font textures
-    immediateSubmit([&](VkCommandBuffer cmd) { ImGui_ImplVulkan_CreateFontsTexture(cmd); });
-    // clear font textures from cpu data
-    ImGui_ImplVulkan_DestroyFontUploadObjects();
-
-    // add imgui stuff to deletion queue
-    deleteQueue.pushBack(
-        [=]()
-        {
-            vkDestroyDescriptorPool(device, imguiPool, nullptr);
-            ImGui_ImplVulkan_Shutdown();
-        });
-}
-
 void VulkanRenderer::cleanup()
 {
     if(!isInitialized)
@@ -655,32 +665,8 @@ void VulkanRenderer::cleanup()
     glfwTerminate();
 }
 
-void VulkanRenderer::run()
+void VulkanRenderer::waitForWorkFinished()
 {
-    glfwSetTime(0.0);
-    Engine::get()->getInputManager()->resetTime();
-
-    while(!glfwWindowShouldClose(Engine::get()->getMainWindow()->glfwWindow))
-    {
-        glfwPollEvents();
-
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-
-        Engine::get()->getInputManager()->update();
-        if(!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
-        {
-            Engine::get()->getCamera()->update();
-        }
-        // Not sure about the order of UI & engine code
-
-        ImGui::NewFrame();
-        ImGui::ShowDemoWindow();
-        ImGui::Render();
-
-        draw();
-    }
-
     vkDeviceWaitIdle(device);
 }
 

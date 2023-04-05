@@ -4,7 +4,12 @@ int main()
 {
     Engine engine;
 
-    engine.run();
+    while(engine.isRunning())
+    {
+        // will probably split when accessing specific parts of the update is needed
+        // but thats not the case atm
+        engine.update();
+    }
 
     return 0;
 }

@@ -17,7 +17,9 @@ class Engine
         return ptr;
     }
 
-    void run();
+    bool isRunning() const;
+
+    void update();
 
     inline Camera* getCamera()
     {
@@ -41,6 +43,8 @@ class Engine
     }
 
   private:
+    bool _isRunning = true;
+
     inline static Engine* ptr = nullptr;
     InputManager inputManager;
     Camera mainCamera;
