@@ -4,8 +4,11 @@
 
 #include <intern/Datastructures/Pool.hpp>
 
-#include "../Material/Material.hpp"
-#include "../Mesh/Mesh.hpp"
+// #include "../Material/Material.hpp"
+// #include "../Mesh/Mesh.hpp"
+
+struct Mesh;
+struct Material;
 
 struct RenderObject
 {

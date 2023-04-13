@@ -40,11 +40,8 @@ void VulkanRenderer::init()
     initDescriptors();
     initImGui();
 
-    initDefaultDescriptorSets();
+    initGlobalDescriptorSets();
     initPipelines();
-    loadMeshes();
-    loadImages();
-    initScene();
 
     // everything went fine
     isInitialized = true;
@@ -313,7 +310,7 @@ void VulkanRenderer::initImGui()
         });
 }
 
-void VulkanRenderer::initDefaultDescriptorSets()
+void VulkanRenderer::initGlobalDescriptorSets()
 {
     VkDescriptorSetLayoutBinding camBufferBinding{
         .binding = 0,
@@ -642,6 +639,57 @@ void VulkanRenderer::initPipelines()
             vkDestroyPipeline(device, texturedPipeline, nullptr);
             // vkDestroyPipelineLayout(device, meshPipelineLayout, nullptr);
         });
+
+    // ALSO BIND TEXTURES TO LAYOUTS ALREADY
+
+    auto lostEmpire = Engine::get()->getResourceManager()->createTexture(
+        ASSETS_PATH "/vkguide/lost_empire-RGBA.png", VK_IMAGE_USAGE_SAMPLED_BIT, "empire_diffuse");
+
+    // Descriptors using the loaded textures
+
+    ResourceManager& rsrcManager = *Engine::get()->getResourceManager();
+
+    VkSamplerCreateInfo samplerInfo{
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+
+        .magFilter = VK_FILTER_NEAREST,
+        .minFilter = VK_FILTER_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    };
+    VkSampler blockySampler;
+    vkCreateSampler(device, &samplerInfo, nullptr, &blockySampler);
+
+    Material* texturedMat = rsrcManager.get(rsrcManager.getMaterial("texturedMesh"));
+
+    VkDescriptorSetAllocateInfo descSetAllocInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .descriptorPool = descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &singleTextureSetLayout,
+    };
+    vkAllocateDescriptorSets(device, &descSetAllocInfo, &texturedMat->textureSet);
+
+    Handle<Texture> empireDiffuse = rsrcManager.getTexture("empire_diffuse");
+    VkDescriptorImageInfo imageBufferInfo{
+        .sampler = blockySampler,
+        .imageView = rsrcManager.get(empireDiffuse)->imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkWriteDescriptorSet texture1Write{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = nullptr,
+
+        .dstSet = texturedMat->textureSet,
+        .dstBinding = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &imageBufferInfo,
+    };
+    vkUpdateDescriptorSets(device, 1, &texture1Write, 0, nullptr);
 }
 
 void VulkanRenderer::cleanup()
@@ -931,115 +979,6 @@ bool VulkanRenderer::loadShaderModule(const char* filePath, VkShaderModule* outS
     *outShaderModule = shaderModule;
 
     return true;
-}
-
-void VulkanRenderer::loadMeshes()
-{
-    std::vector<Vertex> triangleVertices;
-    triangleVertices.resize(3);
-
-    triangleVertices[0].position = {1.f, 1.f, 0.0f};
-    triangleVertices[1].position = {-1.f, 1.f, 0.0f};
-    triangleVertices[2].position = {0.f, -1.f, 0.0f};
-
-    triangleVertices[0].color = {0.0f, 1.0f, 0.0f};
-    triangleVertices[1].color = {0.0f, 1.0f, 0.0f};
-    triangleVertices[2].color = {0.0f, 1.0f, 0.0f};
-
-    auto triangleMesh = Engine::get()->getResourceManager()->createMesh(triangleVertices, "triangle");
-
-    // load monkey mesh
-    auto monkeyMesh =
-        Engine::get()->getResourceManager()->createMesh(ASSETS_PATH "/vkguide/monkey_smooth.obj", "monkey");
-
-    auto lostEmpire =
-        Engine::get()->getResourceManager()->createMesh(ASSETS_PATH "/vkguide/lost_empire.obj", "empire");
-}
-
-void VulkanRenderer::loadImages()
-{
-    auto lostEmpire = Engine::get()->getResourceManager()->createTexture(
-        ASSETS_PATH "/vkguide/lost_empire-RGBA.png", VK_IMAGE_USAGE_SAMPLED_BIT, "empire_diffuse");
-}
-
-void VulkanRenderer::initScene()
-{
-    auto& rsrcManager = *Engine::get()->getResourceManager();
-
-    const auto& newRenderable = renderables.emplace_back(RenderObject{
-        .mesh = rsrcManager.getMesh("monkey"),
-        .material = rsrcManager.getMaterial("defaultMesh"),
-        .transformMatrix = glm::mat4{1.0f},
-    });
-    assert(newRenderable.mesh.isValid());
-    assert(newRenderable.material.isValid());
-
-    for(int x = -20; x <= 20; x++)
-    {
-        for(int y = -20; y <= 20; y++)
-        {
-            glm::mat4 translation = glm::translate(glm::vec3{x, 0, y});
-            glm::mat4 scale = glm::scale(glm::vec3{0.2f});
-
-            const auto& newRenderable = renderables.emplace_back(RenderObject{
-                .mesh = rsrcManager.getMesh("triangle"),
-                .material = rsrcManager.getMaterial("defaultMesh"),
-                .transformMatrix = translation * scale,
-            });
-            assert(newRenderable.mesh.isValid());
-            assert(newRenderable.material.isValid());
-        }
-    }
-
-    RenderObject map;
-    map.mesh = rsrcManager.getMesh("empire");
-    map.material = rsrcManager.getMaterial("texturedMesh");
-    map.transformMatrix = glm::translate(glm::vec3{5.0f, -10.0f, 0.0f});
-    renderables.push_back(map);
-
-    // Descriptors using the loaded textures
-
-    VkSamplerCreateInfo samplerInfo{
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-
-        .magFilter = VK_FILTER_NEAREST,
-        .minFilter = VK_FILTER_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    };
-    VkSampler blockySampler;
-    vkCreateSampler(device, &samplerInfo, nullptr, &blockySampler);
-
-    Material* texturedMat = rsrcManager.get(rsrcManager.getMaterial("texturedMesh"));
-
-    VkDescriptorSetAllocateInfo descSetAllocInfo{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .descriptorPool = descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &singleTextureSetLayout,
-    };
-    vkAllocateDescriptorSets(device, &descSetAllocInfo, &texturedMat->textureSet);
-
-    Handle<Texture> empireDiffuse = rsrcManager.getTexture("empire_diffuse");
-    VkDescriptorImageInfo imageBufferInfo{
-        .sampler = blockySampler,
-        .imageView = rsrcManager.get(empireDiffuse)->imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    VkWriteDescriptorSet texture1Write{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .pNext = nullptr,
-
-        .dstSet = texturedMat->textureSet,
-        .dstBinding = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &imageBufferInfo,
-    };
-    vkUpdateDescriptorSets(device, 1, &texture1Write, 0, nullptr);
 }
 
 // TODO: refactor to take span?

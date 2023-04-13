@@ -5,6 +5,7 @@
 
 #include <glm/glm.hpp>
 
+#include "../Buffer/Buffer.hpp"
 #include "../RenderObject/RenderObject.hpp"
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
@@ -151,14 +152,11 @@ class VulkanRenderer
     void initDescriptors();
     void initImGui();
 
-    void initDefaultDescriptorSets();
+    void initGlobalDescriptorSets();
     // todo: remove from here!
     //       these should be part of the executable!
     //       (the logic, the actual uploading etc should still be part of the engine of course)
     void initPipelines();
-    void loadMeshes();
-    void loadImages();
-    void initScene();
 
     bool loadShaderModule(const char* filePath, VkShaderModule* outShaderModule);
 
