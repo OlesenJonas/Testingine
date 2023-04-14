@@ -158,7 +158,5 @@ class VulkanRenderer
     //       (the logic, the actual uploading etc should still be part of the engine of course)
     void initPipelines();
 
-    bool loadShaderModule(const char* filePath, VkShaderModule* outShaderModule);
-
     size_t padUniformBufferSize(size_t originalSize);
 };

@@ -1,6 +1,7 @@
 #include "VulkanRenderer.hpp"
 #include "../Barriers/Barrier.hpp"
 #include "../Mesh/Mesh.hpp"
+#include "../Pipeline/Shaders.hpp"
 #include "../RenderObject/RenderObject.hpp"
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
@@ -19,6 +20,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <shaderc/shaderc.h>
 #include <stdexcept>
 #include <string>
 
@@ -517,18 +519,18 @@ void VulkanRenderer::initGlobalDescriptorSets()
 
 void VulkanRenderer::initPipelines()
 {
-    VkShaderModule meshTriVertShader;
-    if(!loadShaderModule("../shaders/tri_mesh.vert.spirv", &meshTriVertShader))
+    VkShaderModule meshTriVertShader = compileGLSL(SHADERS_PATH "/tri_mesh.vert", shaderc_vertex_shader);
+    if(meshTriVertShader == VK_NULL_HANDLE)
     {
         std::cout << "Error when building the triangle vertex shader module" << std::endl;
     }
-    VkShaderModule fragShader;
-    if(!loadShaderModule("../shaders/default_lit.frag.spirv", &fragShader))
+    VkShaderModule fragShader = compileGLSL(SHADERS_PATH "/default_lit.frag", shaderc_fragment_shader);
+    if(fragShader == VK_NULL_HANDLE)
     {
         std::cout << "Error when building the triangle fragment shader module" << std::endl;
     }
-    VkShaderModule texturedFragShader;
-    if(!loadShaderModule("../shaders/textured_lit.frag.spirv", &texturedFragShader))
+    VkShaderModule texturedFragShader = compileGLSL(SHADERS_PATH "/textured_lit.frag", shaderc_fragment_shader);
+    if(texturedFragShader == VK_NULL_HANDLE)
     {
         std::cout << "Error when building the textured fragment shader module" << std::endl;
     }
@@ -943,42 +945,6 @@ void VulkanRenderer::draw()
     assertVkResult(vkQueuePresentKHR(graphicsQueue, &presentInfo));
 
     frameNumber++;
-}
-
-bool VulkanRenderer::loadShaderModule(const char* filePath, VkShaderModule* outShaderModule)
-{
-    // todo: readBinaryFile function, overloaded to either return or fill
-    std::ifstream file(filePath, std::ios::ate | std::ios::binary);
-
-    if(!file.is_open())
-    {
-        throw std::runtime_error("failed to open file!");
-    }
-
-    auto fileSize = (size_t)file.tellg();
-    std::vector<char> buffer(fileSize);
-
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-
-    file.close();
-
-    VkShaderModuleCreateInfo smCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .pNext = nullptr,
-        .codeSize = buffer.size(),
-        .pCode = reinterpret_cast<const uint32_t*>(buffer.data()),
-    };
-
-    VkShaderModule shaderModule;
-    if(vkCreateShaderModule(device, &smCreateInfo, nullptr, &shaderModule) != VK_SUCCESS)
-    {
-        return false;
-    }
-
-    *outShaderModule = shaderModule;
-
-    return true;
 }
 
 // TODO: refactor to take span?

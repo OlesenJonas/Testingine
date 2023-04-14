@@ -1,4 +1,5 @@
-include(FindVulkan)
+# include(FindVulkan)
+find_package(Vulkan REQUIRED COMPONENTS shaderc_combined)
 
 # get libraries from vcpk
 find_package(glfw3 CONFIG REQUIRED)
