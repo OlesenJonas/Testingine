@@ -57,7 +57,7 @@ void ShaderIncludeHandler::ReleaseInclude(shaderc_include_result* data)
     delete[] data->source_name;
 };
 
-VkShaderModule compileGLSL(std::string_view path, shaderc_shader_kind shaderType)
+std::vector<uint32_t> compileGLSL(std::string_view path, shaderc_shader_kind shaderType)
 {
     std::string initialPath{path};
 
@@ -109,23 +109,5 @@ VkShaderModule compileGLSL(std::string_view path, shaderc_shader_kind shaderType
         assert(false);
     }
 
-    // todo: same here, can take iterators directly?
-    std::vector<uint32_t> spirvBinary{compilationResult.cbegin(), compilationResult.cend()};
-
-    VkShaderModuleCreateInfo smCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .pNext = nullptr,
-        .codeSize = 4u * spirvBinary.size(), // size in bytes, but spirvBinary is uint32 vector!
-        .pCode = spirvBinary.data(),
-    };
-
-    VkShaderModule shaderModule;
-    VulkanRenderer& renderer = *Engine::get()->getRenderer();
-    // todo: vkCreateShaderModule can be called from multiple threads, MAKE USE OF THAT
-    if(vkCreateShaderModule(renderer.device, &smCreateInfo, nullptr, &shaderModule) != VK_SUCCESS)
-    {
-        return VK_NULL_HANDLE;
-    }
-
-    return shaderModule;
+    return {compilationResult.cbegin(), compilationResult.cend()};
 }

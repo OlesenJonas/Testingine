@@ -1,5 +1,6 @@
 #include "ResourceManager.hpp"
 #include "Graphics/Buffer/Buffer.hpp"
+#include "Graphics/Pipeline/GraphicsPipeline.hpp"
 #include <TinyOBJ/tiny_obj_loader.h>
 #include <intern/Engine/Engine.hpp>
 #include <vulkan/vulkan_core.h>
@@ -32,5 +33,12 @@ void ResourceManager::cleanup()
     {
         deleteMesh(meshHandle);
         meshHandle = meshPool.getFirst();
+    }
+
+    Handle<GraphicsPipeline> gpipelineHandle = graphicsPipelinePool.getFirst();
+    while(gpipelineHandle.isValid())
+    {
+        free(gpipelineHandle);
+        gpipelineHandle = graphicsPipelinePool.getFirst();
     }
 }

@@ -6,6 +6,7 @@ target_link_libraries(intern PUBLIC Vulkan::shaderc_combined)
 target_link_libraries(intern PUBLIC glfw)
 target_link_libraries(intern PUBLIC glm::glm)
 target_link_libraries(intern PUBLIC VMA)
+target_link_libraries(intern PUBLIC SPIRV-Reflect)
 
 IF(VULKAN_ENABLE_VALIDATION)
     message(STATUS "Compiling with vulkan validation enabled")

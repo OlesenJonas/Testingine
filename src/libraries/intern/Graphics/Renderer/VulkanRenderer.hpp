@@ -71,6 +71,11 @@ constexpr int FRAMES_IN_FLIGHT = 2;
 class VulkanRenderer
 {
   public:
+    [[nodiscard]] static inline VulkanRenderer* get()
+    {
+        return ptr;
+    }
+
     // initializes everything in the engine
     void init();
 
@@ -159,4 +164,6 @@ class VulkanRenderer
     void initPipelines();
 
     size_t padUniformBufferSize(size_t originalSize);
+
+    inline static VulkanRenderer* ptr = nullptr;
 };

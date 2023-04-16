@@ -35,6 +35,8 @@
 
 void VulkanRenderer::init()
 {
+    ptr = this;
+
     initVulkan();
     initSwapchain();
     initCommands();
@@ -519,21 +521,31 @@ void VulkanRenderer::initGlobalDescriptorSets()
 
 void VulkanRenderer::initPipelines()
 {
-    VkShaderModule meshTriVertShader = compileGLSL(SHADERS_PATH "/tri_mesh.vert", shaderc_vertex_shader);
-    if(meshTriVertShader == VK_NULL_HANDLE)
-    {
-        std::cout << "Error when building the triangle vertex shader module" << std::endl;
-    }
-    VkShaderModule fragShader = compileGLSL(SHADERS_PATH "/default_lit.frag", shaderc_fragment_shader);
-    if(fragShader == VK_NULL_HANDLE)
-    {
-        std::cout << "Error when building the triangle fragment shader module" << std::endl;
-    }
-    VkShaderModule texturedFragShader = compileGLSL(SHADERS_PATH "/textured_lit.frag", shaderc_fragment_shader);
-    if(texturedFragShader == VK_NULL_HANDLE)
-    {
-        std::cout << "Error when building the textured fragment shader module" << std::endl;
-    }
+    auto& rsrcMngr = *Engine::get()->getResourceManager();
+
+    rsrcMngr.createGraphicsPipeline({
+        .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/textured_lit.frag"},
+    });
+
+    VkShaderModule meshTriVertShader;
+    VkShaderModule fragShader;
+    VkShaderModule texturedFragShader;
+    // VkShaderModule meshTriVertShader = compileGLSL(SHADERS_PATH "/tri_mesh.vert", shaderc_vertex_shader);
+    // if(meshTriVertShader == VK_NULL_HANDLE)
+    // {
+    //     std::cout << "Error when building the triangle vertex shader module" << std::endl;
+    // }
+    // VkShaderModule fragShader = compileGLSL(SHADERS_PATH "/default_lit.frag", shaderc_fragment_shader);
+    // if(fragShader == VK_NULL_HANDLE)
+    // {
+    //     std::cout << "Error when building the triangle fragment shader module" << std::endl;
+    // }
+    // VkShaderModule texturedFragShader = compileGLSL(SHADERS_PATH "/textured_lit.frag", shaderc_fragment_shader);
+    // if(texturedFragShader == VK_NULL_HANDLE)
+    // {
+    //     std::cout << "Error when building the textured fragment shader module" << std::endl;
+    // }
 
     VkPushConstantRange pushConstantRange{
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
@@ -590,7 +602,6 @@ void VulkanRenderer::initPipelines()
 
     VkPipeline meshPipeline = meshPipelineBuilder.createPipeline(device, {swapchainImageFormat}, depthFormat);
 
-    auto& rsrcMngr = *Engine::get()->getResourceManager();
     rsrcMngr.createMaterial(
         {
             .pipeline = meshPipeline,

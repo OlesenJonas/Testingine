@@ -10,6 +10,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo)
     // assume that the underlying pointer wont change until this function returns
     Buffer* buffer = bufferPool.get(newBufferHandle);
 
+    // TODO: dont error, just warn and automatically set transfer_dst_bit
     assert(
         crInfo.initialData == nullptr ||
         (crInfo.info.usage & VK_BUFFER_USAGE_TRANSFER_DST_BIT) > 0 &&

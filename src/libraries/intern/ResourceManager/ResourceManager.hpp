@@ -1,10 +1,12 @@
 #pragma once
 
+// todo: only forward declarations where possible
 #include <intern/Datastructures/Pool.hpp>
 #include <intern/Datastructures/Span.hpp>
 #include <intern/Graphics/Buffer/Buffer.hpp>
 #include <intern/Graphics/Material/Material.hpp>
 #include <intern/Graphics/Mesh/Mesh.hpp>
+#include <intern/Graphics/Pipeline/GraphicsPipeline.hpp>
 #include <intern/Graphics/Texture/Texture.hpp>
 #include <intern/Graphics/Texture/TextureView.hpp>
 #include <intern/Misc/StringHash.hpp>
@@ -26,13 +28,17 @@ class ResourceManager
     Handle<Texture> createTexture(Texture::Info info, std::string_view name);
     // Handle<Texture> createTextureView(Handle<Texture> texture, TextureView::Info info, std::string_view name);
 
+    Handle<GraphicsPipeline> createGraphicsPipeline(GraphicsPipeline::CreateInfo crInfo);
+
     // todo: only takes material by value atm because theres nothing really stored atm
     Handle<Material> createMaterial(Material mat, std::string_view name);
 
-    // todo: rename all these to just delete(Handle<...>)?
+    // todo: rename all these to just free(Handle<...>)?
     void deleteBuffer(Handle<Buffer> handle);
     void deleteMesh(Handle<Mesh> handle);
     void deleteTexture(Handle<Texture> handle);
+
+    void free(Handle<GraphicsPipeline> handle);
 
     inline Buffer* get(Handle<Buffer> handle)
     {
@@ -79,4 +85,5 @@ class ResourceManager
     Pool<Mesh> meshPool{10};
     Pool<Texture> texturePool{10};
     Pool<Material> materialPool{10};
+    Pool<GraphicsPipeline> graphicsPipelinePool{10};
 };

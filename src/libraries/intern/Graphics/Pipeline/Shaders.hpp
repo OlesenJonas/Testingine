@@ -16,5 +16,4 @@ struct ShaderIncludeHandler : public shaderc::CompileOptions::IncluderInterface
     void ReleaseInclude(shaderc_include_result* data) override;
 };
 
-// todo: custom shader_kind wrapper here?
-VkShaderModule compileGLSL(std::string_view pat, shaderc_shader_kind shaderType);
+std::vector<uint32_t> compileGLSL(std::string_view path, shaderc_shader_kind shaderType);
