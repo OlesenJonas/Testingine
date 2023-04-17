@@ -24,7 +24,7 @@
     #define POOL_FREE std::free
 #endif
 
-// as shown in https://twitter.com/SebAaltonen/status/1562747716584648704 and realted tweets
+// Handle and Pool types as shown in https://twitter.com/SebAaltonen/status/1562747716584648704 and realted tweets
 template <typename T>
 class Handle
 {

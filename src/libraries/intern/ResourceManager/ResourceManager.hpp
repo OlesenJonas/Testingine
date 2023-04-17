@@ -37,8 +37,10 @@ class ResourceManager
     void deleteBuffer(Handle<Buffer> handle);
     void deleteMesh(Handle<Mesh> handle);
     void deleteTexture(Handle<Texture> handle);
-
+    // like here
     void free(Handle<GraphicsPipeline> handle);
+
+    // todo: macros for following
 
     inline Buffer* get(Handle<Buffer> handle)
     {
@@ -55,6 +57,10 @@ class ResourceManager
     inline Material* get(Handle<Material> handle)
     {
         return materialPool.get(handle);
+    }
+    inline GraphicsPipeline* get(Handle<GraphicsPipeline> handle)
+    {
+        return graphicsPipelinePool.get(handle);
     }
 
     inline Handle<Mesh> getMesh(std::string_view name)

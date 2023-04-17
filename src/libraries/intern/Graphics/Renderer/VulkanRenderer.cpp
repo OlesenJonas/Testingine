@@ -1,16 +1,14 @@
 #include "VulkanRenderer.hpp"
 #include "../Barriers/Barrier.hpp"
 #include "../Mesh/Mesh.hpp"
-#include "../Pipeline/Shaders.hpp"
 #include "../RenderObject/RenderObject.hpp"
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
-#include "Graphics/Renderer/Init/VulkanPipelineBuilder.hpp"
+#include "Graphics/Pipeline/GraphicsPipeline.hpp"
 #include "Graphics/Renderer/VulkanDebug.hpp"
 #include "Graphics/Renderer/VulkanRenderer.hpp"
 #include "Init/VulkanDeviceFinder.hpp"
 #include "Init/VulkanInit.hpp"
-#include "Init/VulkanPipelineBuilder.hpp"
 #include "Init/VulkanSwapchainSetup.hpp"
 #include "ResourceManager/ResourceManager.hpp"
 #include "VulkanDebug.hpp"
@@ -316,6 +314,9 @@ void VulkanRenderer::initImGui()
 
 void VulkanRenderer::initGlobalDescriptorSets()
 {
+    // TODO: this no longer works since not all buffers may be used in all shader stages
+    //       so have to figure out how to bind just the correct ones etc.
+    //       But should be doable with the existing look up map
     VkDescriptorSetLayoutBinding camBufferBinding{
         .binding = 0,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -327,7 +328,8 @@ void VulkanRenderer::initGlobalDescriptorSets()
         .binding = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
         .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        // .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
         .pImmutableSamplers = nullptr,
     };
     VkDescriptorSetLayoutBinding textureBinding{
@@ -523,135 +525,19 @@ void VulkanRenderer::initPipelines()
 {
     auto& rsrcMngr = *Engine::get()->getResourceManager();
 
-    rsrcMngr.createGraphicsPipeline({
+    auto defaultPipeline = rsrcMngr.createGraphicsPipeline({
+        .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/default_lit.frag"},
+    });
+
+    auto texturedPipeline = rsrcMngr.createGraphicsPipeline({
         .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
         .fragmentShader = {.sourcePath = SHADERS_PATH "/textured_lit.frag"},
     });
 
-    VkShaderModule meshTriVertShader;
-    VkShaderModule fragShader;
-    VkShaderModule texturedFragShader;
-    // VkShaderModule meshTriVertShader = compileGLSL(SHADERS_PATH "/tri_mesh.vert", shaderc_vertex_shader);
-    // if(meshTriVertShader == VK_NULL_HANDLE)
-    // {
-    //     std::cout << "Error when building the triangle vertex shader module" << std::endl;
-    // }
-    // VkShaderModule fragShader = compileGLSL(SHADERS_PATH "/default_lit.frag", shaderc_fragment_shader);
-    // if(fragShader == VK_NULL_HANDLE)
-    // {
-    //     std::cout << "Error when building the triangle fragment shader module" << std::endl;
-    // }
-    // VkShaderModule texturedFragShader = compileGLSL(SHADERS_PATH "/textured_lit.frag", shaderc_fragment_shader);
-    // if(texturedFragShader == VK_NULL_HANDLE)
-    // {
-    //     std::cout << "Error when building the textured fragment shader module" << std::endl;
-    // }
+    rsrcMngr.createMaterial({.pipeline = defaultPipeline}, "defaultMesh");
 
-    VkPushConstantRange pushConstantRange{
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-        .offset = 0,
-        .size = sizeof(MeshPushConstants),
-    };
-    VkDescriptorSetLayout setLayouts[] = {globalSetLayout, objectSetLayout};
-    VkPipelineLayout meshPipelineLayout;
-    VkPipelineLayoutCreateInfo meshPipelineLayoutCrInfo{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .pNext = nullptr,
-
-        .flags = 0,
-        .setLayoutCount = 2,
-        .pSetLayouts = &setLayouts[0],
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &pushConstantRange,
-    };
-    assertVkResult(vkCreatePipelineLayout(device, &meshPipelineLayoutCrInfo, nullptr, &meshPipelineLayout));
-
-    VkPipelineLayout texturedPipelineLayout;
-    VkDescriptorSetLayout texturedSetLayouts[] = {globalSetLayout, objectSetLayout, singleTextureSetLayout};
-    VkPipelineLayoutCreateInfo texturedPipelineLayoutCrInfo{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .pNext = nullptr,
-
-        .flags = 0,
-        .setLayoutCount = 3,
-        .pSetLayouts = &texturedSetLayouts[0],
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &pushConstantRange,
-    };
-    assertVkResult(
-        vkCreatePipelineLayout(device, &texturedPipelineLayoutCrInfo, nullptr, &texturedPipelineLayout));
-
-    VertexInputDescription vertexDescription = Vertex::getVertexDescription();
-
-    VulkanPipelineBuilder meshPipelineBuilder{VulkanPipelineBuilder::CreateInfo{
-        .shaderStages =
-            {{.stage = VK_SHADER_STAGE_VERTEX_BIT, .module = meshTriVertShader},
-             {.stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fragShader}},
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .polygonMode = VK_POLYGON_MODE_FILL,
-        .depthTest = true,
-        .depthCompareOp = VK_COMPARE_OP_LESS,
-        .pipelineLayout = meshPipelineLayout,
-    }};
-    // TODO: add a nice wrapper for this to pipeline constructor!
-    meshPipelineBuilder.vertexInputStateCrInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
-    meshPipelineBuilder.vertexInputStateCrInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
-    meshPipelineBuilder.vertexInputStateCrInfo.vertexAttributeDescriptionCount =
-        vertexDescription.attributes.size();
-    meshPipelineBuilder.vertexInputStateCrInfo.pVertexAttributeDescriptions = vertexDescription.attributes.data();
-
-    VkPipeline meshPipeline = meshPipelineBuilder.createPipeline(device, {swapchainImageFormat}, depthFormat);
-
-    rsrcMngr.createMaterial(
-        {
-            .pipeline = meshPipeline,
-            .pipelineLayout = meshPipelineLayout,
-        },
-        "defaultMesh");
-
-    VulkanPipelineBuilder texturedPipelineBuilder{VulkanPipelineBuilder::CreateInfo{
-        .shaderStages =
-            {{.stage = VK_SHADER_STAGE_VERTEX_BIT, .module = meshTriVertShader},
-             {.stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = texturedFragShader}},
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .polygonMode = VK_POLYGON_MODE_FILL,
-        .depthTest = true,
-        .depthCompareOp = VK_COMPARE_OP_LESS,
-        .pipelineLayout = texturedPipelineLayout,
-    }};
-    // TODO: add a nice wrapper for this to pipeline constructor!
-    texturedPipelineBuilder.vertexInputStateCrInfo.vertexBindingDescriptionCount =
-        vertexDescription.bindings.size();
-    texturedPipelineBuilder.vertexInputStateCrInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
-    texturedPipelineBuilder.vertexInputStateCrInfo.vertexAttributeDescriptionCount =
-        vertexDescription.attributes.size();
-    texturedPipelineBuilder.vertexInputStateCrInfo.pVertexAttributeDescriptions =
-        vertexDescription.attributes.data();
-
-    VkPipeline texturedPipeline =
-        texturedPipelineBuilder.createPipeline(device, {swapchainImageFormat}, depthFormat);
-
-    rsrcMngr.createMaterial(
-        {
-            .pipeline = texturedPipeline,
-            .pipelineLayout = texturedPipelineLayout,
-        },
-        "texturedMesh");
-
-    // Destroy these here already. (dont like though since VulkanPipeline object still exists and references
-    // these!!, so could cause trouble in future when Pipeline needs to get recreated or something)
-    vkDestroyShaderModule(device, meshTriVertShader, nullptr);
-    vkDestroyShaderModule(device, fragShader, nullptr);
-    vkDestroyShaderModule(device, texturedFragShader, nullptr);
-
-    deleteQueue.pushBack(
-        [=]()
-        {
-            vkDestroyPipeline(device, meshPipeline, nullptr);
-            vkDestroyPipelineLayout(device, meshPipelineLayout, nullptr);
-            vkDestroyPipeline(device, texturedPipeline, nullptr);
-            // vkDestroyPipelineLayout(device, meshPipelineLayout, nullptr);
-        });
+    rsrcMngr.createMaterial({.pipeline = texturedPipeline}, "texturedMesh");
 
     // ALSO BIND TEXTURES TO LAYOUTS ALREADY
 
@@ -1000,10 +886,11 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
         RenderObject& object = first[i];
         Mesh* objectMesh = rsrcManager.get(object.mesh);
         Material* objectMaterial = rsrcManager.get(object.material);
+        GraphicsPipeline* objectPipeline = rsrcManager.get(objectMaterial->pipeline);
 
         if(objectMaterial != lastMaterial)
         {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, objectMaterial->pipeline);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, objectPipeline->pipeline);
             lastMaterial = objectMaterial;
 
             uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
@@ -1012,7 +899,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
             vkCmdBindDescriptorSets(
                 cmd,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
-                objectMaterial->pipelineLayout,
+                objectPipeline->layout,
                 0,
                 1,
                 &getCurrentFrameData().globalDescriptor,
@@ -1023,7 +910,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
             vkCmdBindDescriptorSets(
                 cmd,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
-                objectMaterial->pipelineLayout,
+                objectPipeline->layout,
                 1,
                 1,
                 &getCurrentFrameData().objectDescriptor,
@@ -1035,7 +922,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
                 vkCmdBindDescriptorSets(
                     cmd,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    objectMaterial->pipelineLayout,
+                    objectPipeline->layout,
                     2,
                     1,
                     &objectMaterial->textureSet,
@@ -1048,12 +935,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
         constants.transformMatrix = object.transformMatrix;
 
         vkCmdPushConstants(
-            cmd,
-            objectMaterial->pipelineLayout,
-            VK_SHADER_STAGE_VERTEX_BIT,
-            0,
-            sizeof(MeshPushConstants),
-            &constants);
+            cmd, objectPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
 
         if(objectMesh != lastMesh)
         {

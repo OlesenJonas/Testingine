@@ -13,6 +13,29 @@
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
+/*
+    todo:
+        Additionally, check if the set&binding indices match some predefined values?
+*/
+VkDescriptorType getVkDescriptorType(SpvReflectDescriptorBinding* binding)
+{
+    static_assert((VK_DESCRIPTOR_TYPE_STORAGE_BUFFER + 2) == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC);
+    static_assert((VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER + 2) == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+
+    int32_t type = binding->descriptor_type;
+    if(type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER || type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+    {
+        std::string_view name{binding->type_description->type_name};
+        if(name.length() > 8 && name.substr(name.length() - 8, 8) == "_DYNAMIC")
+        {
+            // this is why static asserts needed
+            type += 2;
+        }
+    }
+
+    return (VkDescriptorType)type;
+}
+
 Handle<GraphicsPipeline> ResourceManager::createGraphicsPipeline(GraphicsPipeline::CreateInfo crInfo)
 {
     // todo: handle errors
@@ -128,11 +151,12 @@ Handle<GraphicsPipeline> ResourceManager::createGraphicsPipeline(GraphicsPipelin
             auto bindingEntry = setBindings.find(binding->binding);
             if(bindingEntry == setBindings.end())
             {
+                VkDescriptorType bindingType = getVkDescriptorType(binding);
                 setBindings.emplace(
                     binding->binding,
                     VkDescriptorSetLayoutBinding{
                         .binding = binding->binding,
-                        .descriptorType = (VkDescriptorType)binding->descriptor_type,
+                        .descriptorType = bindingType,
                         .descriptorCount = 1, // todo:
                         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
                         .pImmutableSamplers = nullptr,
@@ -165,13 +189,14 @@ Handle<GraphicsPipeline> ResourceManager::createGraphicsPipeline(GraphicsPipelin
         for(auto* binding : bindings)
         {
             auto bindingEntry = setBindings.find(binding->binding);
+            VkDescriptorType bindingType = getVkDescriptorType(binding);
             if(bindingEntry == setBindings.end())
             {
                 setBindings.emplace(
                     binding->binding,
                     VkDescriptorSetLayoutBinding{
                         .binding = binding->binding,
-                        .descriptorType = (VkDescriptorType)binding->descriptor_type,
+                        .descriptorType = bindingType,
                         .descriptorCount = 1, // todo:
                         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                         .pImmutableSamplers = nullptr,
@@ -181,7 +206,7 @@ Handle<GraphicsPipeline> ResourceManager::createGraphicsPipeline(GraphicsPipelin
             {
                 VkDescriptorSetLayoutBinding& setLayoutBinding = bindingEntry->second;
                 assert(setLayoutBinding.binding == binding->binding);
-                assert(setLayoutBinding.descriptorType == (VkDescriptorType)binding->descriptor_type);
+                assert(setLayoutBinding.descriptorType == bindingType);
                 setLayoutBinding.stageFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
             }
         }
@@ -399,8 +424,22 @@ void ResourceManager::free(Handle<GraphicsPipeline> handle)
     // const VmaAllocator* allocator = &Engine::get()->getRenderer()->allocator;
     // const VkBuffer vkBuffer = buffer->buffer;
     // const VmaAllocation vmaAllocation = buffer->allocation;
-    // Engine::get()->getRenderer()->deleteQueue.pushBack([=]()
-    //                                                    { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation);
-    //                                                    });
-    // bufferPool.remove(handle);
+    VkDevice device = VulkanRenderer::get()->device;
+    VulkanRenderer::get()->deleteQueue.pushBack(
+        [=]()
+        {
+            vkDestroyShaderModule(device, pipeline->vertexShader, nullptr);
+            vkDestroyShaderModule(device, pipeline->fragmentShader, nullptr);
+            vkDestroyPipelineLayout(device, pipeline->layout, nullptr);
+            vkDestroyPipeline(device, pipeline->pipeline, nullptr);
+        });
+    for(int i = 0; i < 4; i++)
+    {
+        if(pipeline->setLayouts[i] != VK_NULL_HANDLE)
+        {
+            VulkanRenderer::get()->deleteQueue.pushBack(
+                [=]() { vkDestroyDescriptorSetLayout(device, pipeline->setLayouts[i], nullptr); });
+        }
+    }
+    graphicsPipelinePool.remove(handle);
 }

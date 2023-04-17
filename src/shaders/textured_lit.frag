@@ -6,7 +6,7 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(set = 0, binding = 1) uniform SceneData
+layout(set = 0, binding = 1) uniform SceneData_DYNAMIC
 {
     vec4 fogColor;
     vec4 fogDistance;
