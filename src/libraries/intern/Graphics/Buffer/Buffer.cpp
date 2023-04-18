@@ -1,8 +1,9 @@
 #include "Buffer.hpp"
 #include <intern/Engine/Engine.hpp>
+#include <intern/Graphics/Renderer/VulkanDebug.hpp>
 #include <intern/ResourceManager/ResourceManager.hpp>
 
-Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo)
+Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::string_view name)
 {
     Handle<Buffer> newBufferHandle = bufferPool.insert(Buffer{.info = crInfo.info});
 
@@ -89,6 +90,11 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo)
         // buffer immediately here
         //  todo: again, dont like the wait here. So once I fix that this call also has to be changed
         vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+    }
+
+    if(!name.empty())
+    {
+        setDebugName(buffer->buffer, name.data());
     }
 
     return newBufferHandle;

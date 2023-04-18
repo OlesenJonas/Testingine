@@ -117,18 +117,20 @@ Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name
         }
     }
 
-    Handle<Buffer> vertexBufferHandle = createBuffer({
-        .info =
-            {
-                .size = vertices.size() * sizeof(Vertex),
-                .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                .memoryAllocationInfo =
-                    {
-                        .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                    },
-            },
-        .initialData = vertices.data(),
-    });
+    Handle<Buffer> vertexBufferHandle = createBuffer(
+        {
+            .info =
+                {
+                    .size = vertices.size() * sizeof(Vertex),
+                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    .memoryAllocationInfo =
+                        {
+                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        },
+                },
+            .initialData = vertices.data(),
+        },
+        std::string{meshName} + "_vertexBuffer");
 
     // todo: handle naming collisions
     auto iterator = nameToMeshLUT.find(meshName);
@@ -148,18 +150,20 @@ Handle<Mesh> ResourceManager::createMesh(Span<Vertex> vertices, std::string_view
     auto iterator = nameToMeshLUT.find(name);
     assert(iterator == nameToMeshLUT.end());
 
-    Handle<Buffer> vertexBufferHandle = createBuffer({
-        .info =
-            {
-                .size = vertices.size() * sizeof(Vertex),
-                .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                .memoryAllocationInfo =
-                    {
-                        .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                    },
-            },
-        .initialData = vertices.data(),
-    });
+    Handle<Buffer> vertexBufferHandle = createBuffer(
+        {
+            .info =
+                {
+                    .size = vertices.size() * sizeof(Vertex),
+                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    .memoryAllocationInfo =
+                        {
+                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        },
+                },
+            .initialData = vertices.data(),
+        },
+        std::string{name} + "_vertexBuffer");
 
     Handle<Mesh> newMeshHandle = meshPool.insert(
         Mesh{.name{name}, .vertexCount = uint32_t(vertices.size()), .vertexBuffer = vertexBufferHandle});

@@ -19,7 +19,7 @@
 class ResourceManager
 {
   public:
-    Handle<Buffer> createBuffer(Buffer::CreateInfo info);
+    Handle<Buffer> createBuffer(Buffer::CreateInfo info, std::string_view name = "");
 
     Handle<Mesh> createMesh(const char* file, std::string_view name = "");
     Handle<Mesh> createMesh(Span<Vertex> vertices, std::string_view name);

@@ -381,21 +381,23 @@ void VulkanRenderer::initGlobalDescriptorSets()
     const size_t sceneParamBufferSize = FRAMES_IN_FLIGHT * padUniformBufferSize(sizeof(GPUSceneData));
     // pretty sure this is overkill (combining Vma and Vk flags, but better safe than sorry )
     auto& rsrcManager = *Engine::get()->getResourceManager();
-    sceneParameterBuffer = rsrcManager.createBuffer(Buffer::CreateInfo{
-        .info =
-            {
-                .size = sceneParamBufferSize,
-                .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                .memoryAllocationInfo =
-                    {
-                        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                                 VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                        .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-                                                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                    },
-            },
-    });
+    sceneParameterBuffer = rsrcManager.createBuffer(
+        Buffer::CreateInfo{
+            .info =
+                {
+                    .size = sceneParamBufferSize,
+                    .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    .memoryAllocationInfo =
+                        {
+                            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                                     VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+                                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                        },
+                },
+        },
+        "sceneParameterBuffer");
 
     for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
     {

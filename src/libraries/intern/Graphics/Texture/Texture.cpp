@@ -1,5 +1,6 @@
 #include "Texture.hpp"
 #include <intern/Engine/Engine.hpp>
+#include <intern/Graphics/Renderer/VulkanDebug.hpp>
 #include <intern/ResourceManager/ResourceManager.hpp>
 #include <iostream>
 #include <stb/stb_image.h>
@@ -195,6 +196,9 @@ Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFla
 
     vkCreateImageView(Engine::get()->getRenderer()->device, &imageInfo, nullptr, &tex->imageView);
 
+    setDebugName(tex->image, (std::string{texName} + "_image").c_str());
+    setDebugName(tex->imageView, (std::string{texName} + "_mainView").c_str());
+
     std::cout << "Texture loaded successfully " << file << std::endl;
 
     return newTextureHandle;
@@ -258,6 +262,9 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info info, std::string_v
     };
 
     vkCreateImageView(Engine::get()->getRenderer()->device, &imageViewCrInfo, nullptr, &tex->imageView);
+
+    setDebugName(tex->image, (std::string{name} + "_image").c_str());
+    setDebugName(tex->imageView, (std::string{name} + "_mainView").c_str());
 
     return newTextureHandle;
 }

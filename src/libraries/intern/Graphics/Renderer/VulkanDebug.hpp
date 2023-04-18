@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string_view>
 #include <vulkan/vulkan.h>
 
 #ifdef NDEBUG
@@ -25,3 +26,7 @@ VkResult CreateDebugUtilsMessengerEXT(
 
 void DestroyDebugUtilsMessengerEXT(
     VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
+
+void setDebugName(VkBuffer buffer, const char* name);
+void setDebugName(VkImage image, const char* name);
+void setDebugName(VkImageView imageView, const char* name);

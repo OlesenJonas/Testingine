@@ -1,7 +1,7 @@
 #include "VulkanDebug.hpp"
 
+#include <intern/Graphics/Renderer/VulkanRenderer.hpp>
 #include <intern/Misc/Macros.hpp>
-
 #include <iostream>
 
 VkDebugUtilsMessengerCreateInfoEXT createDefaultDebugUtilsMessengerCreateInfo()
@@ -67,4 +67,39 @@ void DestroyDebugUtilsMessengerEXT(
     {
         func(instance, debugMessenger, pAllocator);
     }
+}
+
+PFN_vkSetDebugUtilsObjectNameEXT setObjectDebugName = nullptr;
+
+void setDebugName(VkObjectType type, uint64_t handle, const char* name)
+{
+    if(setObjectDebugName == nullptr)
+    {
+        setObjectDebugName = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(
+            VulkanRenderer::get()->instance, "vkSetDebugUtilsObjectNameEXT");
+        assert(setObjectDebugName);
+    }
+    VkDebugUtilsObjectNameInfoEXT nameInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .pNext = nullptr,
+        .objectType = type,
+        .objectHandle = handle,
+        .pObjectName = name,
+    };
+    setObjectDebugName(VulkanRenderer::get()->device, &nameInfo);
+}
+
+void setDebugName(VkBuffer buffer, const char* name)
+{
+    setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)buffer, name);
+}
+
+void setDebugName(VkImage image, const char* name)
+{
+    setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)image, name);
+}
+
+void setDebugName(VkImageView imageView, const char* name)
+{
+    setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)imageView, name);
 }
