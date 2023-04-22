@@ -74,13 +74,38 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
 
     VkPhysicalDeviceFeatures deviceFeatures{};
 
-    // TODO: if the amount of requested core features grows switch to
+    // TODO: if the amount of requested core features grows, switch to
     //   https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkPhysicalDeviceVulkan13Features.html
-    //   and similar Vulkan11-/Vulkan12Features
+    //   and similar Vulkan11-/Vulkan12Features instead of using all these individual structs
+
+    VkPhysicalDeviceDescriptorIndexingFeatures descIndexingFeatures = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+        .pNext = nullptr,
+        .shaderInputAttachmentArrayDynamicIndexing = VK_FALSE,
+        .shaderUniformTexelBufferArrayDynamicIndexing = VK_TRUE,
+        .shaderStorageTexelBufferArrayDynamicIndexing = VK_TRUE,
+        .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
+        .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+        .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
+        .shaderStorageImageArrayNonUniformIndexing = VK_TRUE,
+        .shaderInputAttachmentArrayNonUniformIndexing = VK_FALSE,
+        .shaderUniformTexelBufferArrayNonUniformIndexing = VK_TRUE,
+        .shaderStorageTexelBufferArrayNonUniformIndexing = VK_TRUE,
+        .descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE,
+        .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+        .descriptorBindingStorageImageUpdateAfterBind = VK_TRUE,
+        .descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
+        .descriptorBindingUniformTexelBufferUpdateAfterBind = VK_TRUE,
+        .descriptorBindingStorageTexelBufferUpdateAfterBind = VK_TRUE,
+        .descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
+        .descriptorBindingPartiallyBound = VK_TRUE,
+        .descriptorBindingVariableDescriptorCount = VK_TRUE,
+        .runtimeDescriptorArray = VK_TRUE,
+    };
 
     VkPhysicalDeviceSynchronization2Features synch2Features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-        .pNext = nullptr,
+        .pNext = &descIndexingFeatures,
         .synchronization2 = VK_TRUE,
     };
 

@@ -6,7 +6,6 @@
 #include <intern/Graphics/Buffer/Buffer.hpp>
 #include <intern/Graphics/Material/Material.hpp>
 #include <intern/Graphics/Mesh/Mesh.hpp>
-#include <intern/Graphics/Pipeline/GraphicsPipeline.hpp>
 #include <intern/Graphics/Texture/Texture.hpp>
 #include <intern/Graphics/Texture/TextureView.hpp>
 #include <intern/Misc/StringHash.hpp>
@@ -14,11 +13,20 @@
 
 /*
     ResourceManager needs to ensure that the GPU representations of all the objects are properly created &
-   destroyed The objects themselves only hold CPU information and meta data
+    destroyed
+    The objects themselves should only hold CPU information and POD meta data
+        //todo: that is probably violated in some structs, need to clean this and decide better what to put where!
 */
 class ResourceManager
 {
   public:
+    void init();
+
+    [[nodiscard]] static inline ResourceManager* get()
+    {
+        return ptr;
+    }
+
     Handle<Buffer> createBuffer(Buffer::CreateInfo info, std::string_view name = "");
 
     Handle<Mesh> createMesh(const char* file, std::string_view name = "");
@@ -28,40 +36,27 @@ class ResourceManager
     Handle<Texture> createTexture(Texture::Info info, std::string_view name);
     // Handle<Texture> createTextureView(Handle<Texture> texture, TextureView::Info info, std::string_view name);
 
-    Handle<GraphicsPipeline> createGraphicsPipeline(GraphicsPipeline::CreateInfo crInfo);
-
-    // todo: only takes material by value atm because theres nothing really stored atm
-    Handle<Material> createMaterial(Material mat, std::string_view name);
+    Handle<Material> createMaterial(Material::CreateInfo crInfo, std::string_view name = "");
 
     // todo: rename all these to just free(Handle<...>)?
     void deleteBuffer(Handle<Buffer> handle);
     void deleteMesh(Handle<Mesh> handle);
     void deleteTexture(Handle<Texture> handle);
     // like here
-    void free(Handle<GraphicsPipeline> handle);
+    void free(Handle<Material> handle);
 
-    // todo: macros for following
+    // Accessing -----------------
 
-    inline Buffer* get(Handle<Buffer> handle)
-    {
-        return bufferPool.get(handle);
+#define HANDLE_TO_PTR_GETTER(T, pool)                                                                             \
+    inline T* get(Handle<T> handle)                                                                               \
+    {                                                                                                             \
+        return pool.get(handle);                                                                                  \
     }
-    inline Mesh* get(Handle<Mesh> handle)
-    {
-        return meshPool.get(handle);
-    }
-    inline Texture* get(Handle<Texture> handle)
-    {
-        return texturePool.get(handle);
-    }
-    inline Material* get(Handle<Material> handle)
-    {
-        return materialPool.get(handle);
-    }
-    inline GraphicsPipeline* get(Handle<GraphicsPipeline> handle)
-    {
-        return graphicsPipelinePool.get(handle);
-    }
+
+    HANDLE_TO_PTR_GETTER(Buffer, bufferPool);
+    HANDLE_TO_PTR_GETTER(Mesh, meshPool);
+    HANDLE_TO_PTR_GETTER(Texture, texturePool);
+    HANDLE_TO_PTR_GETTER(Material, materialPool);
 
     inline Handle<Mesh> getMesh(std::string_view name)
     {
@@ -82,6 +77,8 @@ class ResourceManager
     void cleanup();
 
   private:
+    inline static ResourceManager* ptr = nullptr;
+
     // just using standard unordered_map here, because I dont want to think about yet another datastructure atm
     std::unordered_map<std::string, Handle<Mesh>, StringHash, std::equal_to<>> nameToMeshLUT;
     std::unordered_map<std::string, Handle<Texture>, StringHash, std::equal_to<>> nameToTextureLUT;
@@ -91,5 +88,4 @@ class ResourceManager
     Pool<Mesh> meshPool{10};
     Pool<Texture> texturePool{10};
     Pool<Material> materialPool{10};
-    Pool<GraphicsPipeline> graphicsPipelinePool{10};
 };

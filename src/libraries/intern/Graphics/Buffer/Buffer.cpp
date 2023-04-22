@@ -1,7 +1,8 @@
 #include "Buffer.hpp"
-#include <intern/Engine/Engine.hpp>
 #include <intern/Graphics/Renderer/VulkanDebug.hpp>
+#include <intern/Graphics/Renderer/VulkanRenderer.hpp>
 #include <intern/ResourceManager/ResourceManager.hpp>
+#include <vulkan/vulkan_core.h>
 
 Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::string_view name)
 {
@@ -10,6 +11,8 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
     // if we can guarantee that no two threads access the pools at the same time we can
     // assume that the underlying pointer wont change until this function returns
     Buffer* buffer = bufferPool.get(newBufferHandle);
+
+    VulkanRenderer& renderer = *VulkanRenderer::get();
 
     // TODO: dont error, just warn and automatically set transfer_dst_bit
     assert(
@@ -31,7 +34,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
         .requiredFlags = crInfo.info.memoryAllocationInfo.requiredMemoryPropertyFlags,
     };
 
-    VmaAllocator& allocator = Engine::get()->getRenderer()->allocator;
+    VmaAllocator& allocator = renderer.allocator;
     VkResult res = vmaCreateBuffer(
         allocator, &bufferCrInfo, &vmaAllocCrInfo, &buffer->buffer, &buffer->allocation, &buffer->allocInfo);
 
@@ -62,7 +65,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
         };
         AllocatedBuffer stagingBuffer;
         VkResult res = vmaCreateBuffer(
-            Engine::get()->getRenderer()->allocator,
+            renderer.allocator,
             &stagingBufferInfo,
             &vmaallocCrInfo,
             &stagingBuffer.buffer,
@@ -75,7 +78,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
         memcpy(data, crInfo.initialData, crInfo.info.size);
         vmaUnmapMemory(allocator, stagingBuffer.allocation);
 
-        Engine::get()->getRenderer()->immediateSubmit(
+        renderer.immediateSubmit(
             [=](VkCommandBuffer cmd)
             {
                 VkBufferCopy copy{
@@ -97,6 +100,15 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
         setDebugName(buffer->buffer, name.data());
     }
 
+    if(crInfo.info.usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
+    {
+        buffer->uniformResourceIndex = renderer.createUniformBufferBinding(buffer->buffer);
+    }
+    if(crInfo.info.usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+    {
+        buffer->storageResourceIndex = renderer.createStorageBufferBinding(buffer->buffer);
+    }
+
     return newBufferHandle;
 }
 
@@ -115,10 +127,10 @@ void ResourceManager::deleteBuffer(Handle<Buffer> handle)
     {
         return;
     }
-    const VmaAllocator* allocator = &Engine::get()->getRenderer()->allocator;
+    VulkanRenderer& renderer = *VulkanRenderer::get();
+    const VmaAllocator* allocator = &renderer.allocator;
     const VkBuffer vkBuffer = buffer->buffer;
     const VmaAllocation vmaAllocation = buffer->allocation;
-    Engine::get()->getRenderer()->deleteQueue.pushBack([=]()
-                                                       { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
+    renderer.deleteQueue.pushBack([=]() { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
     bufferPool.remove(handle);
 }

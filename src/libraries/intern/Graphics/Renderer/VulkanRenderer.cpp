@@ -4,7 +4,6 @@
 #include "../RenderObject/RenderObject.hpp"
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
-#include "Graphics/Pipeline/GraphicsPipeline.hpp"
 #include "Graphics/Renderer/VulkanDebug.hpp"
 #include "Graphics/Renderer/VulkanRenderer.hpp"
 #include "Init/VulkanDeviceFinder.hpp"
@@ -13,6 +12,7 @@
 #include "ResourceManager/ResourceManager.hpp"
 #include "VulkanDebug.hpp"
 
+#include <cstddef>
 #include <intern/Datastructures/Span.hpp>
 #include <intern/Engine/Engine.hpp>
 
@@ -29,6 +29,7 @@
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 #include <glm/trigonometric.hpp>
+#include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
 void VulkanRenderer::init()
@@ -39,11 +40,10 @@ void VulkanRenderer::init()
     initSwapchain();
     initCommands();
     initSyncStructures();
-    initDescriptors();
-    initImGui();
+    setupBindless();
 
-    initGlobalDescriptorSets();
-    initPipelines();
+    initImGui();
+    initGlobalBuffers();
 
     // everything went fine
     isInitialized = true;
@@ -142,20 +142,20 @@ void VulkanRenderer::initCommands()
 
     for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
     {
-        assertVkResult(vkCreateCommandPool(device, &commandPoolCrInfo, nullptr, &frames[i].commandPool));
+        assertVkResult(vkCreateCommandPool(device, &commandPoolCrInfo, nullptr, &perFrameData[i].commandPool));
 
         VkCommandBufferAllocateInfo cmdBuffAllocInfo{
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .pNext = nullptr,
 
-            .commandPool = frames[i].commandPool,
+            .commandPool = perFrameData[i].commandPool,
             .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             .commandBufferCount = 1,
         };
 
-        assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &frames[i].mainCommandBuffer));
+        assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &perFrameData[i].mainCommandBuffer));
 
-        deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, frames[i].commandPool, nullptr); });
+        deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, perFrameData[i].commandPool, nullptr); });
     }
 
     VkCommandPoolCreateInfo uploadCommandPoolCrInfo{
@@ -196,20 +196,20 @@ void VulkanRenderer::initSyncStructures()
 
     for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
     {
-        assertVkResult(vkCreateFence(device, &fenceCreateInfo, nullptr, &frames[i].renderFence));
+        assertVkResult(vkCreateFence(device, &fenceCreateInfo, nullptr, &perFrameData[i].renderFence));
 
-        deleteQueue.pushBack([=]() { vkDestroyFence(device, frames[i].renderFence, nullptr); });
+        deleteQueue.pushBack([=]() { vkDestroyFence(device, perFrameData[i].renderFence, nullptr); });
 
         assertVkResult(
-            vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &frames[i].imageAvailableSemaphore));
+            vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &perFrameData[i].imageAvailableSemaphore));
         assertVkResult(
-            vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &frames[i].renderFinishedSemaphore));
+            vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &perFrameData[i].renderFinishedSemaphore));
 
         deleteQueue.pushBack(
             [=]()
             {
-                vkDestroySemaphore(device, frames[i].imageAvailableSemaphore, nullptr);
-                vkDestroySemaphore(device, frames[i].renderFinishedSemaphore, nullptr);
+                vkDestroySemaphore(device, perFrameData[i].imageAvailableSemaphore, nullptr);
+                vkDestroySemaphore(device, perFrameData[i].renderFinishedSemaphore, nullptr);
             });
     }
 
@@ -221,32 +221,155 @@ void VulkanRenderer::initSyncStructures()
     deleteQueue.pushBack([=]() { vkDestroyFence(device, uploadContext.uploadFence, nullptr); });
 }
 
-void VulkanRenderer::initDescriptors()
+void VulkanRenderer::setupBindless()
 {
-    std::vector<VkDescriptorPoolSize> sizes = {
-        {.type = VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = 128},
-        {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 128},
-        {.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .descriptorCount = 128},
-        {.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = 128},
-        {.type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, .descriptorCount = 128},
-        {.type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, .descriptorCount = 128},
-        {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 128},
-        {.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 128},
-        {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .descriptorCount = 128},
-        {.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, .descriptorCount = 128},
+    // Setting up bindless -----------------------------
+
+    VkSamplerCreateInfo samplerInfo{
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+
+        .magFilter = VK_FILTER_NEAREST,
+        .minFilter = VK_FILTER_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
     };
+    VkSampler blockySampler;
+    vkCreateSampler(device, &samplerInfo, nullptr, &blockySampler);
+    immutableSamplers.push_back(blockySampler);
+
+    assert(immutableSamplers.size() == immutableSamplerCount);
+    // I already create one somewhere! take that one as example
+
+    std::vector<VkDescriptorPoolSize> descriptorSizes = {
+        {
+            .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .descriptorCount =
+                descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE).limit + immutableSamplerCount,
+        },
+        {
+            .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .descriptorCount = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).limit,
+        },
+        {
+            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).limit,
+        },
+        {
+            .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .descriptorCount = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).limit,
+        },
+    };
+
     VkDescriptorPoolCreateInfo poolCrInfo{
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .pNext = nullptr,
 
-        .flags = 0,
-        .maxSets = 128,
-        .poolSizeCount = (uint32_t)sizes.size(),
-        .pPoolSizes = sizes.data(),
+        .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+        .maxSets = (uint32_t)descriptorSizes.size(),
+        .poolSizeCount = (uint32_t)descriptorSizes.size(),
+        .pPoolSizes = descriptorSizes.data(),
     };
-    assertVkResult(vkCreateDescriptorPool(device, &poolCrInfo, nullptr, &descriptorPool));
+    assertVkResult(vkCreateDescriptorPool(device, &poolCrInfo, nullptr, &bindlessDescriptorPool));
 
-    deleteQueue.pushBack([=]() { vkDestroyDescriptorPool(device, descriptorPool, nullptr); });
+    for(const auto& entry : descriptorTypeTable)
+    {
+        // constexpr VkDescriptorBindingFlags defaultDescBindingFlag =
+        //     VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+        //     VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+        constexpr VkDescriptorBindingFlags defaultDescBindingFlag =
+            VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+
+        std::vector<VkDescriptorBindingFlags> descBindingFlags = {defaultDescBindingFlag};
+
+        std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{
+            VkDescriptorSetLayoutBinding{
+                .binding = 0,
+                .descriptorType = entry.first,
+                .descriptorCount = entry.second.limit,
+                .stageFlags = VK_SHADER_STAGE_ALL,
+                .pImmutableSamplers = nullptr,
+            },
+        };
+
+        if(entry.first == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)
+        {
+            descBindingFlags.push_back(0);
+
+            setLayoutBindings[0].binding = immutableSamplerCount;
+
+            setLayoutBindings.push_back(VkDescriptorSetLayoutBinding{
+                .binding = 0,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .descriptorCount = immutableSamplerCount,
+                .stageFlags = VK_SHADER_STAGE_ALL,
+                .pImmutableSamplers = immutableSamplers.data(),
+            });
+        }
+
+        VkDescriptorSetLayoutBindingFlagsCreateInfo layoutBindingFlagsCrInfo{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+            .pNext = nullptr,
+            .bindingCount = (uint32_t)descBindingFlags.size(),
+            .pBindingFlags = descBindingFlags.data(),
+        };
+
+        VkDescriptorSetLayoutCreateInfo descSetLayoutCrInfo{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .pNext = &layoutBindingFlagsCrInfo,
+            .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+            .bindingCount = (uint32_t)setLayoutBindings.size(),
+            .pBindings = setLayoutBindings.data(),
+        };
+        VkDescriptorSetLayout layout;
+        vkCreateDescriptorSetLayout(device, &descSetLayoutCrInfo, nullptr, &layout);
+        setDebugName(layout, (std::string{entry.second.debugName} + "_setLayout").c_str());
+        bindlessSetLayouts[entry.second.setIndex] = layout;
+
+        // todo: could allocate all at once
+        VkDescriptorSet set;
+        VkDescriptorSetAllocateInfo setAllocInfo{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .pNext = nullptr,
+            .descriptorPool = bindlessDescriptorPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &layout,
+        };
+        vkAllocateDescriptorSets(device, &setAllocInfo, &set);
+        setDebugName(set, (std::string{entry.second.debugName} + "_Set").c_str());
+        bindlessDescriptorSets[entry.second.setIndex] = set;
+    }
+
+    // todo:
+    //   for now just push 3 resource indices to test everything
+    VkPushConstantRange basicPushConstantRange{
+        .stageFlags = VK_SHADER_STAGE_ALL,
+        .offset = 0,
+        .size = sizeof(BindlessIndices),
+    };
+
+    VkPipelineLayoutCreateInfo pipelineLayoutCrInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .setLayoutCount = (uint32_t)bindlessSetLayouts.size(),
+        .pSetLayouts = bindlessSetLayouts.data(),
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &basicPushConstantRange,
+    };
+    vkCreatePipelineLayout(device, &pipelineLayoutCrInfo, nullptr, &bindlessPipelineLayout);
+
+    deleteQueue.pushBack(
+        [=]()
+        {
+            vkDestroyDescriptorPool(device, bindlessDescriptorPool, nullptr);
+            vkDestroyPipelineLayout(device, bindlessPipelineLayout, nullptr);
+        });
+    for(auto setLayout : bindlessSetLayouts)
+    {
+        deleteQueue.pushBack([=]() { vkDestroyDescriptorSetLayout(device, setLayout, nullptr); });
+    }
 }
 
 void VulkanRenderer::initImGui()
@@ -312,96 +435,14 @@ void VulkanRenderer::initImGui()
         });
 }
 
-void VulkanRenderer::initGlobalDescriptorSets()
+void VulkanRenderer::initGlobalBuffers()
 {
-    // TODO: this no longer works since not all buffers may be used in all shader stages
-    //       so have to figure out how to bind just the correct ones etc.
-    //       But should be doable with the existing look up map
-    VkDescriptorSetLayoutBinding camBufferBinding{
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-        .pImmutableSamplers = nullptr,
-    };
-    VkDescriptorSetLayoutBinding sceneParamsBufferBinding{
-        .binding = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-        .descriptorCount = 1,
-        // .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-        .pImmutableSamplers = nullptr,
-    };
-    VkDescriptorSetLayoutBinding textureBinding{
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-        .pImmutableSamplers = nullptr,
-    };
-    VkDescriptorSetLayoutBinding bindings[] = {camBufferBinding, sceneParamsBufferBinding};
-    VkDescriptorSetLayoutCreateInfo descrSetCrInfo{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .pNext = nullptr,
-
-        .flags = 0,
-        .bindingCount = 2,
-        .pBindings = bindings,
-    };
-    vkCreateDescriptorSetLayout(device, &descrSetCrInfo, nullptr, &globalSetLayout);
-
-    // object buffer
-    VkDescriptorSetLayoutBinding objectBufferBinding{
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-        .pImmutableSamplers = nullptr,
-    };
-    VkDescriptorSetLayoutCreateInfo objectDescrSetCrInfo{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .pNext = nullptr,
-
-        .flags = 0,
-        .bindingCount = 1,
-        .pBindings = &objectBufferBinding,
-    };
-    vkCreateDescriptorSetLayout(device, &objectDescrSetCrInfo, nullptr, &objectSetLayout);
-
-    VkDescriptorSetLayoutCreateInfo textureDescrSetLayoutCrInfo{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .pNext = nullptr,
-
-        .flags = 0,
-        .bindingCount = 1,
-        .pBindings = &textureBinding,
-    };
-    vkCreateDescriptorSetLayout(device, &textureDescrSetLayoutCrInfo, nullptr, &singleTextureSetLayout);
-
-    const size_t sceneParamBufferSize = FRAMES_IN_FLIGHT * padUniformBufferSize(sizeof(GPUSceneData));
-    // pretty sure this is overkill (combining Vma and Vk flags, but better safe than sorry )
-    auto& rsrcManager = *Engine::get()->getResourceManager();
-    sceneParameterBuffer = rsrcManager.createBuffer(
-        Buffer::CreateInfo{
-            .info =
-                {
-                    .size = sceneParamBufferSize,
-                    .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                    .memoryAllocationInfo =
-                        {
-                            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                                     VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-                                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                        },
-                },
-        },
-        "sceneParameterBuffer");
+    ResourceManager* rm = ResourceManager::get();
+    assert(rm);
 
     for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
     {
-        frames[i].cameraBuffer = rsrcManager.createBuffer(Buffer::CreateInfo{
+        perFrameData[i].cameraBuffer = rm->createBuffer(Buffer::CreateInfo{
             .info =
                 {
                     .size = sizeof(GPUCameraData),
@@ -418,7 +459,7 @@ void VulkanRenderer::initGlobalDescriptorSets()
         });
 
         const int MAX_OBJECTS = 10000;
-        frames[i].objectBuffer = rsrcManager.createBuffer(Buffer::CreateInfo{
+        perFrameData[i].objectBuffer = rm->createBuffer(Buffer::CreateInfo{
             .info =
                 {
                     .size = sizeof(GPUObjectData) * MAX_OBJECTS,
@@ -433,164 +474,7 @@ void VulkanRenderer::initGlobalDescriptorSets()
                         },
                 },
         });
-
-        VkDescriptorSetAllocateInfo allocInfo = {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .pNext = nullptr,
-
-            .descriptorPool = descriptorPool,
-            .descriptorSetCount = 1,
-            .pSetLayouts = &globalSetLayout,
-        };
-        vkAllocateDescriptorSets(device, &allocInfo, &frames[i].globalDescriptor);
-
-        VkDescriptorBufferInfo camBufferInfo{
-            .buffer = rsrcManager.get(frames[i].cameraBuffer)->buffer,
-            .offset = 0,
-            .range = sizeof(GPUCameraData),
-        };
-
-        VkDescriptorBufferInfo sceneBufferInfo{
-            .buffer = rsrcManager.get(sceneParameterBuffer)->buffer,
-            .offset = 0,
-            .range = sizeof(GPUSceneData),
-        };
-
-        VkWriteDescriptorSet camWrite = {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-
-            .dstSet = frames[i].globalDescriptor,
-            .dstBinding = 0,
-
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .pBufferInfo = &camBufferInfo,
-        };
-
-        VkWriteDescriptorSet sceneWrite = {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-
-            .dstSet = frames[i].globalDescriptor,
-            .dstBinding = 1,
-
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-            .pBufferInfo = &sceneBufferInfo,
-        };
-
-        // Object buffer
-        VkDescriptorSetAllocateInfo objectSetAllocInfo = {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .pNext = nullptr,
-
-            .descriptorPool = descriptorPool,
-            .descriptorSetCount = 1,
-            .pSetLayouts = &objectSetLayout,
-        };
-        vkAllocateDescriptorSets(device, &objectSetAllocInfo, &frames[i].objectDescriptor);
-
-        VkDescriptorBufferInfo objectBufferInfo{
-            .buffer = rsrcManager.get(frames[i].objectBuffer)->buffer,
-            .offset = 0,
-            .range = sizeof(GPUObjectData) * MAX_OBJECTS,
-        };
-        VkWriteDescriptorSet objectWrite = {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-
-            .dstSet = frames[i].objectDescriptor,
-            .dstBinding = 0,
-
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .pBufferInfo = &objectBufferInfo,
-        };
-
-        // write into descriptor sets
-
-        VkWriteDescriptorSet setWrites[] = {camWrite, sceneWrite, objectWrite};
-
-        vkUpdateDescriptorSets(device, 3, setWrites, 0, nullptr);
     }
-
-    deleteQueue.pushBack(
-        [=]()
-        {
-            vkDestroyDescriptorSetLayout(device, globalSetLayout, nullptr);
-            vkDestroyDescriptorSetLayout(device, objectSetLayout, nullptr);
-        });
-}
-
-void VulkanRenderer::initPipelines()
-{
-    auto& rsrcMngr = *Engine::get()->getResourceManager();
-
-    auto defaultPipeline = rsrcMngr.createGraphicsPipeline({
-        .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/default_lit.frag"},
-    });
-
-    auto texturedPipeline = rsrcMngr.createGraphicsPipeline({
-        .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/textured_lit.frag"},
-    });
-
-    rsrcMngr.createMaterial({.pipeline = defaultPipeline}, "defaultMesh");
-
-    rsrcMngr.createMaterial({.pipeline = texturedPipeline}, "texturedMesh");
-
-    // ALSO BIND TEXTURES TO LAYOUTS ALREADY
-
-    auto lostEmpire = Engine::get()->getResourceManager()->createTexture(
-        ASSETS_PATH "/vkguide/lost_empire-RGBA.png", VK_IMAGE_USAGE_SAMPLED_BIT, "empire_diffuse");
-
-    // Descriptors using the loaded textures
-
-    ResourceManager& rsrcManager = *Engine::get()->getResourceManager();
-
-    VkSamplerCreateInfo samplerInfo{
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-
-        .magFilter = VK_FILTER_NEAREST,
-        .minFilter = VK_FILTER_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    };
-    VkSampler blockySampler;
-    vkCreateSampler(device, &samplerInfo, nullptr, &blockySampler);
-
-    Material* texturedMat = rsrcManager.get(rsrcManager.getMaterial("texturedMesh"));
-
-    VkDescriptorSetAllocateInfo descSetAllocInfo{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .descriptorPool = descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &singleTextureSetLayout,
-    };
-    vkAllocateDescriptorSets(device, &descSetAllocInfo, &texturedMat->textureSet);
-
-    Handle<Texture> empireDiffuse = rsrcManager.getTexture("empire_diffuse");
-    VkDescriptorImageInfo imageBufferInfo{
-        .sampler = blockySampler,
-        .imageView = rsrcManager.get(empireDiffuse)->imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    VkWriteDescriptorSet texture1Write{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .pNext = nullptr,
-
-        .dstSet = texturedMat->textureSet,
-        .dstBinding = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &imageBufferInfo,
-    };
-    vkUpdateDescriptorSets(device, 1, &texture1Write, 0, nullptr);
 }
 
 void VulkanRenderer::cleanup()
@@ -640,6 +524,17 @@ void VulkanRenderer::draw()
     };
 
     assertVkResult(vkBeginCommandBuffer(curFrameData.mainCommandBuffer, &cmdBeginInfo));
+
+    // Bind the bindless descriptor sets once per cmdbuffer
+    vkCmdBindDescriptorSets(
+        curFrameData.mainCommandBuffer,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        bindlessPipelineLayout,
+        0,
+        4,
+        bindlessDescriptorSets.data(),
+        0,
+        nullptr);
 
     auto& rsrcManager = *Engine::get()->getResourceManager();
     Texture* depthTexture = rsrcManager.get(this->depthTexture);
@@ -849,17 +744,7 @@ void VulkanRenderer::draw()
 // TODO: refactor to take span?
 void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int count)
 {
-    auto& rsrcManager = *Engine::get()->getResourceManager();
-
-    float framed = (frameNumber / 120.0f);
-    sceneParameters.ambientColor = {sin(framed), 0, cos(framed), 1};
-    char* sceneData = reinterpret_cast<char*>(
-        rsrcManager.get(sceneParameterBuffer)->allocInfo.pMappedData); // char so can increment in single bytes
-    // dont need to map, was requested to be persistently mapped
-    int frameIndex = frameNumber % FRAMES_IN_FLIGHT;
-    sceneData += padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
-    memcpy(sceneData, &sceneParameters, sizeof(GPUSceneData));
-    // dont need to unmap, was requested to be coherent
+    ResourceManager* rm = ResourceManager::get();
 
     Camera* mainCamera = Engine::get()->getCamera();
     // todo: resize GPUCameraData to use all matrices Camera stores and then simply memcpy from
@@ -869,10 +754,15 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     camData.view = mainCamera->getView();
     camData.projView = mainCamera->getProjView();
 
-    void* data = rsrcManager.get(getCurrentFrameData().cameraBuffer)->allocInfo.pMappedData;
+    Buffer* cameraBuffer = rm->get(getCurrentFrameData().cameraBuffer);
+
+    void* data = cameraBuffer->allocInfo.pMappedData;
     memcpy(data, &camData, sizeof(GPUCameraData));
 
-    void* objectData = rsrcManager.get(getCurrentFrameData().objectBuffer)->allocInfo.pMappedData;
+    Buffer* transformBuffer = rm->get(getCurrentFrameData().objectBuffer);
+
+    void* objectData = transformBuffer->allocInfo.pMappedData;
+    // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
     GPUObjectData* objectSSBO = (GPUObjectData*)objectData;
     for(int i = 0; i < count; i++)
     {
@@ -886,62 +776,26 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     for(int i = 0; i < count; i++)
     {
         RenderObject& object = first[i];
-        Mesh* objectMesh = rsrcManager.get(object.mesh);
-        Material* objectMaterial = rsrcManager.get(object.material);
-        GraphicsPipeline* objectPipeline = rsrcManager.get(objectMaterial->pipeline);
+        Mesh* objectMesh = rm->get(object.mesh);
+        Material* objectMaterial = rm->get(object.material);
 
         if(objectMaterial != lastMaterial)
         {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, objectPipeline->pipeline);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, objectMaterial->pipeline);
             lastMaterial = objectMaterial;
-
-            uint32_t uniformOffset = padUniformBufferSize(sizeof(GPUSceneData)) * frameIndex;
-            // Also bind necessary descriptor sets
-            // todo: global descriptor set shouldnt need to be bound for every material!
-            vkCmdBindDescriptorSets(
-                cmd,
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                objectPipeline->layout,
-                0,
-                1,
-                &getCurrentFrameData().globalDescriptor,
-                1,
-                &uniformOffset);
-
-            // object data descriptor
-            vkCmdBindDescriptorSets(
-                cmd,
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                objectPipeline->layout,
-                1,
-                1,
-                &getCurrentFrameData().objectDescriptor,
-                0,
-                nullptr);
-
-            if(objectMaterial->textureSet != VK_NULL_HANDLE)
-            {
-                vkCmdBindDescriptorSets(
-                    cmd,
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    objectPipeline->layout,
-                    2,
-                    1,
-                    &objectMaterial->textureSet,
-                    0,
-                    nullptr);
-            }
         }
 
-        MeshPushConstants constants;
-        constants.transformMatrix = object.transformMatrix;
+        BindlessIndices pushConstants;
+        pushConstants.cameraBuffer = cameraBuffer->uniformResourceIndex;
+        pushConstants.transformBuffer = transformBuffer->storageResourceIndex;
+        pushConstants.transformIndex = i;
 
         vkCmdPushConstants(
-            cmd, objectPipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &constants);
+            cmd, bindlessPipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(BindlessIndices), &pushConstants);
 
         if(objectMesh != lastMesh)
         {
-            Buffer* vertexBuffer = rsrcManager.get(objectMesh->vertexBuffer);
+            Buffer* vertexBuffer = rm->get(objectMesh->vertexBuffer);
             VkDeviceSize offset = 0;
             vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer->buffer, &offset);
             lastMesh = objectMesh;

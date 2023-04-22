@@ -12,6 +12,7 @@
 
 #include <intern/Datastructures/FunctionQueue.hpp>
 
+#include <array>
 #include <string>
 #include <unordered_map>
 
@@ -27,15 +28,6 @@ struct GPUCameraData
     glm::mat4 view;
     glm::mat4 proj;
     glm::mat4 projView;
-};
-
-struct GPUSceneData
-{
-    glm::vec4 fogColor;
-    glm::vec4 fogDistances;
-    glm::vec4 ambientColor;
-    glm::vec4 sunlightDirection;
-    glm::vec4 sunlightColor;
 };
 
 struct GPUObjectData
@@ -66,8 +58,6 @@ struct FrameData
     VkDescriptorSet objectDescriptor;
 };
 
-constexpr int FRAMES_IN_FLIGHT = 2;
-
 class VulkanRenderer
 {
   public:
@@ -84,6 +74,8 @@ class VulkanRenderer
 
     // draw function
     void draw();
+
+    static constexpr int FRAMES_IN_FLIGHT = 2;
 
     bool isInitialized{false};
 
@@ -120,20 +112,55 @@ class VulkanRenderer
     VkQueue graphicsQueue;
     uint32_t graphicsQueueFamily;
 
-    VkDescriptorPool descriptorPool;
-    VkDescriptorSetLayout globalSetLayout;
-    VkDescriptorSetLayout objectSetLayout;
-    VkDescriptorSetLayout singleTextureSetLayout;
+    // ----------------
 
-    FrameData frames[FRAMES_IN_FLIGHT];
+    struct BindlessIndices
+    {
+        uint32_t cameraBuffer;
+        uint32_t transformBuffer;
+        uint32_t transformIndex;
+    };
+
+    // TODO:
+    //   Factor out all the bindless stuff
+    //   Put inside the resourceManager? Dont like that. A new bindless Manager?
+    //  todo: dont like the name
+    struct BindlessDescriptorsInfo
+    {
+        uint32_t setIndex = 0xFFFFFFFF;
+        uint32_t limit = 0xFFFFFFFF;
+        std::string_view debugName;
+        uint32_t freeIndex = 0;
+    };
+    // todo: check against limit from physicalDeviceProperties.limits
+    std::unordered_map<VkDescriptorType, BindlessDescriptorsInfo> descriptorTypeTable = {
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, {0, 128, "SampledImages"}},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, {1, 128, "StorageImages"}},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, {2, 128, "UniformBuffers"}},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, {3, 128, "StorageBuffers"}},
+    };
+
+    // todo: dont like this being a vector, the size needs to be const!
+    const uint32_t immutableSamplerCount = 1;
+    std::vector<VkSampler> immutableSamplers;
+
+    VkDescriptorPool bindlessDescriptorPool;
+    std::array<VkDescriptorSetLayout, 4> bindlessSetLayouts;
+    std::array<VkDescriptorSet, 4> bindlessDescriptorSets;
+    VkPipelineLayout bindlessPipelineLayout;
+
+    uint32_t createUniformBufferBinding(VkBuffer buffer);
+    uint32_t createStorageBufferBinding(VkBuffer buffer);
+    uint32_t createSampledImageBinding(VkImageView view, VkImageLayout layout);
+
+    // ----------------
+
+    FrameData perFrameData[FRAMES_IN_FLIGHT];
     inline FrameData& getCurrentFrameData()
     {
-        return frames[frameNumber % FRAMES_IN_FLIGHT];
+        return perFrameData[frameNumber % FRAMES_IN_FLIGHT];
     }
     UploadContext uploadContext;
-
-    GPUSceneData sceneParameters;
-    Handle<Buffer> sceneParameterBuffer; // Holds FRAMES_IN_FLIGHT * aligned(GPUSceneData)
 
     FunctionQueue<> deleteQueue;
 
@@ -150,20 +177,16 @@ class VulkanRenderer
     void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 
   private:
+    inline static VulkanRenderer* ptr = nullptr;
+
     void initVulkan();
     void initSwapchain();
     void initCommands();
     void initSyncStructures();
-    void initDescriptors();
+    void setupBindless();
     void initImGui();
 
-    void initGlobalDescriptorSets();
-    // todo: remove from here!
-    //       these should be part of the executable!
-    //       (the logic, the actual uploading etc should still be part of the engine of course)
-    void initPipelines();
+    void initGlobalBuffers();
 
     size_t padUniformBufferSize(size_t originalSize);
-
-    inline static VulkanRenderer* ptr = nullptr;
 };

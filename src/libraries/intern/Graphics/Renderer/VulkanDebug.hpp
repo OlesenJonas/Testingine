@@ -30,3 +30,6 @@ void DestroyDebugUtilsMessengerEXT(
 void setDebugName(VkBuffer buffer, const char* name);
 void setDebugName(VkImage image, const char* name);
 void setDebugName(VkImageView imageView, const char* name);
+void setDebugName(VkShaderModule shader, const char* name);
+void setDebugName(VkDescriptorSet set, const char* name);
+void setDebugName(VkDescriptorSetLayout setLayout, const char* name);

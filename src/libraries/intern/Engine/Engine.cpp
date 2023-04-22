@@ -6,6 +6,7 @@ Engine::Engine() : mainWindow(1200, 800, "Vulkan Test", {{GLFW_MAXIMIZED, GLFW_T
 {
     ptr = this;
 
+    resourceManager.init();
     renderer.init();
 
     mainCamera =

@@ -1,6 +1,5 @@
 #include "ResourceManager.hpp"
 #include "Graphics/Buffer/Buffer.hpp"
-#include "Graphics/Pipeline/GraphicsPipeline.hpp"
 #include <TinyOBJ/tiny_obj_loader.h>
 #include <intern/Engine/Engine.hpp>
 #include <vulkan/vulkan_core.h>
@@ -9,6 +8,11 @@
     each "type implementation" is in the respective .cpp file
     ie: createBuffer in Buffer.cpp, createTexture in Texture.cpp ...
 */
+
+void ResourceManager::init()
+{
+    ptr = this;
+}
 
 void ResourceManager::cleanup()
 {
@@ -35,10 +39,10 @@ void ResourceManager::cleanup()
         meshHandle = meshPool.getFirst();
     }
 
-    Handle<GraphicsPipeline> gpipelineHandle = graphicsPipelinePool.getFirst();
-    while(gpipelineHandle.isValid())
+    Handle<Material> materialHandle = materialPool.getFirst();
+    while(materialHandle.isValid())
     {
-        free(gpipelineHandle);
-        gpipelineHandle = graphicsPipelinePool.getFirst();
+        free(materialHandle);
+        materialHandle = materialPool.getFirst();
     }
 }

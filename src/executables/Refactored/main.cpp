@@ -1,9 +1,12 @@
+#include "intern/ResourceManager/ResourceManager.hpp"
 #include <glm/gtx/transform.hpp>
 #include <intern/Engine/Engine.hpp>
 #include <intern/Graphics/Renderer/VulkanRenderer.hpp>
 
-void initMeshes()
+void initResources()
 {
+    ResourceManager* rm = ResourceManager::get();
+
     std::vector<Vertex> triangleVertices;
     triangleVertices.resize(3);
 
@@ -15,24 +18,38 @@ void initMeshes()
     triangleVertices[1].color = {0.0f, 1.0f, 0.0f};
     triangleVertices[2].color = {0.0f, 1.0f, 0.0f};
 
-    auto triangleMesh = Engine::get()->getResourceManager()->createMesh(triangleVertices, "triangle");
+    auto triangleMesh = rm->createMesh(triangleVertices, "triangle");
 
-    // load monkey mesh
-    auto monkeyMesh =
-        Engine::get()->getResourceManager()->createMesh(ASSETS_PATH "/vkguide/monkey_smooth.obj", "monkey");
+    auto monkeyMesh = rm->createMesh(ASSETS_PATH "/vkguide/monkey_smooth.obj", "monkey");
 
-    auto lostEmpire =
-        Engine::get()->getResourceManager()->createMesh(ASSETS_PATH "/vkguide/lost_empire.obj", "empire");
+    // auto lostEmpire = ResourceManager::get()->createMesh(ASSETS_PATH "/vkguide/lost_empire.obj", "empire");
+
+    auto defaultMaterial = rm->createMaterial(
+        {
+            .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/default_lit.frag"},
+        },
+        "defaultMesh");
+
+    // auto texturedMaterial = rm->createMaterial(
+    //     {
+    //         .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
+    //         .fragmentShader = {.sourcePath = SHADERS_PATH "/textured_lit.frag"},
+    //     },
+    //     "texturedMesh");
 }
 
 void initScene()
 {
-    auto& rsrcManager = *Engine::get()->getResourceManager();
-    auto& renderables = Engine::get()->getRenderer()->renderables;
+    initResources();
+
+    ResourceManager* rm = ResourceManager::get();
+
+    auto& renderables = VulkanRenderer::get()->renderables;
 
     const auto& newRenderable = renderables.emplace_back(RenderObject{
-        .mesh = rsrcManager.getMesh("monkey"),
-        .material = rsrcManager.getMaterial("defaultMesh"),
+        .mesh = rm->getMesh("monkey"),
+        .material = rm->getMaterial("defaultMesh"),
         .transformMatrix = glm::mat4{1.0f},
     });
     assert(newRenderable.mesh.isValid());
@@ -46,8 +63,8 @@ void initScene()
             glm::mat4 scale = glm::scale(glm::vec3{0.2f});
 
             const auto& newRenderable = renderables.emplace_back(RenderObject{
-                .mesh = rsrcManager.getMesh("triangle"),
-                .material = rsrcManager.getMaterial("defaultMesh"),
+                .mesh = rm->getMesh("triangle"),
+                .material = rm->getMaterial("defaultMesh"),
                 .transformMatrix = translation * scale,
             });
             assert(newRenderable.mesh.isValid());
@@ -55,11 +72,14 @@ void initScene()
         }
     }
 
-    RenderObject map;
-    map.mesh = rsrcManager.getMesh("empire");
-    map.material = rsrcManager.getMaterial("texturedMesh");
-    map.transformMatrix = glm::translate(glm::vec3{5.0f, -10.0f, 0.0f});
-    renderables.push_back(map);
+    // auto lostEmpire = rm->createTexture(
+    //     ASSETS_PATH "/vkguide/lost_empire-RGBA.png", VK_IMAGE_USAGE_SAMPLED_BIT, "empire_diffuse");
+
+    // RenderObject map;
+    // map.mesh = rsrcManager.getMesh("empire");
+    // map.material = rsrcManager.getMaterial("texturedMesh");
+    // map.transformMatrix = glm::translate(glm::vec3{5.0f, -10.0f, 0.0f});
+    // renderables.push_back(map);
 }
 
 int main()
@@ -68,7 +88,6 @@ int main()
 
     VulkanRenderer& renderer = *engine.getRenderer();
 
-    initMeshes();
     initScene();
 
     while(engine.isRunning())

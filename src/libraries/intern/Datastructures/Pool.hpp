@@ -31,6 +31,10 @@ class Handle
   public:
     Handle() = default;
     Handle(uint32_t index, uint32_t generation) : index(index), generation(generation){};
+    static Handle Invalid()
+    {
+        return {0, 0};
+    }
     [[nodiscard]] bool isValid() const
     {
         return generation != 0u;
