@@ -93,3 +93,36 @@ uint32_t VulkanRenderer::createSampledImageBinding(VkImageView view, VkImageLayo
 
     return freeIndex;
 }
+
+uint32_t VulkanRenderer::createStorageImageBinding(VkImageView view, VkImageLayout layout)
+{
+    // todo: not yet tested or even used, just here as code placeholder
+
+    auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+    uint32_t freeIndex = tableEntry.freeIndex;
+    tableEntry.freeIndex++;
+
+    VkDescriptorImageInfo imageInfo{
+        .sampler = VK_NULL_HANDLE,
+        .imageView = view,
+        .imageLayout = layout,
+    };
+
+    VkWriteDescriptorSet setWrite{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = nullptr,
+
+        .dstSet = bindlessDescriptorSets[tableEntry.setIndex],
+        .dstBinding = 0,
+        .dstArrayElement = freeIndex,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+        .pImageInfo = &imageInfo,
+        .pBufferInfo = nullptr,
+        .pTexelBufferView = nullptr,
+    };
+
+    vkUpdateDescriptorSets(device, 1, &setWrite, 0, nullptr);
+
+    return freeIndex;
+}

@@ -1,9 +1,11 @@
 #include "Texture.hpp"
+#include "Graphics/Renderer/VulkanRenderer.hpp"
 #include <intern/Engine/Engine.hpp>
 #include <intern/Graphics/Renderer/VulkanDebug.hpp>
 #include <intern/ResourceManager/ResourceManager.hpp>
 #include <iostream>
 #include <stb/stb_image.h>
+#include <vulkan/vulkan_core.h>
 
 Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFlags usage, std::string_view name)
 {
@@ -199,6 +201,22 @@ Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFla
     setDebugName(tex->image, (std::string{texName} + "_image").c_str());
     setDebugName(tex->imageView, (std::string{texName} + "_mainView").c_str());
 
+    auto& renderer = *VulkanRenderer::get();
+    // todo:
+    // currently user needs to guarantee that same image is never accessed as storage and sampled image at
+    // the same time (since it cant be in both layouts at the same time). Probably better to add another usage flag
+    // that explicitly indicates that both kinds of access can happen at the same time, in which case the layout
+    // for both should be just "GENERAL"
+    if(tex->info.usage & VK_IMAGE_USAGE_SAMPLED_BIT)
+    {
+        tex->sampledResourceIndex =
+            renderer.createSampledImageBinding(tex->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+    if(tex->info.usage & VK_IMAGE_USAGE_STORAGE_BIT)
+    {
+        tex->storageResourceIndex = renderer.createStorageImageBinding(tex->imageView, VK_IMAGE_LAYOUT_GENERAL);
+    }
+
     std::cout << "Texture loaded successfully " << file << std::endl;
 
     return newTextureHandle;
@@ -265,6 +283,17 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info info, std::string_v
 
     setDebugName(tex->image, (std::string{name} + "_image").c_str());
     setDebugName(tex->imageView, (std::string{name} + "_mainView").c_str());
+
+    VulkanRenderer& renderer = *VulkanRenderer::get();
+    if(tex->info.usage & VK_IMAGE_USAGE_SAMPLED_BIT)
+    {
+        tex->sampledResourceIndex =
+            renderer.createSampledImageBinding(tex->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+    if(tex->info.usage & VK_IMAGE_USAGE_STORAGE_BIT)
+    {
+        tex->storageResourceIndex = renderer.createStorageImageBinding(tex->imageView, VK_IMAGE_LAYOUT_GENERAL);
+    }
 
     return newTextureHandle;
 }

@@ -95,8 +95,26 @@ std::vector<uint32_t> compileGLSL(std::string_view path, shaderc_shader_kind sha
         std::cout << preprocessedResult.GetErrorMessage() << std::endl;
         assert(false);
     }
-    // std::string preprocessedShader = std::string{preprocessedResult.cbegin(), preprocessedResult.cend()};
-    // std::cout << preprocessedShader << std::endl;
+
+    //------------------
+    // keep code for debugging
+    // {
+    //     std::string preprocessedString{preprocessedResult.cbegin(), preprocessedResult.cend()};
+    //     auto compilationResult = compiler.CompileGlslToSpvAssembly(
+    //         preprocessedString.c_str(),
+    //         preprocessedString.size(),
+    //         shaderType,
+    //         initialPath.c_str(),
+    //         "main",
+    //         options);
+    //     if(compilationResult.GetCompilationStatus() != shaderc_compilation_status_success)
+    //     {
+    //         std::cout << compilationResult.GetErrorMessage() << std::endl;
+    //         assert(false);
+    //     }
+    //     std::cout << std::string{compilationResult.cbegin(), compilationResult.cend()} << std::endl;
+    // }
+    //------------------
 
     // todo: can use iterators as pointers for compilation directly, so that no temp string is needed?
     //       read docs if thats specified to work

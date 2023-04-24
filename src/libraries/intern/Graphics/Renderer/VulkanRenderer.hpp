@@ -114,16 +114,24 @@ class VulkanRenderer
 
     // ----------------
 
-    struct BindlessIndices
-    {
-        uint32_t cameraBuffer;
-        uint32_t transformBuffer;
-        uint32_t transformIndex;
-    };
-
     // TODO:
     //   Factor out all the bindless stuff
     //   Put inside the resourceManager? Dont like that. A new bindless Manager?
+
+    struct BindlessIndices
+    {
+        // Frame globals
+        uint32_t FrameDataBuffer;
+        // Resolution, matrices (differs in eg. shadow and default pass)
+        uint32_t RenderInfoBuffer;
+        // Buffer with object transforms and index into that buffer
+        uint32_t transformBuffer;
+        uint32_t transformIndex;
+        // Buffer with material/-instance parameters
+        uint32_t materialParamsBuffer;
+        uint32_t materialInstanceParamsBuffer;
+    };
+
     //  todo: dont like the name
     struct BindlessDescriptorsInfo
     {
@@ -152,6 +160,7 @@ class VulkanRenderer
     uint32_t createUniformBufferBinding(VkBuffer buffer);
     uint32_t createStorageBufferBinding(VkBuffer buffer);
     uint32_t createSampledImageBinding(VkImageView view, VkImageLayout layout);
+    uint32_t createStorageImageBinding(VkImageView view, VkImageLayout layout);
 
     // ----------------
 

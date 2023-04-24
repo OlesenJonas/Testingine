@@ -1,28 +1,29 @@
 #version 450
-#extension GL_GOOGLE_include_directive : enable
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "Bindless.glsl"
 
 layout(location = 0) in vec3 inColor;
 layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(set = 0, binding = 1) uniform SceneData_DYNAMIC
+layout(std430, set=UBO_SET, binding = 0) uniform MaterialParametersBuffer {
+    uint colorTexture;
+} globalMaterialParametersBuffers[];
+
+layout (set = SAMPLED_IMG_SET, binding = 0) uniform sampler globalSamplers[GLOBAL_SAMPLER_COUNT];
+layout (set = SAMPLED_IMG_SET, binding = GLOBAL_SAMPLER_COUNT) uniform texture2D globalTexture2Ds[];
+
+layout (push_constant) uniform constants
 {
-    vec4 fogColor;
-    vec4 fogDistance;
-    vec4 ambientColor;
-    vec4 sunlightDirection;
-    vec4 sunlightColor;
-} sceneData;
-
-layout (set=2, binding = 0) uniform sampler2D tex1;
-
-#include "test.glsl"
+    BindlessIndices bindlessIndices;
+};
 
 void main()
 {
-    // fragColor = vec4(inColor + sceneData.ambientColor.xyz, 1.0);
-    // fragColor = vec4(texCoord, 0.5, 1.0);
-    vec3 color = texture(tex1, texCoord).xyz;
-    fragColor = vec4(invert(color), 1.0);
+    const uint colorTextureIndex = globalMaterialParametersBuffers[bindlessIndices.materialParamsBuffer].colorTexture;
+    vec3 color = texture(sampler2D(globalTexture2Ds[colorTextureIndex],globalSamplers[0]), texCoord).xyz;
+    fragColor = vec4(color, 1.0);
 }

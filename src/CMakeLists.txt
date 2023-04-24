@@ -9,7 +9,8 @@ find_package(glm CONFIG REQUIRED)
 add_subdirectory("libraries/")
 
 # build shaders
-add_subdirectory("shaders/")
+# add_subdirectory("shaders/")
+# Disabled since were loading shaders at runtime atm
 
 # create executables
 add_subdirectory("executables/")

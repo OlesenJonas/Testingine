@@ -747,7 +747,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     ResourceManager* rm = ResourceManager::get();
 
     Camera* mainCamera = Engine::get()->getCamera();
-    // todo: resize GPUCameraData to use all matrices Camera stores and then simply memcpy from
+    // todo: resize GPUCameraData to use all the matrices Camera stores and then simply memcpy from
     // mainCamera.getMatrices directly
     GPUCameraData camData;
     camData.proj = mainCamera->getProj();
@@ -770,38 +770,52 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
         objectSSBO[i].modelMatrix = object.transformMatrix;
     }
 
-    Mesh* lastMesh;
-    Material* lastMaterial;
+    //---
+
+    BindlessIndices pushConstants;
+    pushConstants.RenderInfoBuffer = cameraBuffer->uniformResourceIndex;
+    pushConstants.transformBuffer = transformBuffer->storageResourceIndex;
+
+    Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
+    Handle<Material> lastMaterial = Handle<Material>::Invalid();
+    uint32_t vertCount = 0;
 
     for(int i = 0; i < count; i++)
     {
         RenderObject& object = first[i];
-        Mesh* objectMesh = rm->get(object.mesh);
-        Material* objectMaterial = rm->get(object.material);
+
+        Handle<Mesh> objectMesh = object.mesh;
+        Handle<Material> objectMaterial = object.material;
 
         if(objectMaterial != lastMaterial)
         {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, objectMaterial->pipeline);
-            lastMaterial = objectMaterial;
+            Material* newMat = rm->get(objectMaterial);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, newMat->pipeline);
+            if(newMat->hasMaterialParameters())
+            {
+                Buffer* materialParamsBuffer = rm->get(newMat->getMaterialParametersBuffer());
+                pushConstants.materialParamsBuffer = materialParamsBuffer->uniformResourceIndex;
+                lastMaterial = objectMaterial;
+            }
+            // todo: some check / other way to make sure shader doesnt actually access the material params buffer
+            // shouldnt be the case, otherwise reflection wouldve filled the material params member
         }
 
-        BindlessIndices pushConstants;
-        pushConstants.cameraBuffer = cameraBuffer->uniformResourceIndex;
-        pushConstants.transformBuffer = transformBuffer->storageResourceIndex;
         pushConstants.transformIndex = i;
-
         vkCmdPushConstants(
             cmd, bindlessPipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(BindlessIndices), &pushConstants);
 
         if(objectMesh != lastMesh)
         {
-            Buffer* vertexBuffer = rm->get(objectMesh->vertexBuffer);
+            Mesh* newMesh = rm->get(objectMesh);
+            vertCount = newMesh->vertexCount;
+            Buffer* vertexBuffer = rm->get(newMesh->vertexBuffer);
             VkDeviceSize offset = 0;
             vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer->buffer, &offset);
             lastMesh = objectMesh;
         }
 
-        vkCmdDraw(cmd, objectMesh->vertexCount, 1, 0, i);
+        vkCmdDraw(cmd, vertCount, 1, 0, i);
     }
 }
 

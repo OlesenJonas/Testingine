@@ -22,7 +22,10 @@ void initResources()
 
     auto monkeyMesh = rm->createMesh(ASSETS_PATH "/vkguide/monkey_smooth.obj", "monkey");
 
-    // auto lostEmpire = ResourceManager::get()->createMesh(ASSETS_PATH "/vkguide/lost_empire.obj", "empire");
+    auto lostEmpireMesh = ResourceManager::get()->createMesh(ASSETS_PATH "/vkguide/lost_empire.obj", "empire");
+
+    auto lostEmpireTex = rm->createTexture(
+        ASSETS_PATH "/vkguide/lost_empire-RGBA.png", VK_IMAGE_USAGE_SAMPLED_BIT, "empire_diffuse");
 
     auto defaultMaterial = rm->createMaterial(
         {
@@ -31,12 +34,16 @@ void initResources()
         },
         "defaultMesh");
 
-    // auto texturedMaterial = rm->createMaterial(
-    //     {
-    //         .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
-    //         .fragmentShader = {.sourcePath = SHADERS_PATH "/textured_lit.frag"},
-    //     },
-    //     "texturedMesh");
+    auto texturedMaterial = rm->createMaterial(
+        {
+            .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/textured_lit.frag"},
+        },
+        "texturedMesh");
+
+    Material* mat = rm->get(texturedMaterial);
+    mat->setResource("colorTexture", rm->get(lostEmpireTex)->sampledResourceIndex);
+    mat->pushParameterChanges();
 }
 
 void initScene()
@@ -72,14 +79,11 @@ void initScene()
         }
     }
 
-    // auto lostEmpire = rm->createTexture(
-    //     ASSETS_PATH "/vkguide/lost_empire-RGBA.png", VK_IMAGE_USAGE_SAMPLED_BIT, "empire_diffuse");
-
-    // RenderObject map;
-    // map.mesh = rsrcManager.getMesh("empire");
-    // map.material = rsrcManager.getMaterial("texturedMesh");
-    // map.transformMatrix = glm::translate(glm::vec3{5.0f, -10.0f, 0.0f});
-    // renderables.push_back(map);
+    RenderObject map;
+    map.mesh = rm->getMesh("empire");
+    map.material = rm->getMaterial("texturedMesh");
+    map.transformMatrix = glm::translate(glm::vec3{5.0f, -10.0f, 0.0f});
+    renderables.push_back(map);
 }
 
 int main()
