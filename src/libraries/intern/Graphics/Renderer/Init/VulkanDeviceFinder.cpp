@@ -167,8 +167,61 @@ bool VulkanDeviceFinder::isDeviceSuitable(VkPhysicalDevice device)
 {
     VkPhysicalDeviceProperties deviceProperties;
     vkGetPhysicalDeviceProperties(device, &deviceProperties);
-    VkPhysicalDeviceFeatures deviceFeatures;
-    vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+    bool featuresSupported = true;
+    {
+        VkPhysicalDeviceScalarBlockLayoutFeatures scalarBlockLayoutFeatures{
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
+            .pNext = nullptr,
+        };
+        VkPhysicalDeviceDescriptorIndexingFeatures descIndexingFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+            .pNext = &scalarBlockLayoutFeatures,
+        };
+        VkPhysicalDeviceSynchronization2Features synch2Features = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+            .pNext = &descIndexingFeatures,
+        };
+        VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+            .pNext = &synch2Features,
+        };
+        VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParamFeatures = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES,
+            .pNext = &dynamicRenderingFeatures,
+        };
+        //--
+        VkPhysicalDeviceFeatures2 deviceFeatures{
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &shaderDrawParamFeatures,
+        };
+        vkGetPhysicalDeviceFeatures2(device, &deviceFeatures);
+        featuresSupported &= scalarBlockLayoutFeatures.scalarBlockLayout;
+
+        featuresSupported &= descIndexingFeatures.shaderUniformTexelBufferArrayDynamicIndexing;
+        featuresSupported &= descIndexingFeatures.shaderStorageTexelBufferArrayDynamicIndexing;
+        featuresSupported &= descIndexingFeatures.shaderUniformBufferArrayNonUniformIndexing;
+        featuresSupported &= descIndexingFeatures.shaderSampledImageArrayNonUniformIndexing;
+        featuresSupported &= descIndexingFeatures.shaderStorageBufferArrayNonUniformIndexing;
+        featuresSupported &= descIndexingFeatures.shaderStorageImageArrayNonUniformIndexing;
+        featuresSupported &= descIndexingFeatures.shaderUniformTexelBufferArrayNonUniformIndexing;
+        featuresSupported &= descIndexingFeatures.shaderStorageTexelBufferArrayNonUniformIndexing;
+        featuresSupported &= descIndexingFeatures.descriptorBindingUniformBufferUpdateAfterBind;
+        featuresSupported &= descIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind;
+        featuresSupported &= descIndexingFeatures.descriptorBindingStorageImageUpdateAfterBind;
+        featuresSupported &= descIndexingFeatures.descriptorBindingStorageBufferUpdateAfterBind;
+        featuresSupported &= descIndexingFeatures.descriptorBindingUniformTexelBufferUpdateAfterBind;
+        featuresSupported &= descIndexingFeatures.descriptorBindingStorageTexelBufferUpdateAfterBind;
+        featuresSupported &= descIndexingFeatures.descriptorBindingUpdateUnusedWhilePending;
+        featuresSupported &= descIndexingFeatures.descriptorBindingPartiallyBound;
+        featuresSupported &= descIndexingFeatures.descriptorBindingVariableDescriptorCount;
+        featuresSupported &= descIndexingFeatures.runtimeDescriptorArray;
+
+        featuresSupported &= synch2Features.synchronization2;
+
+        featuresSupported &= dynamicRenderingFeatures.dynamicRendering;
+        featuresSupported &= shaderDrawParamFeatures.shaderDrawParameters;
+    }
 
     bool extensionsSupported = checkDeviceExtensionSupport(device);
     bool swapChainAdequate = false;
@@ -180,8 +233,8 @@ bool VulkanDeviceFinder::isDeviceSuitable(VkPhysicalDevice device)
 
     auto queueIndices = findQueueFamilies(device);
 
-    return extensionsSupported && queueIndices.isComplete() && swapChainAdequate &&
-           (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) && deviceFeatures.geometryShader;
+    return extensionsSupported && featuresSupported && queueIndices.isComplete() && swapChainAdequate &&
+           (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
 }
 
 bool VulkanDeviceFinder::checkDeviceExtensionSupport(VkPhysicalDevice device)
