@@ -3,8 +3,8 @@
 #include "DynamicBitset.hpp"
 
 #include <cassert>
+#include <intern/Misc/Concepts.hpp>
 #include <type_traits>
-#include <vcruntime_string.h>
 
 /*
     not sure this is correct yet, will see
@@ -150,13 +150,31 @@ class Pool
         memset(generations, 0u, 4 * capacity);
         freeArray.resize(capacity);
 
-        memcpy(storage, oldStorage, oldCapacity * sizeof(T));
         memcpy(generations, oldGenerations, oldCapacity * sizeof(uint32_t));
         freeArray.fill(oldCapacity, capacity - 1);
+
+        if constexpr(canUseMemcpy)
+        {
+            memcpy(storage, oldStorage, oldCapacity * sizeof(T));
+        }
+        else
+        {
+            for(int i = 0; i < oldCapacity; i++)
+            {
+                // move construct from old storage into new
+                // C++20 has construct_at, just trying it out
+                std::construct_at(&storage[i], std::move(oldStorage[i]));
+                // explicitly destroy left over object in old storage
+                storage[i].~T();
+            }
+        }
 
         POOL_FREE(oldStorage);
         delete[] oldGenerations;
     }
+
+    // if T is trivially_relocatable then we can grow the Pool with simple memmoves
+    static constexpr bool canUseMemcpy = is_trivially_relocatable<T>;
 
     size_t capacity = 0;
     T* storage;
