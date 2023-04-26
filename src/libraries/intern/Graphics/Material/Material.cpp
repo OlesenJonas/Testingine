@@ -334,8 +334,8 @@ void Material::createPipeline()
         .basePipelineHandle = VK_NULL_HANDLE,
     };
 
-    if(vkCreateGraphicsPipelines(renderer.device, VK_NULL_HANDLE, 1, &pipelineCrInfo, nullptr, &pipeline) !=
-       VK_SUCCESS)
+    if(vkCreateGraphicsPipelines(
+           renderer.device, renderer.pipelineCache, 1, &pipelineCrInfo, nullptr, &pipeline) != VK_SUCCESS)
     {
         std::cout << "Failed to create pipeline!" << std::endl;
         assert(false);

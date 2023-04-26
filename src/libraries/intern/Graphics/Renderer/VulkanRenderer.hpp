@@ -1,6 +1,7 @@
 #pragma once
 
 #include <VMA/VMA.hpp>
+#include <string_view>
 #include <vulkan/vulkan_core.h>
 
 #include <glm/glm.hpp>
@@ -164,6 +165,9 @@ class VulkanRenderer
 
     // ----------------
 
+    VkPipelineCache pipelineCache;
+    const std::string_view pipelineCacheFile = "vkpipelinecache";
+
     FrameData perFrameData[FRAMES_IN_FLIGHT];
     inline FrameData& getCurrentFrameData()
     {
@@ -193,9 +197,11 @@ class VulkanRenderer
     void initCommands();
     void initSyncStructures();
     void setupBindless();
+    void initPipelineCache();
     void initImGui();
-
     void initGlobalBuffers();
+
+    void savePipelineCache();
 
     size_t padUniformBufferSize(size_t originalSize);
 };

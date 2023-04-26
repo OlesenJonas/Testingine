@@ -41,6 +41,7 @@ void VulkanRenderer::init()
     initCommands();
     initSyncStructures();
     setupBindless();
+    initPipelineCache();
 
     initImGui();
     initGlobalBuffers();
@@ -372,6 +373,55 @@ void VulkanRenderer::setupBindless()
     }
 }
 
+void VulkanRenderer::initPipelineCache()
+{
+    VkPipelineCacheCreateInfo cacheCrInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+    };
+    // VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT ?
+
+    std::vector<char> buffer;
+    bool cacheFileExists = false;
+    {
+        std::ifstream file(pipelineCacheFile.data(), std::ios::ate | std::ios::binary);
+        if(file.is_open())
+        {
+            auto fileSize = (size_t)file.tellg();
+            buffer.resize(fileSize);
+            file.seekg(0);
+            file.read(buffer.data(), fileSize);
+            file.close();
+
+            // Check if cache can be used by seeing if header matches
+            auto* cacheHeader = (VkPipelineCacheHeaderVersionOne*)buffer.data();
+            if(cacheHeader->deviceID == physicalDeviceProperties.deviceID &&
+               cacheHeader->vendorID == physicalDeviceProperties.vendorID &&
+               (memcmp(cacheHeader->pipelineCacheUUID, physicalDeviceProperties.pipelineCacheUUID, VK_UUID_SIZE) ==
+                0))
+            {
+                cacheFileExists = true;
+            }
+        }
+    }
+
+    if(cacheFileExists)
+    {
+        cacheCrInfo.initialDataSize = (uint32_t)buffer.size();
+        cacheCrInfo.pInitialData = buffer.data();
+    }
+    else
+    {
+        cacheCrInfo.initialDataSize = 0;
+        cacheCrInfo.pInitialData = nullptr;
+    }
+
+    vkCreatePipelineCache(device, &cacheCrInfo, nullptr, &pipelineCache);
+
+    deleteQueue.pushBack([=]() { vkDestroyPipelineCache(device, pipelineCache, nullptr); });
+}
+
 void VulkanRenderer::initImGui()
 {
     // 1: create descriptor pool for IMGUI
@@ -412,6 +462,7 @@ void VulkanRenderer::initImGui()
         .Device = device,
         .QueueFamily = graphicsQueueFamily,
         .Queue = graphicsQueue,
+        .PipelineCache = pipelineCache,
         .DescriptorPool = imguiPool,
         // todo: dont hardcode these, retrieve from swapchain creation
         .MinImageCount = 2,
@@ -477,10 +528,25 @@ void VulkanRenderer::initGlobalBuffers()
     }
 }
 
+void VulkanRenderer::savePipelineCache()
+{
+    size_t cacheDataSize = 0;
+    vkGetPipelineCacheData(device, pipelineCache, &cacheDataSize, nullptr);
+    std::vector<char> cacheData;
+    cacheData.resize(cacheDataSize);
+    vkGetPipelineCacheData(device, pipelineCache, &cacheDataSize, cacheData.data());
+
+    std::ofstream outFile(pipelineCacheFile.data(), std::ios::out | std::ios::binary);
+    outFile.write(cacheData.data(), cacheData.size());
+    outFile.close();
+}
+
 void VulkanRenderer::cleanup()
 {
     if(!isInitialized)
         return;
+
+    savePipelineCache();
 
     deleteQueue.flushReverse();
 
