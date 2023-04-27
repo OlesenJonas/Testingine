@@ -40,7 +40,7 @@ void VulkanRenderer::init()
     initSwapchain();
     initCommands();
     initSyncStructures();
-    setupBindless();
+    initBindless();
     initPipelineCache();
 
     initImGui();
@@ -222,128 +222,10 @@ void VulkanRenderer::initSyncStructures()
     deleteQueue.pushBack([=]() { vkDestroyFence(device, uploadContext.uploadFence, nullptr); });
 }
 
-void VulkanRenderer::setupBindless()
+void VulkanRenderer::initBindless()
 {
-    // Setting up bindless -----------------------------
+    bindlessManager.init();
 
-    VkSamplerCreateInfo samplerInfo{
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-
-        .magFilter = VK_FILTER_NEAREST,
-        .minFilter = VK_FILTER_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    };
-    VkSampler blockySampler;
-    vkCreateSampler(device, &samplerInfo, nullptr, &blockySampler);
-    immutableSamplers.push_back(blockySampler);
-
-    assert(immutableSamplers.size() == immutableSamplerCount);
-    // I already create one somewhere! take that one as example
-
-    std::vector<VkDescriptorPoolSize> descriptorSizes = {
-        {
-            .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-            .descriptorCount =
-                descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE).limit + immutableSamplerCount,
-        },
-        {
-            .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            .descriptorCount = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).limit,
-        },
-        {
-            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .descriptorCount = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).limit,
-        },
-        {
-            .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .descriptorCount = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).limit,
-        },
-    };
-
-    VkDescriptorPoolCreateInfo poolCrInfo{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .pNext = nullptr,
-
-        .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-        .maxSets = (uint32_t)descriptorSizes.size(),
-        .poolSizeCount = (uint32_t)descriptorSizes.size(),
-        .pPoolSizes = descriptorSizes.data(),
-    };
-    assertVkResult(vkCreateDescriptorPool(device, &poolCrInfo, nullptr, &bindlessDescriptorPool));
-
-    for(const auto& entry : descriptorTypeTable)
-    {
-        // constexpr VkDescriptorBindingFlags defaultDescBindingFlag =
-        //     VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
-        //     VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
-        constexpr VkDescriptorBindingFlags defaultDescBindingFlag =
-            VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
-
-        std::vector<VkDescriptorBindingFlags> descBindingFlags = {defaultDescBindingFlag};
-
-        std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{
-            VkDescriptorSetLayoutBinding{
-                .binding = 0,
-                .descriptorType = entry.first,
-                .descriptorCount = entry.second.limit,
-                .stageFlags = VK_SHADER_STAGE_ALL,
-                .pImmutableSamplers = nullptr,
-            },
-        };
-
-        if(entry.first == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)
-        {
-            descBindingFlags.push_back(0);
-
-            setLayoutBindings[0].binding = immutableSamplerCount;
-
-            setLayoutBindings.push_back(VkDescriptorSetLayoutBinding{
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-                .descriptorCount = immutableSamplerCount,
-                .stageFlags = VK_SHADER_STAGE_ALL,
-                .pImmutableSamplers = immutableSamplers.data(),
-            });
-        }
-
-        VkDescriptorSetLayoutBindingFlagsCreateInfo layoutBindingFlagsCrInfo{
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-            .pNext = nullptr,
-            .bindingCount = (uint32_t)descBindingFlags.size(),
-            .pBindingFlags = descBindingFlags.data(),
-        };
-
-        VkDescriptorSetLayoutCreateInfo descSetLayoutCrInfo{
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .pNext = &layoutBindingFlagsCrInfo,
-            .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-            .bindingCount = (uint32_t)setLayoutBindings.size(),
-            .pBindings = setLayoutBindings.data(),
-        };
-        VkDescriptorSetLayout layout;
-        vkCreateDescriptorSetLayout(device, &descSetLayoutCrInfo, nullptr, &layout);
-        setDebugName(layout, (std::string{entry.second.debugName} + "_setLayout").c_str());
-        bindlessSetLayouts[entry.second.setIndex] = layout;
-
-        // todo: could allocate all at once
-        VkDescriptorSet set;
-        VkDescriptorSetAllocateInfo setAllocInfo{
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .descriptorPool = bindlessDescriptorPool,
-            .descriptorSetCount = 1,
-            .pSetLayouts = &layout,
-        };
-        vkAllocateDescriptorSets(device, &setAllocInfo, &set);
-        setDebugName(set, (std::string{entry.second.debugName} + "_Set").c_str());
-        bindlessDescriptorSets[entry.second.setIndex] = set;
-    }
-
-    // todo:
-    //   for now just push 3 resource indices to test everything
     VkPushConstantRange basicPushConstantRange{
         .stageFlags = VK_SHADER_STAGE_ALL,
         .offset = 0,
@@ -354,23 +236,14 @@ void VulkanRenderer::setupBindless()
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .setLayoutCount = (uint32_t)bindlessSetLayouts.size(),
-        .pSetLayouts = bindlessSetLayouts.data(),
+        .setLayoutCount = (uint32_t)bindlessManager.bindlessSetLayouts.size(),
+        .pSetLayouts = bindlessManager.bindlessSetLayouts.data(),
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &basicPushConstantRange,
     };
     vkCreatePipelineLayout(device, &pipelineLayoutCrInfo, nullptr, &bindlessPipelineLayout);
 
-    deleteQueue.pushBack(
-        [=]()
-        {
-            vkDestroyDescriptorPool(device, bindlessDescriptorPool, nullptr);
-            vkDestroyPipelineLayout(device, bindlessPipelineLayout, nullptr);
-        });
-    for(auto setLayout : bindlessSetLayouts)
-    {
-        deleteQueue.pushBack([=]() { vkDestroyDescriptorSetLayout(device, setLayout, nullptr); });
-    }
+    deleteQueue.pushBack([=]() { vkDestroyPipelineLayout(device, bindlessPipelineLayout, nullptr); });
 }
 
 void VulkanRenderer::initPipelineCache()
@@ -598,7 +471,7 @@ void VulkanRenderer::draw()
         bindlessPipelineLayout,
         0,
         4,
-        bindlessDescriptorSets.data(),
+        bindlessManager.bindlessDescriptorSets.data(),
         0,
         nullptr);
 

@@ -10,6 +10,7 @@
 #include "../RenderObject/RenderObject.hpp"
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
+#include "BindlessManager.hpp"
 
 #include <intern/Datastructures/FunctionQueue.hpp>
 
@@ -113,58 +114,6 @@ class VulkanRenderer
     VkQueue graphicsQueue;
     uint32_t graphicsQueueFamily;
 
-    // ----------------
-
-    // TODO:
-    //   Factor out all the bindless stuff
-    //   Put inside the resourceManager? Dont like that. A new bindless Manager?
-
-    struct BindlessIndices
-    {
-        // Frame globals
-        uint32_t FrameDataBuffer;
-        // Resolution, matrices (differs in eg. shadow and default pass)
-        uint32_t RenderInfoBuffer;
-        // Buffer with object transforms and index into that buffer
-        uint32_t transformBuffer;
-        uint32_t transformIndex;
-        // Buffer with material/-instance parameters
-        uint32_t materialParamsBuffer;
-        uint32_t materialInstanceParamsBuffer;
-    };
-
-    //  todo: dont like the name
-    struct BindlessDescriptorsInfo
-    {
-        uint32_t setIndex = 0xFFFFFFFF;
-        uint32_t limit = 0xFFFFFFFF;
-        std::string_view debugName;
-        uint32_t freeIndex = 0;
-    };
-    // todo: check against limit from physicalDeviceProperties.limits
-    std::unordered_map<VkDescriptorType, BindlessDescriptorsInfo> descriptorTypeTable = {
-        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, {0, 128, "SampledImages"}},
-        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, {1, 128, "StorageImages"}},
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, {2, 128, "UniformBuffers"}},
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, {3, 128, "StorageBuffers"}},
-    };
-
-    // todo: dont like this being a vector, the size needs to be const!
-    const uint32_t immutableSamplerCount = 1;
-    std::vector<VkSampler> immutableSamplers;
-
-    VkDescriptorPool bindlessDescriptorPool;
-    std::array<VkDescriptorSetLayout, 4> bindlessSetLayouts;
-    std::array<VkDescriptorSet, 4> bindlessDescriptorSets;
-    VkPipelineLayout bindlessPipelineLayout;
-
-    uint32_t createUniformBufferBinding(VkBuffer buffer);
-    uint32_t createStorageBufferBinding(VkBuffer buffer);
-    uint32_t createSampledImageBinding(VkImageView view, VkImageLayout layout);
-    uint32_t createStorageImageBinding(VkImageView view, VkImageLayout layout);
-
-    // ----------------
-
     VkPipelineCache pipelineCache;
     const std::string_view pipelineCacheFile = "vkpipelinecache";
 
@@ -178,6 +127,23 @@ class VulkanRenderer
     FunctionQueue<> deleteQueue;
 
     VmaAllocator allocator;
+
+    BindlessManager bindlessManager{*this};
+    // this is here because it felt out of place inside the manager
+    VkPipelineLayout bindlessPipelineLayout;
+    struct BindlessIndices
+    {
+        // Frame globals
+        uint32_t FrameDataBuffer;
+        // Resolution, matrices (differs in eg. shadow and default pass)
+        uint32_t RenderInfoBuffer;
+        // Buffer with object transforms and index into that buffer
+        uint32_t transformBuffer;
+        uint32_t transformIndex;
+        // Buffer with material/-instance parameters
+        uint32_t materialParamsBuffer;
+        uint32_t materialInstanceParamsBuffer;
+    };
 
     std::vector<RenderObject> renderables;
 
@@ -196,7 +162,7 @@ class VulkanRenderer
     void initSwapchain();
     void initCommands();
     void initSyncStructures();
-    void setupBindless();
+    void initBindless();
     void initPipelineCache();
     void initImGui();
     void initGlobalBuffers();

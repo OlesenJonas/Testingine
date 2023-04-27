@@ -102,11 +102,11 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
 
     if(crInfo.info.usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
     {
-        buffer->uniformResourceIndex = renderer.createUniformBufferBinding(buffer->buffer);
+        buffer->uniformResourceIndex = renderer.bindlessManager.createUniformBufferBinding(buffer->buffer);
     }
     if(crInfo.info.usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
     {
-        buffer->storageResourceIndex = renderer.createStorageBufferBinding(buffer->buffer);
+        buffer->storageResourceIndex = renderer.bindlessManager.createStorageBufferBinding(buffer->buffer);
     }
 
     return newBufferHandle;

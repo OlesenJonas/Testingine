@@ -209,12 +209,13 @@ Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFla
     // for both should be just "GENERAL"
     if(tex->info.usage & VK_IMAGE_USAGE_SAMPLED_BIT)
     {
-        tex->sampledResourceIndex =
-            renderer.createSampledImageBinding(tex->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        tex->sampledResourceIndex = renderer.bindlessManager.createSampledImageBinding(
+            tex->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
     if(tex->info.usage & VK_IMAGE_USAGE_STORAGE_BIT)
     {
-        tex->storageResourceIndex = renderer.createStorageImageBinding(tex->imageView, VK_IMAGE_LAYOUT_GENERAL);
+        tex->storageResourceIndex =
+            renderer.bindlessManager.createStorageImageBinding(tex->imageView, VK_IMAGE_LAYOUT_GENERAL);
     }
 
     std::cout << "Texture loaded successfully " << file << std::endl;
@@ -287,12 +288,13 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info info, std::string_v
     VulkanRenderer& renderer = *VulkanRenderer::get();
     if(tex->info.usage & VK_IMAGE_USAGE_SAMPLED_BIT)
     {
-        tex->sampledResourceIndex =
-            renderer.createSampledImageBinding(tex->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        tex->sampledResourceIndex = renderer.bindlessManager.createSampledImageBinding(
+            tex->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
     if(tex->info.usage & VK_IMAGE_USAGE_STORAGE_BIT)
     {
-        tex->storageResourceIndex = renderer.createStorageImageBinding(tex->imageView, VK_IMAGE_LAYOUT_GENERAL);
+        tex->storageResourceIndex =
+            renderer.bindlessManager.createStorageImageBinding(tex->imageView, VK_IMAGE_LAYOUT_GENERAL);
     }
 
     return newTextureHandle;
