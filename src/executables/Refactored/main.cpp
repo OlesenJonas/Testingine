@@ -2,6 +2,7 @@
 #include <glm/gtx/transform.hpp>
 #include <intern/Engine/Engine.hpp>
 #include <intern/Graphics/Renderer/VulkanRenderer.hpp>
+#include <vulkan/vulkan_core.h>
 
 void initResources()
 {
@@ -27,6 +28,21 @@ void initResources()
     auto lostEmpireTex = rm->createTexture(
         ASSETS_PATH "/vkguide/lost_empire-RGBA.png", VK_IMAGE_USAGE_SAMPLED_BIT, "empire_diffuse");
 
+    auto linearSampler = rm->createSampler({
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    });
+    auto blockySampler = rm->createSampler({
+        .magFilter = VK_FILTER_NEAREST,
+        .minFilter = VK_FILTER_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    });
+
     auto defaultMaterial = rm->createMaterial(
         {
             .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
@@ -43,6 +59,7 @@ void initResources()
 
     Material* mat = rm->get(texturedMaterial);
     mat->setResource("colorTexture", rm->get(lostEmpireTex)->sampledResourceIndex);
+    mat->setResource("blockySampler", rm->get(blockySampler)->resourceIndex);
     mat->pushParameterChanges();
 }
 

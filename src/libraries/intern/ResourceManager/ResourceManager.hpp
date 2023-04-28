@@ -10,6 +10,7 @@
 #include <intern/Graphics/Texture/TextureView.hpp>
 #include <intern/Misc/StringHash.hpp>
 #include <unordered_map>
+#include <vulkan/vulkan_core.h>
 
 /*
     ResourceManager needs to ensure that the GPU representations of all the objects are properly created &
@@ -38,12 +39,16 @@ class ResourceManager
 
     Handle<Material> createMaterial(Material::CreateInfo crInfo, std::string_view name = "");
 
+    Handle<Sampler> createSampler(Sampler::Info&& info);
+
     // todo: rename all these to just free(Handle<...>)?
     void deleteBuffer(Handle<Buffer> handle);
     void deleteMesh(Handle<Mesh> handle);
     void deleteTexture(Handle<Texture> handle);
     // like here
     void free(Handle<Material> handle);
+    // no explicit free function for samplers, since they could be used in multiple places
+    // and usages arent tracked yet!
 
     // Accessing -----------------
 
@@ -52,11 +57,15 @@ class ResourceManager
     {                                                                                                             \
         return pool.get(handle);                                                                                  \
     }
-
     HANDLE_TO_PTR_GETTER(Buffer, bufferPool);
     HANDLE_TO_PTR_GETTER(Mesh, meshPool);
     HANDLE_TO_PTR_GETTER(Texture, texturePool);
     HANDLE_TO_PTR_GETTER(Material, materialPool);
+    // Samplers dont use pool, so special getter needed
+    inline Sampler* get(Handle<Sampler> handle)
+    {
+        return &samplerArray[handle.index];
+    }
 
     inline Handle<Mesh> getMesh(std::string_view name)
     {
@@ -76,6 +85,8 @@ class ResourceManager
 
     void cleanup();
 
+    constexpr static uint32_t samplerLimit = 32;
+
   private:
     inline static ResourceManager* ptr = nullptr;
 
@@ -88,4 +99,11 @@ class ResourceManager
     Pool<Mesh> meshPool{10};
     Pool<Texture> texturePool{10};
     Pool<Material> materialPool{10};
+
+    // this value needs to match the one in bindless.glsl!
+    // todo: could pass this as a define to shader compilation I guess
+    std::array<Sampler, samplerLimit> samplerArray;
+    // since samplers are never deleted, a simple linear index is enough
+    // todo: free entries after they arent in use for some time, then need mechanism to reclaim that entry
+    uint32_t freeSamplerIndex = 0;
 };

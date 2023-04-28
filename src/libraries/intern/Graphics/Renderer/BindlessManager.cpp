@@ -1,6 +1,7 @@
 #include "Graphics/Renderer/BindlessManager.hpp"
 #include "VulkanDebug.hpp"
 #include "VulkanRenderer.hpp"
+#include <intern/ResourceManager/ResourceManager.hpp>
 #include <vulkan/vulkan_core.h>
 
 BindlessManager::BindlessManager(VulkanRenderer& renderer) : renderer(renderer){};
@@ -9,28 +10,14 @@ void BindlessManager::init()
 {
     // Setting up bindless -----------------------------
 
-    VkSamplerCreateInfo samplerInfo{
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-
-        .magFilter = VK_FILTER_NEAREST,
-        .minFilter = VK_FILTER_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    };
-    VkSampler blockySampler;
-    vkCreateSampler(renderer.device, &samplerInfo, nullptr, &blockySampler);
-    immutableSamplers.push_back(blockySampler);
-
-    assert(immutableSamplers.size() == immutableSamplerCount);
-    // I already create one somewhere! take that one as example
-
     std::vector<VkDescriptorPoolSize> descriptorSizes = {
         {
+            .type = VK_DESCRIPTOR_TYPE_SAMPLER,
+            .descriptorCount = ResourceManager::samplerLimit,
+        },
+        {
             .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-            .descriptorCount =
-                descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE).limit + immutableSamplerCount,
+            .descriptorCount = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE).limit,
         },
         {
             .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
@@ -79,16 +66,16 @@ void BindlessManager::init()
 
         if(entry.first == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)
         {
-            descBindingFlags.push_back(0);
+            descBindingFlags.push_back(defaultDescBindingFlag);
 
-            setLayoutBindings[0].binding = immutableSamplerCount;
+            setLayoutBindings[0].binding = ResourceManager::samplerLimit;
 
             setLayoutBindings.push_back(VkDescriptorSetLayoutBinding{
                 .binding = 0,
                 .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-                .descriptorCount = immutableSamplerCount,
+                .descriptorCount = ResourceManager::samplerLimit,
                 .stageFlags = VK_SHADER_STAGE_ALL,
-                .pImmutableSamplers = immutableSamplers.data(),
+                .pImmutableSamplers = nullptr,
             });
         }
 
@@ -213,7 +200,7 @@ uint32_t BindlessManager::createSampledImageBinding(VkImageView view, VkImageLay
         .pNext = nullptr,
 
         .dstSet = bindlessDescriptorSets[tableEntry.setIndex],
-        .dstBinding = immutableSamplerCount,
+        .dstBinding = ResourceManager::samplerLimit,
         .dstArrayElement = freeIndex,
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
@@ -225,6 +212,35 @@ uint32_t BindlessManager::createSampledImageBinding(VkImageView view, VkImageLay
     vkUpdateDescriptorSets(renderer.device, 1, &setWrite, 0, nullptr);
 
     return freeIndex;
+}
+
+uint32_t BindlessManager::createSamplerBinding(VkSampler sampler, uint32_t index)
+{
+    auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
+
+    VkDescriptorImageInfo imageInfo{
+        .sampler = sampler,
+        .imageView = nullptr,
+        .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+
+    VkWriteDescriptorSet setWrite{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = nullptr,
+
+        .dstSet = bindlessDescriptorSets[tableEntry.setIndex],
+        .dstBinding = 0,
+        .dstArrayElement = index,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+        .pImageInfo = &imageInfo,
+        .pBufferInfo = nullptr,
+        .pTexelBufferView = nullptr,
+    };
+
+    vkUpdateDescriptorSets(renderer.device, 1, &setWrite, 0, nullptr);
+
+    return index;
 }
 
 uint32_t BindlessManager::createStorageImageBinding(VkImageView view, VkImageLayout layout)

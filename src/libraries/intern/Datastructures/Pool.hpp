@@ -54,6 +54,7 @@ class Handle
 
     template <typename U>
     friend class Pool;
+    friend class ResourceManager;
 };
 
 template <typename T>

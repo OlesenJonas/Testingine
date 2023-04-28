@@ -11,6 +11,7 @@ layout(location = 0) out vec4 fragColor;
 
 MaterialParameters(
     TextureHandle colorTexture;
+    SamplerHandle blockySampler;
 );
 
 layout (push_constant) uniform constants
@@ -21,6 +22,7 @@ layout (push_constant) uniform constants
 void main()
 {
     const TextureHandle colorTexture = getMaterialParams(bindlessIndices.materialParamsBuffer).colorTexture;
-    vec3 color = texture(sampler2D(Texture2D(colorTexture),Samplers[0]), texCoord).xyz;
+    const SamplerHandle blockySampler = getMaterialParams(bindlessIndices.materialParamsBuffer).blockySampler;
+    vec3 color = texture(sampler2D(Texture2D(colorTexture),Samplers[blockySampler.index]), texCoord).xyz;
     fragColor = vec4(color, 1.0);
 }

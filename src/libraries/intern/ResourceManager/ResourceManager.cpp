@@ -1,5 +1,6 @@
 #include "ResourceManager.hpp"
 #include "Graphics/Buffer/Buffer.hpp"
+#include "Graphics/Renderer/VulkanRenderer.hpp"
 #include <TinyOBJ/tiny_obj_loader.h>
 #include <intern/Engine/Engine.hpp>
 #include <vulkan/vulkan_core.h>
@@ -17,6 +18,12 @@ void ResourceManager::init()
 void ResourceManager::cleanup()
 {
     // I dont like this way of "clearing" the pools, but works for now...
+
+    for(int i = 0; i < freeSamplerIndex; i++)
+    {
+        VulkanRenderer::get()->deleteQueue.pushBack(
+            [=]() { vkDestroySampler(VulkanRenderer::get()->device, samplerArray[i].sampler, nullptr); });
+    }
 
     Handle<Texture> texHandle = texturePool.getFirst();
     while(texHandle.isValid())

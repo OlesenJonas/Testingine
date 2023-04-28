@@ -30,28 +30,15 @@ class BindlessManager
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, {3, 128, "StorageBuffers"}},
     };
 
-    // static constexpr VkSamplerCreateInfo immutableSamplers[4] = {{
-    //     .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-    //     .pNext = nullptr,
-
-    //     .magFilter = VK_FILTER_NEAREST,
-    //     .minFilter = VK_FILTER_NEAREST,
-    //     .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    //     .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    //     .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    // }};
-
-    const uint32_t immutableSamplerCount = 1;
-    std::vector<VkSampler> immutableSamplers;
-
     VkDescriptorPool bindlessDescriptorPool;
     std::array<VkDescriptorSetLayout, 4> bindlessSetLayouts;
     std::array<VkDescriptorSet, 4> bindlessDescriptorSets;
 
-    uint32_t createUniformBufferBinding(VkBuffer buffer);
-    uint32_t createStorageBufferBinding(VkBuffer buffer);
+    uint32_t createSamplerBinding(VkSampler sampler, uint32_t index);
     uint32_t createSampledImageBinding(VkImageView view, VkImageLayout layout);
     uint32_t createStorageImageBinding(VkImageView view, VkImageLayout layout);
+    uint32_t createUniformBufferBinding(VkBuffer buffer);
+    uint32_t createStorageBufferBinding(VkBuffer buffer);
 
   private:
     VulkanRenderer& renderer;

@@ -8,7 +8,7 @@
 //  todo: include this header on c++ side aswell, so it does automatically
 //        hide all the shader specifics with #ifdef __cplusplus
 
-#define GLOBAL_SAMPLER_COUNT 1
+#define GLOBAL_SAMPLER_COUNT 32
 
 #define SAMPLED_IMG_SET 0
 #define STORAGE_IMG_SET 1
@@ -19,8 +19,11 @@ struct BufferHandle
 {
     uint index;
 };
-
 struct TextureHandle
+{
+    uint index;
+};
+struct SamplerHandle
 {
     uint index;
 };

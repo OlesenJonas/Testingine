@@ -1,5 +1,6 @@
 #include "Texture.hpp"
 #include "Graphics/Renderer/VulkanRenderer.hpp"
+#include "Graphics/Texture/Texture.hpp"
 #include <intern/Engine/Engine.hpp>
 #include <intern/Graphics/Renderer/VulkanDebug.hpp>
 #include <intern/ResourceManager/ResourceManager.hpp>
@@ -323,4 +324,82 @@ void ResourceManager::deleteTexture(Handle<Texture> handle)
     renderer.deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
 
     texturePool.remove(handle);
+}
+
+Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)
+{
+    // Check if such a sampler already exists
+
+    // since the sampler limit is quite low atm, and sampler creation should be a rare thing
+    // just doing a linear search here. Could of course hash the creation info and do some lookup
+    // in the future
+
+    for(uint32_t i = 0; i < freeSamplerIndex; i++)
+    {
+        Sampler::Info& entryInfo = samplerArray[i].info;
+        if(entryInfo == info)
+        {
+            return Handle<Sampler>{i, 1};
+        }
+    }
+
+    // Otherwise create a new sampler
+
+    Handle<Sampler> samplerHandle{freeSamplerIndex, 1};
+    freeSamplerIndex++;
+    Sampler* sampler = &samplerArray[samplerHandle.index];
+
+    VulkanRenderer& renderer = *VulkanRenderer::get();
+
+    VkSamplerCreateInfo createInfo{
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = info.flags,
+        .magFilter = info.magFilter,
+        .minFilter = info.minFilter,
+        .mipmapMode = info.mipmapMode,
+        .addressModeU = info.addressModeU,
+        .addressModeV = info.addressModeV,
+        .addressModeW = info.addressModeW,
+        .mipLodBias = info.mipLodBias,
+        .anisotropyEnable = info.anisotropyEnable,
+        .maxAnisotropy = info.maxAnisotropy,
+        .compareEnable = info.compareEnable,
+        .compareOp = info.compareOp,
+        .minLod = info.minLod,
+        .maxLod = info.maxLod,
+        .borderColor = info.borderColor,
+        .unnormalizedCoordinates = info.unnormalizedCoordinates,
+    };
+    sampler->info = info;
+
+    vkCreateSampler(renderer.device, &createInfo, nullptr, &sampler->sampler);
+
+    // setDebugName(tex->imageView, (std::string{name} + "_mainView").c_str());
+
+    sampler->resourceIndex = renderer.bindlessManager.createSamplerBinding(sampler->sampler, samplerHandle.index);
+
+    return samplerHandle;
+}
+
+bool operator==(const Sampler::Info& lhs, const Sampler::Info& rhs)
+{
+#define EQUAL_MEMBER(member) lhs.member == rhs.member
+    return EQUAL_MEMBER(flags) &&            //
+           EQUAL_MEMBER(magFilter) &&        //
+           EQUAL_MEMBER(minFilter) &&        //
+           EQUAL_MEMBER(mipmapMode) &&       //
+           EQUAL_MEMBER(addressModeU) &&     //
+           EQUAL_MEMBER(addressModeV) &&     //
+           EQUAL_MEMBER(addressModeW) &&     //
+           EQUAL_MEMBER(mipLodBias) &&       //
+           EQUAL_MEMBER(anisotropyEnable) && //
+           EQUAL_MEMBER(maxAnisotropy) &&    //
+           EQUAL_MEMBER(compareEnable) &&    //
+           EQUAL_MEMBER(compareOp) &&        //
+           EQUAL_MEMBER(minLod) &&           //
+           EQUAL_MEMBER(maxLod) &&           //
+           EQUAL_MEMBER(borderColor) &&      //
+           EQUAL_MEMBER(unnormalizedCoordinates);
+#undef EQUAL_MEMBER
 }
