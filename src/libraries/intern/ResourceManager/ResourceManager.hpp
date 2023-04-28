@@ -67,21 +67,15 @@ class ResourceManager
         return &samplerArray[handle.index];
     }
 
-    inline Handle<Mesh> getMesh(std::string_view name)
-    {
-        const auto iterator = nameToMeshLUT.find(name);
-        return (iterator == nameToMeshLUT.end()) ? Handle<Mesh>{} : iterator->second;
+#define NAME_TO_HANDLE_GETTER(T, LUT)                                                                             \
+    inline Handle<T> get##T(std::string_view name)                                                                \
+    {                                                                                                             \
+        const auto iterator = LUT.find(name);                                                                     \
+        return (iterator == LUT.end()) ? Handle<T>{} : iterator->second;                                          \
     }
-    inline Handle<Texture> getTexture(std::string_view name)
-    {
-        const auto iterator = nameToTextureLUT.find(name);
-        return (iterator == nameToTextureLUT.end()) ? Handle<Texture>{} : iterator->second;
-    }
-    inline Handle<Material> getMaterial(std::string_view name)
-    {
-        const auto iterator = nameToMaterialLUT.find(name);
-        return (iterator == nameToMaterialLUT.end()) ? Handle<Material>{} : iterator->second;
-    }
+    NAME_TO_HANDLE_GETTER(Mesh, nameToMeshLUT);
+    NAME_TO_HANDLE_GETTER(Texture, nameToTextureLUT);
+    NAME_TO_HANDLE_GETTER(Material, nameToMaterialLUT);
 
     void cleanup();
 
