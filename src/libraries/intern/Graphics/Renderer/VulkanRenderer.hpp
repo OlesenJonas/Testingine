@@ -13,17 +13,11 @@
 #include "BindlessManager.hpp"
 
 #include <intern/Datastructures/FunctionQueue.hpp>
+#include <intern/Misc/Macros.hpp>
 
 #include <array>
 #include <string>
 #include <unordered_map>
-
-// TODO: dont like this being here
-struct MeshPushConstants
-{
-    glm::vec4 data;
-    glm::mat4 transformMatrix;
-};
 
 struct GPUCameraData
 {
@@ -37,51 +31,21 @@ struct GPUObjectData
     glm::mat4 modelMatrix;
 };
 
-struct UploadContext
-{
-    VkFence uploadFence;
-    VkCommandPool commandPool;
-    VkCommandBuffer commandBuffer;
-};
-
-struct FrameData
-{
-    VkSemaphore imageAvailableSemaphore;
-    VkSemaphore renderFinishedSemaphore;
-    VkFence renderFence;
-    // todo: one command buffer for offscreen and one for present
-    VkCommandPool commandPool;
-    VkCommandBuffer mainCommandBuffer;
-
-    Handle<Buffer> cameraBuffer;
-    VkDescriptorSet globalDescriptor;
-
-    Handle<Buffer> objectBuffer;
-    VkDescriptorSet objectDescriptor;
-};
-
 class VulkanRenderer
 {
   public:
-    [[nodiscard]] static inline VulkanRenderer* get()
-    {
-        return ptr;
-    }
+    CREATE_STATIC_GETTER(VulkanRenderer);
 
-    // initializes everything in the engine
     void init();
-
-    // shuts down the engine
     void cleanup();
 
-    // draw function
     void draw();
 
     static constexpr int FRAMES_IN_FLIGHT = 2;
 
-    bool isInitialized{false};
+    bool isInitialized = false;
 
-    int frameNumber{0};
+    int frameNumber = 0;
 
 #ifdef ENABLE_VULKAN_VALIDATION
     bool enableValidationLayers = true;
@@ -108,8 +72,6 @@ class VulkanRenderer
 
     VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
     Handle<Texture> depthTexture;
-    // VkImageView depthImageView;
-    // AllocatedImage depthImage;
 
     VkQueue graphicsQueue;
     uint32_t graphicsQueueFamily;
@@ -117,11 +79,30 @@ class VulkanRenderer
     VkPipelineCache pipelineCache;
     const std::string_view pipelineCacheFile = "vkpipelinecache";
 
+    struct FrameData
+    {
+        VkSemaphore imageAvailableSemaphore;
+        VkSemaphore renderFinishedSemaphore;
+        VkFence renderFence;
+        VkCommandPool commandPool;
+        // todo: one command buffer for offscreen and one for present (at least)
+        VkCommandBuffer mainCommandBuffer;
+
+        Handle<Buffer> cameraBuffer;
+        Handle<Buffer> objectBuffer;
+    };
     FrameData perFrameData[FRAMES_IN_FLIGHT];
     inline FrameData& getCurrentFrameData()
     {
         return perFrameData[frameNumber % FRAMES_IN_FLIGHT];
     }
+
+    struct UploadContext
+    {
+        VkFence uploadFence;
+        VkCommandPool commandPool;
+        VkCommandBuffer commandBuffer;
+    };
     UploadContext uploadContext;
 
     FunctionQueue<> deleteQueue;
@@ -147,17 +128,13 @@ class VulkanRenderer
 
     std::vector<RenderObject> renderables;
 
-    // Wait until all currently submitted GPU commands are executed
+    void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
+    // Waits until all currently submitted GPU commands are executed
     void waitForWorkFinished();
 
-    // TODO: refactor to take span
     void drawObjects(VkCommandBuffer cmd, RenderObject* first, int count);
 
-    void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
-
   private:
-    inline static VulkanRenderer* ptr = nullptr;
-
     void initVulkan();
     void initSwapchain();
     void initCommands();

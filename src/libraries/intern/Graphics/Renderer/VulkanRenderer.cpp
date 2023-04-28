@@ -137,7 +137,7 @@ void VulkanRenderer::initCommands()
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .pNext = nullptr,
 
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .flags = 0,
         .queueFamilyIndex = graphicsQueueFamily,
     };
 
@@ -452,7 +452,8 @@ void VulkanRenderer::draw()
     assertVkResult(vkAcquireNextImageKHR(
         device, swapchain, UINT64_MAX, curFrameData.imageAvailableSemaphore, nullptr, &swapchainImageIndex));
 
-    assertVkResult(vkResetCommandBuffer(curFrameData.mainCommandBuffer, 0));
+    // Reset all command buffers for current frame
+    assertVkResult(vkResetCommandPool(device, curFrameData.commandPool, 0));
 
     VkCommandBufferBeginInfo cmdBeginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,

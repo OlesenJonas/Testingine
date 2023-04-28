@@ -15,3 +15,14 @@
     // #define BREAKPOINT __builtin_trap()
     #define BREAKPOINT
 #endif
+
+#define CREATE_STATIC_GETTER(T)                                                                                   \
+  private:                                                                                                        \
+    inline static T* ptr = nullptr;                                                                               \
+                                                                                                                  \
+  public:                                                                                                         \
+    [[nodiscard]] static inline T* get()                                                                          \
+    {                                                                                                             \
+        assert(ptr != nullptr);                                                                                   \
+        return ptr;                                                                                               \
+    }
