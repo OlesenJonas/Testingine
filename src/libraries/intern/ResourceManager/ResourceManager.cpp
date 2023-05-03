@@ -25,6 +25,22 @@ void ResourceManager::cleanup()
             [=]() { vkDestroySampler(VulkanRenderer::get()->device, samplerArray[i].sampler, nullptr); });
     }
 
+    // todo: macro, lambda, or smth
+
+    Handle<MaterialInstance> materialInstanceHandle = materialInstancePool.getFirst();
+    while(materialInstanceHandle.isValid())
+    {
+        free(materialInstanceHandle);
+        materialInstanceHandle = materialInstancePool.getFirst();
+    }
+
+    Handle<Material> materialHandle = materialPool.getFirst();
+    while(materialHandle.isValid())
+    {
+        free(materialHandle);
+        materialHandle = materialPool.getFirst();
+    }
+
     Handle<Texture> texHandle = texturePool.getFirst();
     while(texHandle.isValid())
     {
@@ -44,12 +60,5 @@ void ResourceManager::cleanup()
     {
         deleteMesh(meshHandle);
         meshHandle = meshPool.getFirst();
-    }
-
-    Handle<Material> materialHandle = materialPool.getFirst();
-    while(materialHandle.isValid())
-    {
-        free(materialHandle);
-        materialHandle = materialPool.getFirst();
     }
 }

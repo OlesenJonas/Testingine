@@ -5,6 +5,7 @@
 #include <intern/Datastructures/Span.hpp>
 #include <intern/Graphics/Buffer/Buffer.hpp>
 #include <intern/Graphics/Material/Material.hpp>
+#include <intern/Graphics/Material/MaterialInstance.hpp>
 #include <intern/Graphics/Mesh/Mesh.hpp>
 #include <intern/Graphics/Texture/Texture.hpp>
 #include <intern/Graphics/Texture/TextureView.hpp>
@@ -21,12 +22,9 @@
 class ResourceManager
 {
   public:
-    void init();
+    CREATE_STATIC_GETTER(ResourceManager);
 
-    [[nodiscard]] static inline ResourceManager* get()
-    {
-        return ptr;
-    }
+    void init();
 
     Handle<Buffer> createBuffer(Buffer::CreateInfo info, std::string_view name = "");
 
@@ -38,15 +36,18 @@ class ResourceManager
     // Handle<Texture> createTextureView(Handle<Texture> texture, TextureView::Info info, std::string_view name);
 
     Handle<Material> createMaterial(Material::CreateInfo crInfo, std::string_view name = "");
+    Handle<MaterialInstance> createMaterialInstance(Handle<Material> material);
 
     Handle<Sampler> createSampler(Sampler::Info&& info);
 
+    // todo: track resource usage so no stuff thats in use gets deleted
     // todo: rename all these to just free(Handle<...>)?
     void deleteBuffer(Handle<Buffer> handle);
     void deleteMesh(Handle<Mesh> handle);
     void deleteTexture(Handle<Texture> handle);
     // like here
     void free(Handle<Material> handle);
+    void free(Handle<MaterialInstance> handle);
     // no explicit free function for samplers, since they could be used in multiple places
     // and usages arent tracked yet!
 
@@ -61,6 +62,7 @@ class ResourceManager
     HANDLE_TO_PTR_GETTER(Mesh, meshPool);
     HANDLE_TO_PTR_GETTER(Texture, texturePool);
     HANDLE_TO_PTR_GETTER(Material, materialPool);
+    HANDLE_TO_PTR_GETTER(MaterialInstance, materialInstancePool);
     // Samplers dont use pool, so special getter needed
     inline Sampler* get(Handle<Sampler> handle)
     {
@@ -82,8 +84,6 @@ class ResourceManager
     constexpr static uint32_t samplerLimit = 32;
 
   private:
-    inline static ResourceManager* ptr = nullptr;
-
     // just using standard unordered_map here, because I dont want to think about yet another datastructure atm
     std::unordered_map<std::string, Handle<Mesh>, StringHash, std::equal_to<>> nameToMeshLUT;
     std::unordered_map<std::string, Handle<Texture>, StringHash, std::equal_to<>> nameToTextureLUT;
@@ -93,6 +93,7 @@ class ResourceManager
     Pool<Mesh> meshPool{10};
     Pool<Texture> texturePool{10};
     Pool<Material> materialPool{10};
+    Pool<MaterialInstance> materialInstancePool{10};
 
     // this value needs to match the one in bindless.glsl!
     // todo: could pass this as a define to shader compilation I guess

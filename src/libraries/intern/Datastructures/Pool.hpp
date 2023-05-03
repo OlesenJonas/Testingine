@@ -47,10 +47,14 @@ class Handle
     {
         return index != other.index || generation != other.generation;
     }
+    [[nodiscard]] uint32_t hash() const
+    {
+        return (uint32_t(index) << 16u) + uint32_t(generation);
+    }
 
   private:
-    uint32_t index = 0;
-    uint32_t generation = 0;
+    uint16_t index = 0;
+    uint16_t generation = 0;
 
     template <typename U>
     friend class Pool;

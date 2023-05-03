@@ -1,5 +1,6 @@
 #include "Material.hpp"
 #include <SPIRV-Reflect/spirv_reflect.h>
+#include <intern/Datastructures/ArraySize.hpp>
 #include <intern/Graphics/Renderer/VulkanDebug.hpp>
 #include <intern/Graphics/Renderer/VulkanRenderer.hpp>
 #include <intern/Graphics/Shaders/Shaders.hpp>
@@ -74,29 +75,33 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
         fragModule.descriptor_bindings, fragModule.descriptor_binding_count};
 
     SpvReflectDescriptorBinding* materialParametersBinding = nullptr;
-    // Find (if it exists) the material parameter binding
-    for(int i = 0; i < vertDescriptorBindings.size() && materialParametersBinding == nullptr; i++)
+    SpvReflectDescriptorBinding* materialInstanceParametersBinding = nullptr;
+    // Find (if it exists) the material(-instance) parameter binding
+    for(auto& binding : vertDescriptorBindings)
     {
-        auto& binding = vertDescriptorBindings[i];
         if(strcmp(binding.name, "globalMaterialParametersBuffers") == 0)
             materialParametersBinding = &binding;
+        if(strcmp(binding.name, "globalMaterialInstanceParametersBuffers") == 0)
+            materialInstanceParametersBinding = &binding;
     }
-    for(int i = 0; i < fragDescriptorBindings.size() && materialParametersBinding == nullptr; i++)
+    for(auto& binding : fragDescriptorBindings)
     {
-        auto& binding = fragDescriptorBindings[i];
         if(strcmp(binding.name, "globalMaterialParametersBuffers") == 0)
             materialParametersBinding = &binding;
+        if(strcmp(binding.name, "globalMaterialInstanceParametersBuffers") == 0)
+            materialInstanceParametersBinding = &binding;
     }
 
     if(materialParametersBinding != nullptr)
     {
         material->parametersBufferSize = materialParametersBinding->block.padded_size;
-        material->parametersBufferCPU = (char*)malloc(material->parametersBufferSize);
-        memset(material->parametersBufferCPU, 0, material->parametersBufferSize);
+        material->parameters.bufferSize = materialParametersBinding->block.padded_size;
+        material->parameters.cpuBuffer = (char*)malloc(material->parameters.bufferSize);
+        memset(material->parameters.cpuBuffer, 0, material->parameters.bufferSize);
 
         // Store offset (and size?) as LUT by name for writing parameters later
-        material->parametersLUT =
-            new std::unordered_map<std::string, Material::ParameterInfo, StringHash, std::equal_to<>>;
+        material->parametersLUT = new std::unordered_map<std::string, ParameterInfo, StringHash, std::equal_to<>>;
+        material->parameters.lut = material->parametersLUT;
         auto& LUT = *material->parametersLUT;
 
         std::span<SpvReflectBlockVariable> members{
@@ -108,7 +113,7 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
 
             auto insertion = LUT.try_emplace(
                 member.name,
-                Material::ParameterInfo{
+                ParameterInfo{
                     .byteSize = (uint16_t)member.padded_size,
                     // not sure what absolute offset is, but .offset seems to work
                     .byteOffsetInBuffer = (uint16_t)member.offset,
@@ -118,10 +123,10 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
 
         for(int i = 0; i < VulkanRenderer::FRAMES_IN_FLIGHT; i++)
         {
-            material->parametersBuffers[i] = createBuffer(Buffer::CreateInfo{
+            material->parameters.gpuBuffers[i] = createBuffer(Buffer::CreateInfo{
                 .info =
                     {
-                        .size = material->parametersBufferSize,
+                        .size = material->parameters.bufferSize,
                         .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                         .memoryAllocationInfo =
                             {
@@ -132,7 +137,37 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
                                                                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                             },
                     },
-                .initialData = material->parametersBufferCPU});
+                .initialData = material->parameters.cpuBuffer});
+        }
+    }
+
+    if(materialInstanceParametersBinding != nullptr)
+    {
+        // only create parameter LUT, actual buffers will be allocated when instances are created
+
+        material->instanceParametersBufferSize = materialInstanceParametersBinding->block.padded_size;
+
+        // Store offset (and size?) as LUT by name for writing parameters later
+        material->instanceParametersLUT =
+            new std::unordered_map<std::string, ParameterInfo, StringHash, std::equal_to<>>;
+        auto& LUT = *material->instanceParametersLUT;
+
+        std::span<SpvReflectBlockVariable> members{
+            materialInstanceParametersBinding->block.members,
+            materialInstanceParametersBinding->block.member_count};
+
+        for(auto& member : members)
+        {
+            assert(member.padded_size >= member.size);
+
+            auto insertion = LUT.try_emplace(
+                member.name,
+                ParameterInfo{
+                    .byteSize = (uint16_t)member.padded_size,
+                    // not sure what absolute offset is, but .offset seems to work
+                    .byteOffsetInBuffer = (uint16_t)member.offset,
+                });
+            assert(insertion.second); // assertion must have happened, otherwise something is srsly wrong
         }
     }
 
@@ -151,20 +186,38 @@ void ResourceManager::free(Handle<Material> handle)
         return;
     }
 
-    VkDevice device = VulkanRenderer::get()->device;
+    VulkanRenderer& renderer = *VulkanRenderer::get();
+    VkDevice device = renderer.device;
+    const VmaAllocator* allocator = &renderer.allocator;
 
-    if(material->parametersBufferCPU != nullptr)
-        ::free(material->parametersBufferCPU);
+    if(material->parameters.cpuBuffer != nullptr)
+    {
+        ::free(material->parameters.cpuBuffer);
+
+        uint32_t bufferCount = ArraySize(material->parameters.gpuBuffers);
+        for(int i = 0; i < bufferCount; i++)
+        {
+            Handle<Buffer> bufferHandle = material->parameters.gpuBuffers[i];
+            const Buffer* buffer = get(bufferHandle);
+            if(buffer == nullptr)
+            {
+                return;
+            }
+            const VkBuffer vkBuffer = buffer->buffer;
+            const VmaAllocation vmaAllocation = buffer->allocation;
+            renderer.deleteQueue.pushBack([=]() { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
+            bufferPool.remove(bufferHandle);
+        }
+    }
 
     delete material->parametersLUT;
 
     if(material->pipeline != VK_NULL_HANDLE)
     {
-        VulkanRenderer::get()->deleteQueue.pushBack([=]()
-                                                    { vkDestroyPipeline(device, material->pipeline, nullptr); });
+        renderer.deleteQueue.pushBack([=]() { vkDestroyPipeline(device, material->pipeline, nullptr); });
     }
 
-    VulkanRenderer::get()->deleteQueue.pushBack(
+    renderer.deleteQueue.pushBack(
         [=]()
         {
             vkDestroyShaderModule(device, material->vertexShader, nullptr);
@@ -340,36 +393,4 @@ void Material::createPipeline()
         std::cout << "Failed to create pipeline!" << std::endl;
         assert(false);
     }
-}
-
-bool Material::hasMaterialParameters()
-{
-    return parametersBufferCPU != nullptr;
-}
-
-void Material::setResource(std::string_view name, uint32_t index)
-{
-    const auto& iterator = parametersLUT->find(name);
-    if(iterator == parametersLUT->end())
-    {
-        // todo: emit some warning
-        return;
-    }
-    const auto& parameterInfo = iterator->second;
-    auto* ptr = (uint32_t*)&(parametersBufferCPU[parameterInfo.byteOffsetInBuffer]);
-    *ptr = index;
-}
-
-void Material::pushParameterChanges()
-{
-    // Copy changes over to next vulkan buffer and set it as active
-    uint8_t newIndex = (currentBufferIndex + 1) % VulkanRenderer::FRAMES_IN_FLIGHT;
-    Buffer* paramsBuffer = ResourceManager::get()->get(parametersBuffers[newIndex]);
-    memcpy(paramsBuffer->allocInfo.pMappedData, parametersBufferCPU, parametersBufferSize);
-    currentBufferIndex = newIndex;
-}
-
-Handle<Buffer> Material::getMaterialParametersBuffer()
-{
-    return parametersBuffers[currentBufferIndex];
 }

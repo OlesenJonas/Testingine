@@ -718,6 +718,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
 
     Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
     Handle<Material> lastMaterial = Handle<Material>::Invalid();
+    Handle<MaterialInstance> lastMaterialInstance = Handle<MaterialInstance>::Invalid();
     uint32_t vertCount = 0;
 
     for(int i = 0; i < count; i++)
@@ -725,20 +726,28 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
         RenderObject& object = first[i];
 
         Handle<Mesh> objectMesh = object.mesh;
-        Handle<Material> objectMaterial = object.material;
+        Handle<MaterialInstance> objectMaterialInstance = object.materialInstance;
 
-        if(objectMaterial != lastMaterial)
+        if(objectMaterialInstance != lastMaterialInstance)
         {
-            Material* newMat = rm->get(objectMaterial);
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, newMat->pipeline);
-            if(newMat->hasMaterialParameters())
+            MaterialInstance* newMatInst = rm->get(objectMaterialInstance);
+            if(newMatInst->parentMaterial != lastMaterial)
             {
-                Buffer* materialParamsBuffer = rm->get(newMat->getMaterialParametersBuffer());
-                pushConstants.materialParamsBuffer = materialParamsBuffer->uniformResourceIndex;
-                lastMaterial = objectMaterial;
+                Material* newMat = rm->get(newMatInst->parentMaterial);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, newMat->pipeline);
+                Buffer* materialParamsBuffer = rm->get(newMat->parameters.getGPUBuffer());
+                if(materialParamsBuffer != nullptr)
+                {
+                    pushConstants.materialParamsBuffer = materialParamsBuffer->uniformResourceIndex;
+                }
+                lastMaterial = newMatInst->parentMaterial;
             }
-            // todo: some check / other way to make sure shader doesnt actually access the material params buffer
-            // shouldnt be the case, otherwise reflection wouldve filled the material params member
+
+            Buffer* materialInstanceParamsBuffer = rm->get(newMatInst->parameters.getGPUBuffer());
+            if(materialInstanceParamsBuffer != nullptr)
+            {
+                pushConstants.materialInstanceParamsBuffer = materialInstanceParamsBuffer->uniformResourceIndex;
+            }
         }
 
         pushConstants.transformIndex = i;

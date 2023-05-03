@@ -1,11 +1,12 @@
-#include "intern/ResourceManager/ResourceManager.hpp"
 #include <glm/gtx/transform.hpp>
 #include <intern/Engine/Engine.hpp>
 #include <intern/Graphics/Renderer/VulkanRenderer.hpp>
 #include <vulkan/vulkan_core.h>
 
-void initResources()
+void initScene()
 {
+    // Resources
+
     ResourceManager* rm = ResourceManager::get();
 
     std::vector<Vertex> triangleVertices;
@@ -57,27 +58,25 @@ void initResources()
         },
         "texturedMesh");
 
-    Material* mat = rm->get(texturedMaterial);
-    mat->setResource("colorTexture", rm->get(lostEmpireTex)->sampledResourceIndex);
-    mat->setResource("blockySampler", rm->get(blockySampler)->resourceIndex);
-    mat->pushParameterChanges();
-}
+    auto solidMaterialInstance = rm->createMaterialInstance(defaultMaterial);
+    auto texturedMaterialInstance = rm->createMaterialInstance(texturedMaterial);
 
-void initScene()
-{
-    initResources();
+    MaterialInstance* matInst = rm->get(texturedMaterialInstance);
+    matInst->parameters.setResource("colorTexture", rm->get(lostEmpireTex)->sampledResourceIndex);
+    matInst->parameters.setResource("blockySampler", rm->get(blockySampler)->resourceIndex);
+    matInst->parameters.pushChanges();
 
-    ResourceManager* rm = ResourceManager::get();
+    // Scene
 
     auto& renderables = VulkanRenderer::get()->renderables;
 
     const auto& newRenderable = renderables.emplace_back(RenderObject{
         .mesh = rm->getMesh("monkey"),
-        .material = rm->getMaterial("defaultMesh"),
+        .materialInstance = solidMaterialInstance,
         .transformMatrix = glm::mat4{1.0f},
     });
     assert(newRenderable.mesh.isValid());
-    assert(newRenderable.material.isValid());
+    assert(newRenderable.materialInstance.isValid());
 
     for(int x = -20; x <= 20; x++)
     {
@@ -88,17 +87,17 @@ void initScene()
 
             const auto& newRenderable = renderables.emplace_back(RenderObject{
                 .mesh = rm->getMesh("triangle"),
-                .material = rm->getMaterial("defaultMesh"),
+                .materialInstance = solidMaterialInstance,
                 .transformMatrix = translation * scale,
             });
             assert(newRenderable.mesh.isValid());
-            assert(newRenderable.material.isValid());
+            assert(newRenderable.materialInstance.isValid());
         }
     }
 
     RenderObject map;
     map.mesh = rm->getMesh("empire");
-    map.material = rm->getMaterial("texturedMesh");
+    map.materialInstance = texturedMaterialInstance;
     map.transformMatrix = glm::translate(glm::vec3{5.0f, -10.0f, 0.0f});
     renderables.push_back(map);
 }

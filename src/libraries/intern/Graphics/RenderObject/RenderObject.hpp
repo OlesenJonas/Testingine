@@ -4,17 +4,14 @@
 
 #include <intern/Datastructures/Pool.hpp>
 
-// #include "../Material/Material.hpp"
-// #include "../Mesh/Mesh.hpp"
-
 struct Mesh;
-struct Material;
+struct MaterialInstance;
 
 struct RenderObject
 {
     Handle<Mesh> mesh;
 
-    Handle<Material> material;
+    Handle<MaterialInstance> materialInstance;
 
     glm::mat4 transformMatrix;
 };
