@@ -5,6 +5,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <intern/Datastructures/Pool.hpp>
+#include <intern/Datastructures/Span.hpp>
 #include <string>
 #include <vector>
 #include <vulkan/vulkan_core.h>
@@ -15,22 +16,18 @@ struct VertexInputDescription
 {
     std::vector<VkVertexInputBindingDescription> bindings;
     std::vector<VkVertexInputAttributeDescription> attributes;
-
-    VkPipelineVertexInputStateCreateFlags flags = 0;
-};
-
-struct Vertex
-{
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec3 color;
-    glm::vec2 uv;
-
-    static VertexInputDescription getVertexDescription();
+    static VertexInputDescription getDefault();
 };
 
 struct Mesh
 {
+    struct VertexAttributes
+    {
+        glm::vec3 normal;
+        glm::vec3 color;
+        glm::vec2 uv;
+    };
+
     // std::vector<Vertex> vertices;
 
     // todo: does this need to be here?
@@ -40,7 +37,8 @@ struct Mesh
 
     uint32_t vertexCount = 0;
 
-    Handle<Buffer> vertexBuffer;
+    Handle<Buffer> positionBuffer;
+    Handle<Buffer> attributeBuffer;
 
     // bool loadFromObj(const char* filename);
 };

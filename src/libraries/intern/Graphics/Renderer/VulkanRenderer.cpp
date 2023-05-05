@@ -758,9 +758,11 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
         {
             Mesh* newMesh = rm->get(objectMesh);
             vertCount = newMesh->vertexCount;
-            Buffer* vertexBuffer = rm->get(newMesh->vertexBuffer);
-            VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer->buffer, &offset);
+            Buffer* positionBuffer = rm->get(newMesh->positionBuffer);
+            Buffer* attributeBuffer = rm->get(newMesh->attributeBuffer);
+            const VkBuffer buffers[2] = {positionBuffer->buffer, attributeBuffer->buffer};
+            const VkDeviceSize offsets[2] = {0, 0};
+            vkCmdBindVertexBuffers(cmd, 0, 2, &buffers[0], &offsets[0]);
             lastMesh = objectMesh;
         }
 

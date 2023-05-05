@@ -254,7 +254,7 @@ void Material::createPipeline()
         },
     };
 
-    const VertexInputDescription vertexDescription = Vertex::getVertexDescription();
+    const VertexInputDescription vertexDescription = VertexInputDescription::getDefault();
     const VkPipelineVertexInputStateCreateInfo vertexInputStateCrInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = nullptr,

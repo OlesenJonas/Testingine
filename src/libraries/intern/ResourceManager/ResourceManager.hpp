@@ -29,7 +29,8 @@ class ResourceManager
     Handle<Buffer> createBuffer(Buffer::CreateInfo info, std::string_view name = "");
 
     Handle<Mesh> createMesh(const char* file, std::string_view name = "");
-    Handle<Mesh> createMesh(Span<Vertex> vertices, std::string_view name);
+    Handle<Mesh> createMesh(
+        Span<glm::vec3> vertexPositions, Span<Mesh::VertexAttributes> vertexAttributes, std::string_view name);
 
     Handle<Texture> createTexture(const char* file, VkImageUsageFlags usage, std::string_view name = "");
     Handle<Texture> createTexture(Texture::Info info, std::string_view name);

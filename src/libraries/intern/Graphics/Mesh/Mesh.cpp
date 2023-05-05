@@ -3,49 +3,55 @@
 #include <intern/ResourceManager/ResourceManager.hpp>
 #include <iostream>
 
-VertexInputDescription Vertex::getVertexDescription()
+VertexInputDescription VertexInputDescription::getDefault()
 {
     VertexInputDescription description;
 
-    VkVertexInputBindingDescription mainBinding = {};
-    mainBinding.binding = 0;
-    mainBinding.stride = sizeof(Vertex);
-    mainBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-    description.bindings.push_back(mainBinding);
+    constexpr VkVertexInputBindingDescription positionBinding = {
+        .binding = 0,
+        .stride = sizeof(glm::vec3),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+    };
+    constexpr VkVertexInputBindingDescription attributeBinding = {
+        .binding = 1,
+        .stride = sizeof(Mesh::VertexAttributes),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+    };
+    description.bindings = {positionBinding, attributeBinding};
 
     // Position will be stored at location 0
-    VkVertexInputAttributeDescription positionAttribute = {};
-    positionAttribute.binding = 0;
-    positionAttribute.location = 0;
-    positionAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
-    positionAttribute.offset = offsetof(Vertex, position);
+    constexpr VkVertexInputAttributeDescription positionAttribute = {
+        .location = 0,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = 0,
+    };
 
     // Normal will be stored at location 1
-    VkVertexInputAttributeDescription normalAttribute = {};
-    normalAttribute.binding = 0;
-    normalAttribute.location = 1;
-    normalAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
-    normalAttribute.offset = offsetof(Vertex, normal);
+    constexpr VkVertexInputAttributeDescription normalAttribute = {
+        .location = 1,
+        .binding = 1,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = offsetof(Mesh::VertexAttributes, normal),
+    };
 
     // Color will be stored at location 2
-    VkVertexInputAttributeDescription colorAttribute = {};
-    colorAttribute.binding = 0;
-    colorAttribute.location = 2;
-    colorAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
-    colorAttribute.offset = offsetof(Vertex, color);
+    VkVertexInputAttributeDescription colorAttribute = {
+        .location = 2,
+        .binding = 1,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = offsetof(Mesh::VertexAttributes, color),
+    };
 
     // UVs will be stored at location 3
-    VkVertexInputAttributeDescription uvAttribute = {};
-    uvAttribute.binding = 0;
-    uvAttribute.location = 3;
-    uvAttribute.format = VK_FORMAT_R32G32_SFLOAT;
-    uvAttribute.offset = offsetof(Vertex, uv);
+    VkVertexInputAttributeDescription uvAttribute = {
+        .location = 3,
+        .binding = 1,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = offsetof(Mesh::VertexAttributes, uv),
+    };
 
-    description.attributes.push_back(positionAttribute);
-    description.attributes.push_back(normalAttribute);
-    description.attributes.push_back(colorAttribute);
-    description.attributes.push_back(uvAttribute);
+    description.attributes = {positionAttribute, normalAttribute, colorAttribute, uvAttribute};
 
     return description;
 }
@@ -77,7 +83,8 @@ Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name
         return {};
     }
 
-    std::vector<Vertex> vertices;
+    std::vector<glm::vec3> vertexPositions;
+    std::vector<Mesh::VertexAttributes> vertexAttributes;
 
     // TODO: **VERY** unoptimized, barebones
     for(size_t s = 0; s < shapes.size(); s++)
@@ -105,11 +112,10 @@ Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name
                 tinyobj::real_t uvx = attrib.texcoords[2 * idx.texcoord_index + 0];
                 tinyobj::real_t uvy = attrib.texcoords[2 * idx.texcoord_index + 1];
 
-                vertices.push_back({
-                    .position = {vx, vy, vz},
+                vertexPositions.emplace_back(vx, vy, vz);
+                vertexAttributes.emplace_back(Mesh::VertexAttributes{
                     .normal = {nx, ny, nz},
                     .color = {nx, ny, nz},
-                    // todo: parameterize UV-y flip
                     .uv = {uvx, 1.0 - uvy},
                 });
             }
@@ -117,56 +123,53 @@ Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name
         }
     }
 
-    Handle<Buffer> vertexBufferHandle = createBuffer(
-        {
-            .info =
-                {
-                    .size = vertices.size() * sizeof(Vertex),
-                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                    .memoryAllocationInfo =
-                        {
-                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                        },
-                },
-            .initialData = vertices.data(),
-        },
-        std::string{meshName} + "_vertexBuffer");
-
-    // todo: handle naming collisions
-    auto iterator = nameToMeshLUT.find(meshName);
-    assert(iterator == nameToMeshLUT.end());
-
-    Handle<Mesh> newMeshHandle = meshPool.insert(
-        Mesh{.name{meshName}, .vertexCount = uint32_t(vertices.size()), .vertexBuffer = vertexBufferHandle});
-
-    nameToMeshLUT.insert({std::string{meshName}, newMeshHandle});
-
-    return newMeshHandle;
+    return createMesh(vertexPositions, vertexAttributes, meshName);
 }
 
-Handle<Mesh> ResourceManager::createMesh(Span<Vertex> vertices, std::string_view name)
+Handle<Mesh> ResourceManager::createMesh(
+    Span<glm::vec3> vertexPositions, Span<Mesh::VertexAttributes> vertexAttributes, std::string_view name)
 {
+    assert(vertexAttributes.size() == vertexPositions.size());
+
     // todo: handle naming collisions
     auto iterator = nameToMeshLUT.find(name);
     assert(iterator == nameToMeshLUT.end());
 
-    Handle<Buffer> vertexBufferHandle = createBuffer(
+    Handle<Buffer> positionBufferHandle = createBuffer(
         {
             .info =
                 {
-                    .size = vertices.size() * sizeof(Vertex),
+                    .size = vertexPositions.size() * sizeof(glm::vec3),
                     .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                     .memoryAllocationInfo =
                         {
                             .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                         },
                 },
-            .initialData = vertices.data(),
+            .initialData = vertexPositions.data(),
         },
-        std::string{name} + "_vertexBuffer");
+        std::string{name} + "_positionsBuffer");
 
-    Handle<Mesh> newMeshHandle = meshPool.insert(
-        Mesh{.name{name}, .vertexCount = uint32_t(vertices.size()), .vertexBuffer = vertexBufferHandle});
+    Handle<Buffer> attributesBufferHandle = createBuffer(
+        {
+            .info =
+                {
+                    .size = vertexAttributes.size() * sizeof(vertexAttributes[0]),
+                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    .memoryAllocationInfo =
+                        {
+                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        },
+                },
+            .initialData = vertexAttributes.data(),
+        },
+        std::string{name} + "_attributesBuffer");
+
+    Handle<Mesh> newMeshHandle = meshPool.insert(Mesh{
+        .name{name},
+        .vertexCount = uint32_t(vertexPositions.size()),
+        .positionBuffer = positionBufferHandle,
+        .attributeBuffer = attributesBufferHandle});
 
     nameToMeshLUT.insert({std::string{name}, newMeshHandle});
 
@@ -181,7 +184,7 @@ void ResourceManager::deleteMesh(Handle<Mesh> handle)
         also need to ensure renderer deletes !all! objects from per frame queue during shutdown, ignoring the
             current frame!
     */
-    // currently doesnt own any data, so only need to remove the vertex buffers it points to
-    deleteBuffer(get(handle)->vertexBuffer);
+    deleteBuffer(get(handle)->positionBuffer);
+    deleteBuffer(get(handle)->attributeBuffer);
     meshPool.remove(handle);
 }

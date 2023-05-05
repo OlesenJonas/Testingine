@@ -9,18 +9,20 @@ void initScene()
 
     ResourceManager* rm = ResourceManager::get();
 
-    std::vector<Vertex> triangleVertices;
-    triangleVertices.resize(3);
+    std::vector<glm::vec3> triangleVertexPositions;
+    std::vector<Mesh::VertexAttributes> triangleVertexAttributes;
+    triangleVertexPositions.resize(3);
+    triangleVertexAttributes.resize(3);
 
-    triangleVertices[0].position = {1.f, 1.f, 0.0f};
-    triangleVertices[1].position = {-1.f, 1.f, 0.0f};
-    triangleVertices[2].position = {0.f, -1.f, 0.0f};
+    triangleVertexPositions[0] = {1.f, 1.f, 0.0f};
+    triangleVertexPositions[1] = {-1.f, 1.f, 0.0f};
+    triangleVertexPositions[2] = {0.f, -1.f, 0.0f};
 
-    triangleVertices[0].color = {0.0f, 1.0f, 0.0f};
-    triangleVertices[1].color = {0.0f, 1.0f, 0.0f};
-    triangleVertices[2].color = {0.0f, 1.0f, 0.0f};
+    triangleVertexAttributes[0].color = {0.0f, 1.0f, 0.0f};
+    triangleVertexAttributes[1].color = {0.0f, 1.0f, 0.0f};
+    triangleVertexAttributes[2].color = {0.0f, 1.0f, 0.0f};
 
-    auto triangleMesh = rm->createMesh(triangleVertices, "triangle");
+    auto triangleMesh = rm->createMesh(triangleVertexPositions, triangleVertexAttributes, "triangle");
 
     auto monkeyMesh = rm->createMesh(ASSETS_PATH "/vkguide/monkey_smooth.obj", "monkey");
 
