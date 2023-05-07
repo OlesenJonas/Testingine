@@ -23,6 +23,6 @@
   public:                                                                                                         \
     [[nodiscard]] static inline T* get()                                                                          \
     {                                                                                                             \
-        assert(ptr != nullptr);                                                                                   \
+        assert(ptr != nullptr && "Static pointer for type " #T "was not initialized!");                           \
         return ptr;                                                                                               \
     }

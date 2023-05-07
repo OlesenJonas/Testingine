@@ -7,6 +7,7 @@ target_link_libraries(intern PUBLIC glfw)
 target_link_libraries(intern PUBLIC glm::glm)
 target_link_libraries(intern PUBLIC VMA)
 target_link_libraries(intern PUBLIC SPIRV-Reflect)
+target_link_libraries(intern PRIVATE EASTL)
 
 IF(VULKAN_ENABLE_VALIDATION)
     message(STATUS "Compiling with vulkan validation enabled")

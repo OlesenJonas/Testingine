@@ -1,9 +1,11 @@
 #pragma once
 
 #include <intern/Camera/Camera.hpp>
+#include <intern/ECS/ECS.hpp>
 #include <intern/Graphics/Renderer/VulkanRenderer.hpp>
 #include <intern/InputManager/InputManager.hpp>
 #include <intern/ResourceManager/ResourceManager.hpp>
+#include <intern/Scene/Scene.hpp>
 #include <intern/Window/Window.hpp>
 
 class Engine
@@ -42,13 +44,16 @@ class Engine
         return &resourceManager;
     }
 
+    ECS ecs;
+    Scene scene;
+
   private:
     bool _isRunning = true;
 
     inline static Engine* ptr = nullptr;
     InputManager inputManager;
-    Camera mainCamera;
     Window mainWindow;
     VulkanRenderer renderer;
     ResourceManager resourceManager;
+    Camera mainCamera;
 };
