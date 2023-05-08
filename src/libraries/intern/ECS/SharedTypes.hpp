@@ -21,24 +21,18 @@ namespace std
         std::size_t operator()(const ComponentMask& key) const
         {
             static_assert(is_same_v<ComponentMask::word_type, uint64_t>);
-            // dont think eastl bitset guarantees that any bits > size are kept at 0
-            // so have to do that ourselves
-            constexpr uint32_t amountBitsToClear = (MAX_COMPONENT_TYPES % 64u) == 0
-                                                       ? 0 //
-                                                       : 64 - (MAX_COMPONENT_TYPES % 64u);
-            constexpr uint64_t mask = (~uint64_t(0)) << amountBitsToClear;
+            // eastl bitset guarantees that any bits > size are kept at 0, dont have to worry about that
             if constexpr(ComponentMask::kWordCount == 1)
             {
-                return (key.mWord[0] & mask);
+                return key.mWord[0];
             }
             else
             {
                 uint64_t hash = 0;
-                for(int i = 0; i < key.kWordCount - 1; i++)
+                for(int i = 0; i < key.kWordCount; i++)
                 {
                     hash ^= key.mWord[i];
                 }
-                hash ^= (key.mWord[key.kWordCount - 1] & mask);
                 return hash;
             }
         }
