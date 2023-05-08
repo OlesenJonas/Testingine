@@ -34,7 +34,7 @@ void ECS::registerComponent()
 }
 
 template <typename C, typename... Args>
-C& ECS::addComponent(Entity* entity, Args&&... args)
+C* ECS::addComponent(Entity* entity, Args&&... args)
 {
     auto archetypeEntryIt = entityLUT.find(entity->id);
     assert(archetypeEntryIt != entityLUT.end());
@@ -53,18 +53,21 @@ C& ECS::addComponent(Entity* entity, Args&&... args)
 
     const uint32_t newArchetypeCompCount = mask.count();
 
+    C* newComponent = nullptr;
     Archetype* newArchetype = nullptr;
     auto newArchetypeIter = archetypeLUT.find(mask);
+    uint32_t newArchetypeIndex = 0xFFFFFFFF;
     // Create new archetype with needed components if it doesnt exist yet
     if(newArchetypeIter == archetypeLUT.end())
     {
-        uint32_t newArchetypeIndex = createArchetype(mask);
-        newArchetype = &archetypes[newArchetypeIndex];
+        newArchetypeIndex = createArchetype(mask);
     }
     else
     {
-        newArchetype = &archetypes[newArchetypeIter->second];
+        newArchetypeIndex = newArchetypeIter->second;
     }
+    newArchetype = &archetypes[newArchetypeIndex];
+    assert(newArchetype->componentMask == mask);
 
     // check if storage left in new archetype
     if(newArchetype->storageUsed >= newArchetype->storageCapacity)
@@ -75,6 +78,7 @@ C& ECS::addComponent(Entity* entity, Args&&... args)
     // move into new archetype
     const uint32_t indexInOldArchetype = archEntry.inArrayIndex;
     const uint32_t indexInNewArchetype = newArchetype->storageUsed;
+    newArchetype->storageUsed++;
     uint32_t lastFind = mask.find_first();
     uint32_t oldArchArrayIndex = 0;
     for(uint32_t newArchArrayIndex = 0; newArchArrayIndex < newArchetypeCompCount; newArchArrayIndex++)
@@ -85,8 +89,8 @@ C& ECS::addComponent(Entity* entity, Args&&... args)
         // Component existed in old archetype
         if(oldMask[componentTypeID])
         {
-            std::byte* oldArchArray = (std::byte*)(oldArchetype->componentArrays[oldArchArrayIndex]);
-            std::byte* newArchArray = (std::byte*)(newArchetype->componentArrays[newArchArrayIndex]);
+            std::byte* oldArchCompArray = (std::byte*)(oldArchetype->componentArrays[oldArchArrayIndex]);
+            std::byte* newArchCompArray = (std::byte*)(newArchetype->componentArrays[newArchArrayIndex]);
 
             const ComponentInfo::MoveFunc_t moveFunc = componentInfo.moveFunc;
             const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
@@ -94,15 +98,15 @@ C& ECS::addComponent(Entity* entity, Args&&... args)
             {
                 // type is trivially relocatable, just memcpy components into new array
                 memcpy(
-                    &newArchArray[indexInNewArchetype * componentInfo.size],
-                    &oldArchArray[indexInOldArchetype * componentInfo.size],
+                    &newArchCompArray[indexInNewArchetype * componentInfo.size],
+                    &oldArchCompArray[indexInOldArchetype * componentInfo.size],
                     componentInfo.size);
             }
             else
             {
                 moveFunc(
-                    &oldArchArray[indexInOldArchetype * componentInfo.size],
-                    &newArchArray[indexInNewArchetype * componentInfo.size]);
+                    &oldArchCompArray[indexInOldArchetype * componentInfo.size],
+                    &newArchCompArray[indexInNewArchetype * componentInfo.size]);
                 // dont destroy, will be moved into when hole in Archetype is fixed!
             }
 
@@ -111,12 +115,22 @@ C& ECS::addComponent(Entity* entity, Args&&... args)
         }
         else
         {
-            construct new C inside new Archetypes array
+            // Component did not exist in old archetype
+            // so this must be the one being added
+            C* newArchCompArray = (C*)(newArchetype->componentArrays[newArchArrayIndex]);
+            // this assumes the memory is "in destroyed state" (not sure about correct terminology)
+            // -> construct instead of move into
+            newComponent = new(&newArchCompArray[indexInNewArchetype]) C(std::forward<Args>(args)...);
         }
     }
-    newArchetype->storageUsed++;
+    newArchetype->entityIDs.push_back(entity->id);
+    const ArchetypeEntry updatedEntry{
+        .archetypeIndex = newArchetypeIter->second, .inArrayIndex = indexInNewArchetype};
+    entityLUT[entity->id] = updatedEntry;
 
-    // todo: much stuff still left out, see notes
+    oldArchetype->fixGap(indexInOldArchetype);
+
+    return newComponent;
 }
 
 template <typename C>
@@ -127,7 +141,7 @@ void ECS::removeComponent(Entity* entity)
 template <typename C>
 C* ECS::getComponent(Entity* entity)
 {
-    ArchetypeEntry& entry = entityLUT.at(entity->id);
+    ArchetypeEntry& entry = entityLUT.find(entity->id)->second;
     Archetype& archetype = archetypes[entry.archetypeIndex];
     const int bitIndex = ComponentTypeIDCache<C>::getID();
     if(!archetype.componentMask[bitIndex])

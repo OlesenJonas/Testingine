@@ -1,9 +1,11 @@
 #pragma once
 
+#include <bitset>
 #include <cstdint>
 #include <intern/Misc/Macros.hpp>
 #include <type_traits>
 #include <unordered_map>
+#include <vector>
 
 #include "SharedTypes.hpp"
 
@@ -21,6 +23,8 @@ struct ECS
     struct ArchetypeEntry;
 
   public:
+    ECS();
+
     Entity createEntity();
 
     template <typename C>
@@ -28,7 +32,7 @@ struct ECS
 
   private:
     template <typename C, typename... Args>
-    C& addComponent(Entity* entity, Args&&... args);
+    C* addComponent(Entity* entity, Args&&... args);
 
     template <typename C>
     void removeComponent(Entity* entity);
@@ -37,14 +41,6 @@ struct ECS
     C* getComponent(Entity* entity);
 
     uint32_t createArchetype(ComponentMask mask);
-
-    //------------------------ Private Members
-
-    EntityID entityIDCounter = 0;
-    std::vector<ComponentInfo> componentInfos;
-    std::vector<Archetype> archetypes;
-    std::unordered_map<ComponentMask, uint32_t, ComponentMaskHash> archetypeLUT;
-    std::unordered_map<EntityID, ArchetypeEntry> entityLUT;
 
     //------------------------ Struct Definitions
 
@@ -83,6 +79,7 @@ struct ECS
         size_t storageCapacity;
 
         void growStorage();
+        void fixGap(uint32_t gapIndex);
     };
     static_assert(std::is_move_constructible<Archetype>::value);
 
@@ -119,8 +116,15 @@ struct ECS
         MoveFunc_t moveFunc = nullptr;
         DestroyFunc_t destroyFunc = nullptr;
     };
-};
 
+    //------------------------ Private Members
+
+    EntityID entityIDCounter = 0;
+    std::vector<ComponentInfo> componentInfos;
+    std::vector<Archetype> archetypes;
+    std::unordered_map<ComponentMask, uint32_t> archetypeLUT;
+    std::unordered_map<EntityID, ArchetypeEntry> entityLUT;
+};
 #include "Entity.tpp"
 
 #include "ECS.tpp"
