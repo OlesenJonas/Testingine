@@ -102,7 +102,12 @@ struct ECS
     {
       public:
         template <typename C>
-        static const IDType GetNewID();
+        static IDType GetNewID()
+        {
+            static ComponentTypeID value = counter++;
+            ComponentTypeIDCache<C>::id = value;
+            return value;
+        }
 
       private:
         inline static IDType counter = 0;

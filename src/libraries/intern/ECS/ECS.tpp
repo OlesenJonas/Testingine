@@ -124,8 +124,7 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
         }
     }
     newArchetype->entityIDs.push_back(entity->id);
-    const ArchetypeEntry updatedEntry{
-        .archetypeIndex = newArchetypeIter->second, .inArrayIndex = indexInNewArchetype};
+    const ArchetypeEntry updatedEntry{.archetypeIndex = newArchetypeIndex, .inArrayIndex = indexInNewArchetype};
     entityLUT[entity->id] = updatedEntry;
 
     oldArchetype->fixGap(indexInOldArchetype);
@@ -136,6 +135,95 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
 template <typename C>
 void ECS::removeComponent(Entity* entity)
 {
+    auto archetypeEntryIt = entityLUT.find(entity->id);
+    assert(archetypeEntryIt != entityLUT.end());
+    ArchetypeEntry archEntry = archetypeEntryIt->second;
+
+    Archetype* oldArchetype = &archetypes[archEntry.archetypeIndex];
+    const ComponentMask& oldMask = oldArchetype->componentMask;
+    ComponentTypeID cId = ComponentTypeIDCache<C>::getID();
+    if(!oldMask[cId])
+    {
+        assert(false && "Object doesnt contain component of that type!");
+    }
+
+    ComponentMask mask = oldMask;
+    mask.reset(cId);
+    assert(!mask[cId]);
+
+    const uint32_t oldArchetypeCompCount = oldMask.count();
+
+    Archetype* newArchetype = nullptr;
+    auto newArchetypeIter = archetypeLUT.find(mask);
+    uint32_t newArchetypeIndex = 0xFFFFFFFF;
+    // Create new archetype with needed components if it doesnt exist yet
+    if(newArchetypeIter == archetypeLUT.end())
+    {
+        newArchetypeIndex = createArchetype(mask);
+    }
+    else
+    {
+        newArchetypeIndex = newArchetypeIter->second;
+    }
+    newArchetype = &archetypes[newArchetypeIndex];
+    assert(newArchetype->componentMask == mask);
+
+    // check if storage left in new archetype
+    if(newArchetype->storageUsed >= newArchetype->storageCapacity)
+    {
+        newArchetype->growStorage();
+    }
+
+    // move into new archetype
+    const uint32_t indexInOldArchetype = archEntry.inArrayIndex;
+    const uint32_t indexInNewArchetype = newArchetype->storageUsed;
+    newArchetype->storageUsed++;
+    uint32_t lastFind = oldMask.find_first();
+    uint32_t newArchArrayIndex = 0;
+    for(uint32_t oldArchArrayIndex = 0; oldArchArrayIndex < oldArchetypeCompCount; oldArchArrayIndex++)
+    {
+        const auto componentTypeID = lastFind;
+        const auto& componentInfo = ECS::get()->componentInfos[componentTypeID];
+
+        if(mask[componentTypeID])
+        {
+            // Component still exists in new archetype
+            std::byte* oldArchCompArray = (std::byte*)(oldArchetype->componentArrays[oldArchArrayIndex]);
+            std::byte* newArchCompArray = (std::byte*)(newArchetype->componentArrays[newArchArrayIndex]);
+
+            const ComponentInfo::MoveFunc_t moveFunc = componentInfo.moveFunc;
+            const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
+            if(moveFunc == nullptr)
+            {
+                // type is trivially relocatable, just memcpy components into new array
+                memcpy(
+                    &newArchCompArray[indexInNewArchetype * componentInfo.size],
+                    &oldArchCompArray[indexInOldArchetype * componentInfo.size],
+                    componentInfo.size);
+            }
+            else
+            {
+                moveFunc(
+                    &oldArchCompArray[indexInOldArchetype * componentInfo.size],
+                    &newArchCompArray[indexInNewArchetype * componentInfo.size]);
+                // dont destroy, will be moved into when hole in Archetype is fixed!
+            }
+
+            lastFind = mask.find_next(lastFind);
+            newArchArrayIndex++;
+        }
+        else
+        {
+            // Component does not exist in new archetype
+            // so this must be the one being removed
+            // -- do nothing --
+        }
+    }
+    newArchetype->entityIDs.push_back(entity->id);
+    const ArchetypeEntry updatedEntry{.archetypeIndex = newArchetypeIndex, .inArrayIndex = indexInNewArchetype};
+    entityLUT[entity->id] = updatedEntry;
+
+    oldArchetype->fixGap(indexInOldArchetype);
 }
 
 template <typename C>
