@@ -4,11 +4,17 @@
 
 ECS::ECS()
 {
+    assert(ptr == nullptr);
     ptr = this;
 
     archetypes.emplace_back(ComponentMask{});
     assert(archetypes[0].componentMask.none());
     archetypeLUT.emplace(std::make_pair(ComponentMask{}, 0));
+}
+
+ECS::~ECS()
+{
+    ptr = nullptr;
 }
 
 ECS::Entity ECS::createEntity()
@@ -67,6 +73,29 @@ ECS::Archetype::Archetype(ComponentMask mask) : componentMask(mask)
             lastFind = componentMask.find_next(lastFind);
         }
     }
+}
+
+ECS::Archetype::Archetype(Archetype&& other) noexcept
+    : componentMask(other.componentMask),
+      componentArrays(std::move(other.componentArrays)),
+      entityIDs(std::move(other.entityIDs)),
+      storageUsed(other.storageUsed),
+      storageCapacity(other.storageCapacity)
+{
+    assert(other.componentArrays.empty());
+}
+
+ECS::Archetype::~Archetype()
+{
+    for(int i = 0; i < componentArrays.size(); i++)
+    {
+        delete[]((std::byte*)componentArrays[i]);
+    }
+    // dont have to worry about fixing any relations (LUT entries etc)
+    // since this is only called
+    //      a) on ECS shutdown
+    //      b) after ECS::archetypes has been resized, in which case
+    //         this should be in a moved-from (empty) state anyways
 }
 
 void ECS::Archetype::growStorage()

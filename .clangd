@@ -10,3 +10,6 @@ InlayHints:
   Enabled: No
   ParameterNames: No
   DeducedTypes: No
+
+CompileFlags:
+  Add: [-Werror=return-type]

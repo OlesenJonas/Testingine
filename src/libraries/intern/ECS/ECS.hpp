@@ -9,6 +9,10 @@
 
 #include "SharedTypes.hpp"
 
+#ifdef TESTER_CLASS
+class TESTER_CLASS;
+#endif
+
 struct ECS
 {
     CREATE_STATIC_GETTER(ECS);
@@ -24,6 +28,7 @@ struct ECS
 
   public:
     ECS();
+    ~ECS();
 
     Entity createEntity();
 
@@ -70,6 +75,9 @@ struct ECS
     struct Archetype
     {
         explicit Archetype(ComponentMask mask);
+        Archetype(Archetype&& other) noexcept;
+        ~Archetype();
+        Archetype(const Archetype&) = delete;
         // this is technically stored twice, since its also the key
         // used to store the Archetype lookup entry
         const ComponentMask componentMask;
@@ -92,17 +100,23 @@ struct ECS
     template <typename C>
     struct ComponentTypeIDCache
     {
-        static ComponentTypeID getID();
+        static ComponentTypeID getID()
+        {
+            assert(id != ~ComponentTypeID(0) && "ID of component is invalid, has it been registered?");
+            return id;
+        }
 
       private:
         inline static ComponentTypeID id = ~ComponentTypeID(0);
+
+        friend ComponentTypeIDGenerator;
     };
 
     struct ComponentTypeIDGenerator
     {
       public:
         template <typename C>
-        static IDType GetNewID()
+        static IDType Generate()
         {
             static ComponentTypeID value = counter++;
             ComponentTypeIDCache<C>::id = value;
@@ -129,6 +143,10 @@ struct ECS
     std::vector<Archetype> archetypes;
     std::unordered_map<ComponentMask, uint32_t> archetypeLUT;
     std::unordered_map<EntityID, ArchetypeEntry> entityLUT;
+
+#ifdef TESTER_CLASS
+    friend TESTER_CLASS;
+#endif
 };
 #include "Entity.tpp"
 

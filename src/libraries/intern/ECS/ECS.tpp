@@ -20,7 +20,7 @@ template <typename C>
 void ECS::registerComponent()
 {
     // Try to cache a component type id for C
-    ComponentTypeID compTypeID = ComponentTypeIDGenerator::GetNewID<C>();
+    ComponentTypeID compTypeID = ComponentTypeIDGenerator::Generate<C>();
 
     if constexpr(is_trivially_relocatable<C>)
     {
@@ -29,7 +29,8 @@ void ECS::registerComponent()
     }
     else
     {
-        componentInfos.emplace_back(sizeof(C), moveComponent<C>, destroyComponent<C>);
+        ComponentInfo info{sizeof(C), moveComponent<C>, destroyComponent<C>};
+        componentInfos.emplace_back(info);
     }
 }
 

@@ -20,3 +20,9 @@ add_executable(Bitset_test Bitset.cpp)
 target_link_libraries(Bitset_test intern)
 # Define the test
 add_test(NAME "run_bitset_test" COMMAND $<TARGET_FILE:Bitset_test>)
+
+add_executable(ECS_test TestECS.cpp)
+# link needed libraries
+target_link_libraries(ECS_test intern)
+# Define the test
+add_test(NAME "run_ECS_test" COMMAND $<TARGET_FILE:ECS_test>)
