@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Helpers.hpp"
 #include "SharedTypes.hpp"
 
 #ifdef TESTER_CLASS
@@ -15,20 +16,14 @@ class TESTER_CLASS;
 
 struct ECS
 {
-    CREATE_STATIC_GETTER(ECS);
-
   private:
     struct Entity;
-    struct ComponentTypeIDGenerator;
-    template <typename C>
-    struct ComponentTypeIDCache;
     struct ComponentInfo;
     struct Archetype;
     struct ArchetypeEntry;
 
   public:
     ECS();
-    ~ECS();
 
     Entity createEntity();
 
@@ -36,6 +31,9 @@ struct ECS
     void registerComponent();
 
   private:
+    template <typename C>
+    uint32_t bitmaskIndexFromComponentType();
+
     template <typename C, typename... Args>
     C* addComponent(Entity* entity, Args&&... args);
 
@@ -61,20 +59,26 @@ struct ECS
         void removeComponent();
 
         template <typename C>
-        C& getComponent();
+        C* getComponent();
 
       private:
         // only allow construction by ECS
-        Entity() = default;
+        Entity(ECS& ecs);
 
         EntityID id;
+        // not sure if its worth it to store the reference here just for the nicer syntax of
+        //   entity.addComponent
+        //   instead of
+        //   ecs.addComponent(entity, params)
+        //   will see
+        ECS& ecs;
 
         friend ECS;
     };
 
     struct Archetype
     {
-        explicit Archetype(ComponentMask mask);
+        explicit Archetype(ComponentMask mask, ECS& ecs);
         Archetype(Archetype&& other) noexcept;
         ~Archetype();
         Archetype(const Archetype&) = delete;
@@ -85,6 +89,7 @@ struct ECS
         std::vector<EntityID> entityIDs;
         size_t storageUsed;
         size_t storageCapacity;
+        ECS& ecs;
 
         void growStorage();
         void fixGap(uint32_t gapIndex);
@@ -95,36 +100,6 @@ struct ECS
     {
         uint32_t archetypeIndex = 0xFFFFFFFF;
         uint32_t inArrayIndex = 0xFFFFFFFF;
-    };
-
-    template <typename C>
-    struct ComponentTypeIDCache
-    {
-        static ComponentTypeID getID()
-        {
-            assert(id != ~ComponentTypeID(0) && "ID of component is invalid, has it been registered?");
-            return id;
-        }
-
-      private:
-        inline static ComponentTypeID id = ~ComponentTypeID(0);
-
-        friend ComponentTypeIDGenerator;
-    };
-
-    struct ComponentTypeIDGenerator
-    {
-      public:
-        template <typename C>
-        static IDType Generate()
-        {
-            static ComponentTypeID value = counter++;
-            ComponentTypeIDCache<C>::id = value;
-            return value;
-        }
-
-      private:
-        inline static IDType counter = 0;
     };
 
     struct ComponentInfo
@@ -143,11 +118,14 @@ struct ECS
     std::vector<Archetype> archetypes;
     std::unordered_map<ComponentMask, uint32_t> archetypeLUT;
     std::unordered_map<EntityID, ArchetypeEntry> entityLUT;
+    uint32_t bitmaskIndexCounter = 0;
+    std::unordered_map<ECSHelpers::TypeKey, uint32_t> componentTypeKeyToBitmaskIndexLUT;
 
 #ifdef TESTER_CLASS
     friend TESTER_CLASS;
 #endif
 };
+
 #include "Entity.tpp"
 
 #include "ECS.tpp"

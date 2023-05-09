@@ -4,23 +4,18 @@
 #include <intern/Misc/Concepts.hpp>
 
 template <typename C>
-void moveComponent(void* src, void* dst)
-{
-    C& dstC = *(C*)dst;
-    dstC = std::move(*((C*)src));
-}
-
-template <typename C>
-void destroyComponent(void* ptr)
-{
-    ((C*)ptr)->~C();
-}
-
-template <typename C>
 void ECS::registerComponent()
 {
     // Try to cache a component type id for C
-    ComponentTypeID compTypeID = ComponentTypeIDGenerator::Generate<C>();
+    // ECSHelpers::TypeKey
+    const ECSHelpers::TypeKey key = ECSHelpers::getTypeKey<C>();
+    auto iter = componentTypeKeyToBitmaskIndexLUT.find(key);
+    assert(
+        iter == componentTypeKeyToBitmaskIndexLUT.end() &&
+        "Trying to register a component that has already been registered!");
+
+    uint32_t newBitmaskIndex = bitmaskIndexCounter++;
+    componentTypeKeyToBitmaskIndexLUT.emplace(std::make_pair(key, newBitmaskIndex));
 
     if constexpr(is_trivially_relocatable<C>)
     {
@@ -29,9 +24,21 @@ void ECS::registerComponent()
     }
     else
     {
-        ComponentInfo info{sizeof(C), moveComponent<C>, destroyComponent<C>};
+        ComponentInfo info{sizeof(C), ECSHelpers::moveComponent<C>, ECSHelpers::destroyComponent<C>};
         componentInfos.emplace_back(info);
     }
+    assert(componentInfos.size() - 1 == newBitmaskIndex);
+}
+
+template <typename C>
+uint32_t ECS::bitmaskIndexFromComponentType()
+{
+    const ECSHelpers::TypeKey key = ECSHelpers::getTypeKey<C>();
+    auto iter = componentTypeKeyToBitmaskIndexLUT.find(key);
+    assert(
+        iter != componentTypeKeyToBitmaskIndexLUT.end() &&
+        "Trying to find the index of a component that has not been registered yet!");
+    return iter->second;
 }
 
 template <typename C, typename... Args>
@@ -42,33 +49,35 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
     ArchetypeEntry archEntry = archetypeEntryIt->second;
 
     Archetype* oldArchetype = &archetypes[archEntry.archetypeIndex];
-    const ComponentMask& oldMask = oldArchetype->componentMask;
-    ComponentTypeID cId = ComponentTypeIDCache<C>::getID();
-    if(oldMask[cId])
+    const ComponentMask oldMask = oldArchetype->componentMask;
+    uint32_t componentTypeBitmaskIndex = bitmaskIndexFromComponentType<C>();
+    if(oldMask[componentTypeBitmaskIndex])
     {
         assert(false && "Object already contains component of that type!");
     }
 
-    ComponentMask mask = oldMask;
-    mask.set(cId);
+    ComponentMask newMask = oldMask;
+    newMask.set(componentTypeBitmaskIndex);
 
-    const uint32_t newArchetypeCompCount = mask.count();
+    const uint32_t newArchetypeCompCount = newMask.count();
 
     C* newComponent = nullptr;
     Archetype* newArchetype = nullptr;
-    auto newArchetypeIter = archetypeLUT.find(mask);
+    auto newArchetypeIter = archetypeLUT.find(newMask);
     uint32_t newArchetypeIndex = 0xFFFFFFFF;
     // Create new archetype with needed components if it doesnt exist yet
     if(newArchetypeIter == archetypeLUT.end())
     {
-        newArchetypeIndex = createArchetype(mask);
+        newArchetypeIndex = createArchetype(newMask);
+        // This can resize the archetypes array, so we need to refresh any Archetype variables retrieved earlier
+        oldArchetype = &archetypes[archEntry.archetypeIndex];
     }
     else
     {
         newArchetypeIndex = newArchetypeIter->second;
     }
     newArchetype = &archetypes[newArchetypeIndex];
-    assert(newArchetype->componentMask == mask);
+    assert(newArchetype->componentMask == newMask);
 
     // check if storage left in new archetype
     if(newArchetype->storageUsed >= newArchetype->storageCapacity)
@@ -80,12 +89,12 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
     const uint32_t indexInOldArchetype = archEntry.inArrayIndex;
     const uint32_t indexInNewArchetype = newArchetype->storageUsed;
     newArchetype->storageUsed++;
-    uint32_t lastFind = mask.find_first();
+    uint32_t lastFind = newMask.find_first();
     uint32_t oldArchArrayIndex = 0;
     for(uint32_t newArchArrayIndex = 0; newArchArrayIndex < newArchetypeCompCount; newArchArrayIndex++)
     {
         const auto componentTypeID = lastFind;
-        const auto& componentInfo = ECS::get()->componentInfos[componentTypeID];
+        const auto& componentInfo = componentInfos[componentTypeID];
 
         // Component existed in old archetype
         if(oldMask[componentTypeID])
@@ -111,7 +120,7 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
                 // dont destroy, will be moved into when hole in Archetype is fixed!
             }
 
-            lastFind = mask.find_next(lastFind);
+            lastFind = newMask.find_next(lastFind);
             oldArchArrayIndex++;
         }
         else
@@ -141,33 +150,35 @@ void ECS::removeComponent(Entity* entity)
     ArchetypeEntry archEntry = archetypeEntryIt->second;
 
     Archetype* oldArchetype = &archetypes[archEntry.archetypeIndex];
-    const ComponentMask& oldMask = oldArchetype->componentMask;
-    ComponentTypeID cId = ComponentTypeIDCache<C>::getID();
-    if(!oldMask[cId])
+    const ComponentMask oldMask = oldArchetype->componentMask;
+    uint32_t componentTypeBitmaskIndex = bitmaskIndexFromComponentType<C>();
+    if(!oldMask[componentTypeBitmaskIndex])
     {
         assert(false && "Object doesnt contain component of that type!");
     }
 
-    ComponentMask mask = oldMask;
-    mask.reset(cId);
-    assert(!mask[cId]);
+    ComponentMask newMask = oldMask;
+    newMask.reset(componentTypeBitmaskIndex);
+    assert(!newMask[componentTypeBitmaskIndex]);
 
     const uint32_t oldArchetypeCompCount = oldMask.count();
 
     Archetype* newArchetype = nullptr;
-    auto newArchetypeIter = archetypeLUT.find(mask);
+    auto newArchetypeIter = archetypeLUT.find(newMask);
     uint32_t newArchetypeIndex = 0xFFFFFFFF;
     // Create new archetype with needed components if it doesnt exist yet
     if(newArchetypeIter == archetypeLUT.end())
     {
-        newArchetypeIndex = createArchetype(mask);
+        newArchetypeIndex = createArchetype(newMask);
+        // This can resize the archetypes array, so we need to refresh any Archetype variables retrieved earlier
+        oldArchetype = &archetypes[archEntry.archetypeIndex];
     }
     else
     {
         newArchetypeIndex = newArchetypeIter->second;
     }
     newArchetype = &archetypes[newArchetypeIndex];
-    assert(newArchetype->componentMask == mask);
+    assert(newArchetype->componentMask == newMask);
 
     // check if storage left in new archetype
     if(newArchetype->storageUsed >= newArchetype->storageCapacity)
@@ -184,9 +195,9 @@ void ECS::removeComponent(Entity* entity)
     for(uint32_t oldArchArrayIndex = 0; oldArchArrayIndex < oldArchetypeCompCount; oldArchArrayIndex++)
     {
         const auto componentTypeID = lastFind;
-        const auto& componentInfo = ECS::get()->componentInfos[componentTypeID];
+        const auto& componentInfo = componentInfos[componentTypeID];
 
-        if(mask[componentTypeID])
+        if(newMask[componentTypeID])
         {
             // Component still exists in new archetype
             std::byte* oldArchCompArray = (std::byte*)(oldArchetype->componentArrays[oldArchArrayIndex]);
@@ -210,7 +221,7 @@ void ECS::removeComponent(Entity* entity)
                 // dont destroy, will be moved into when hole in Archetype is fixed!
             }
 
-            lastFind = mask.find_next(lastFind);
+            lastFind = newMask.find_next(lastFind);
             newArchArrayIndex++;
         }
         else
@@ -232,14 +243,14 @@ C* ECS::getComponent(Entity* entity)
 {
     ArchetypeEntry& entry = entityLUT.find(entity->id)->second;
     Archetype& archetype = archetypes[entry.archetypeIndex];
-    const int bitIndex = ComponentTypeIDCache<C>::getID();
-    if(!archetype.componentMask[bitIndex])
+    uint32_t componentTypeBitmaskIndex = bitmaskIndexFromComponentType<C>();
+    if(!archetype.componentMask[componentTypeBitmaskIndex])
         return nullptr;
     // shift away all bits (including C::getID one) and count how many remain, thats the index
     // into the component array array
-    const int highBitsToEliminate = MAX_COMPONENT_TYPES - bitIndex;
+    const int highBitsToEliminate = MAX_COMPONENT_TYPES - componentTypeBitmaskIndex;
     ComponentMask mask = archetype.componentMask;
-    mask >>= highBitsToEliminate;
+    mask <<= highBitsToEliminate;
     const auto arrayIndex = mask.count();
     assert(entry.inArrayIndex < archetype.storageUsed);
     C* array = reinterpret_cast<C*>(archetype.componentArrays[arrayIndex]);

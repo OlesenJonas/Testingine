@@ -2,24 +2,20 @@
 #include "ECS/ECS.hpp"
 #include "ECS/SharedTypes.hpp"
 
+ECS::Entity::Entity(ECS& ecs) : ecs(ecs)
+{
+}
+
 ECS::ECS()
 {
-    assert(ptr == nullptr);
-    ptr = this;
-
-    archetypes.emplace_back(ComponentMask{});
+    archetypes.emplace_back(ComponentMask{}, *this);
     assert(archetypes[0].componentMask.none());
     archetypeLUT.emplace(std::make_pair(ComponentMask{}, 0));
 }
 
-ECS::~ECS()
-{
-    ptr = nullptr;
-}
-
 ECS::Entity ECS::createEntity()
 {
-    Entity entity{};
+    Entity entity{*this};
     entity.id = entityIDCounter++;
 
     Archetype& emptyArchetype = archetypes[0];
@@ -41,14 +37,14 @@ EntityID ECS::Entity::getID() const
 uint32_t ECS::createArchetype(ComponentMask mask)
 {
     assert(archetypeLUT.find(mask) == archetypeLUT.end());
-    Archetype& newArchetype = archetypes.emplace_back(mask);
+    Archetype& newArchetype = archetypes.emplace_back(mask, *this);
     uint32_t newArchetypeIndex = archetypes.size() - 1;
     archetypeLUT.emplace(std::make_pair(mask, newArchetypeIndex));
     assert(archetypeLUT.find(mask) != archetypeLUT.end());
     return newArchetypeIndex;
 }
 
-ECS::Archetype::Archetype(ComponentMask mask) : componentMask(mask)
+ECS::Archetype::Archetype(ComponentMask mask, ECS& ecs) : componentMask(mask), ecs(ecs)
 {
     if(componentMask.none())
     {
@@ -68,7 +64,7 @@ ECS::Archetype::Archetype(ComponentMask mask) : componentMask(mask)
         for(int i = 0; i < componentCount; i++)
         {
             const auto componentTypeID = lastFind;
-            const size_t componentSize = ECS::get()->componentInfos[componentTypeID].size;
+            const size_t componentSize = ecs.componentInfos[componentTypeID].size;
             componentArrays[i] = new std::byte[componentSize * storageCapacity];
             lastFind = componentMask.find_next(lastFind);
         }
@@ -77,6 +73,7 @@ ECS::Archetype::Archetype(ComponentMask mask) : componentMask(mask)
 
 ECS::Archetype::Archetype(Archetype&& other) noexcept
     : componentMask(other.componentMask),
+      ecs(other.ecs),
       componentArrays(std::move(other.componentArrays)),
       entityIDs(std::move(other.entityIDs)),
       storageUsed(other.storageUsed),
@@ -108,7 +105,7 @@ void ECS::Archetype::growStorage()
     for(int i = 0; i < componentCount; i++)
     {
         const auto componentTypeID = lastFind;
-        const auto& componentInfo = ECS::get()->componentInfos[componentTypeID];
+        const auto& componentInfo = ecs.componentInfos[componentTypeID];
 
         std::byte* oldStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
         std::byte* newStorage = new std::byte[componentInfo.size * newCapacity];
@@ -145,14 +142,15 @@ void ECS::Archetype::growStorage()
 
 void ECS::Archetype::fixGap(uint32_t gapIndex)
 {
-    uint32_t oldEndIndex = storageUsed - 1;
-    storageUsed--;
+    uint32_t oldEndIndex = entityIDs.size() - 1;
+    if(!componentArrays.empty())
+        storageUsed--;
     // move last group of components into gap to fill it
     uint32_t lastFind = componentMask.find_first();
     for(int i = 0; i < componentMask.count(); i++)
     {
         const auto componentTypeID = lastFind;
-        const auto& componentInfo = ECS::get()->componentInfos[componentTypeID];
+        const auto& componentInfo = ecs.componentInfos[componentTypeID];
 
         std::byte* componentStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
 
@@ -190,8 +188,8 @@ void ECS::Archetype::fixGap(uint32_t gapIndex)
     // Also need to update entityLUT information of filler entity
     if(gapIndex != oldEndIndex)
     {
-        auto iter = ECS::get()->entityLUT.find(entityIDs[gapIndex]);
-        assert(iter != ECS::get()->entityLUT.end());
+        auto iter = ecs.entityLUT.find(entityIDs[gapIndex]);
+        assert(iter != ecs.entityLUT.end());
         assert(iter->second.inArrayIndex == oldEndIndex);
         iter->second.inArrayIndex = gapIndex;
     }
