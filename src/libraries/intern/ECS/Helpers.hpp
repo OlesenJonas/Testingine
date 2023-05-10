@@ -39,6 +39,9 @@ namespace ECSHelpers
     template <typename C>
     void destroyComponent(void* ptr)
     {
+#ifndef _NDEBUG
+        C* component = (C*)ptr;
+#endif
         ((C*)ptr)->~C();
     }
 }; // namespace ECSHelpers

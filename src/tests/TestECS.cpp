@@ -197,21 +197,22 @@ class ECSTester
         TEST_EQUAL(*gotBar, Bar{});
     }
 
+    struct Foo
+    {
+        int x, y;
+        auto operator<=>(const Foo&) const = default;
+    };
+    static_assert(is_trivially_relocatable<Foo>);
+    struct BarNR
+    {
+        std::vector<float> someVec;
+        char someChar{};
+        auto operator<=>(const BarNR&) const = default;
+    };
+    static_assert(!is_trivially_relocatable<BarNR>);
+
     static void testResizes()
     {
-
-        struct Foo
-        {
-            int x, y;
-            auto operator<=>(const Foo&) const = default;
-        };
-        struct BarNR
-        {
-            std::vector<float> someVec;
-            char someChar{};
-            auto operator<=>(const BarNR&) const = default;
-        };
-        static_assert(!is_trivially_relocatable<BarNR>);
 
         ECS ecs;
         testInitialState(ecs);
@@ -275,7 +276,106 @@ class ECSTester
         TEST_NOT_EQUAL(ecs.archetypes[2].storageCapacity, initialCapacity);
 
         const uint32_t deletedIndex = 5;
+        TEST_EQUAL(*entts[deletedIndex].getComponent<BarNR>(), bars[deletedIndex]);
         entts[deletedIndex].removeComponent<Foo>();
+        TEST_EQUAL(*entts[deletedIndex].getComponent<BarNR>(), bars[deletedIndex]);
+        entts[deletedIndex].removeComponent<BarNR>();
+
+        const uint32_t deletedIndex2 = 7;
+        TEST_EQUAL(*entts[deletedIndex2].getComponent<Foo>(), foos[deletedIndex2]);
+        entts[deletedIndex2].removeComponent<BarNR>();
+        TEST_EQUAL(*entts[deletedIndex2].getComponent<Foo>(), foos[deletedIndex2]);
+        entts[deletedIndex2].removeComponent<Foo>();
+
+        for(int i = 0; i < entts.size(); i++)
+        {
+            if(i != deletedIndex && i != deletedIndex2)
+            {
+                TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
+                TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+            }
+        }
+        entts[entts.size() - 1].removeComponent<Foo>();
+        entts[entts.size() - 1].removeComponent<BarNR>();
+        entts.pop_back();
+
+        for(int i = 0; i < entts.size(); i++)
+        {
+            if(i != deletedIndex && i != deletedIndex2)
+            {
+                TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
+                TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+            }
+        }
+    }
+
+    static void testResizes2()
+    {
+        ECS ecs;
+        testInitialState(ecs);
+        ecs.registerComponent<Foo>();
+        ecs.registerComponent<BarNR>();
+
+        std::vector<ECS::Entity> entts;
+        std::vector<Foo> foos;
+        std::vector<BarNR> bars;
+        {
+            auto& foo = foos.emplace_back(Foo{.x = rand(), .y = rand()});
+            auto& bar =
+                bars.emplace_back(BarNR{.someVec = {rand() * 0.1234f}, .someChar = static_cast<char>(rand())});
+            // bar = Bar{.v = {rand() * 0.1234f}, .z = static_cast<char>(rand());
+            ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
+            entt.addComponent<Foo>(foo);
+            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
+            entt.addComponent<BarNR>(bar);
+            TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+        }
+        uint32_t initialCapacity = ecs.archetypes[1].storageCapacity;
+        for(int i = 1; i < initialCapacity; i++)
+        {
+            auto& foo = foos.emplace_back(Foo{.x = rand(), .y = rand()});
+            auto& bar =
+                bars.emplace_back(BarNR{.someVec = {rand() * 0.1234f}, .someChar = static_cast<char>(rand())});
+            ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
+            entt.addComponent<Foo>(foo);
+            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
+            entt.addComponent<BarNR>(bar);
+            TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+        }
+
+        for(int i = 0; i < 10; i++)
+        {
+            TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
+            TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+        }
+
+        TEST_EQUAL(ecs.archetypes[0].storageUsed, 0);
+        TEST_EQUAL(ecs.archetypes[1].storageUsed, 0);
+        TEST_EQUAL(ecs.archetypes[2].storageUsed, ecs.archetypes[2].storageCapacity);
+        // Force growing storage
+        {
+            auto& foo = foos.emplace_back(Foo{.x = rand(), .y = rand()});
+            auto& bar =
+                bars.emplace_back(BarNR{.someVec = {rand() * 0.1234f}, .someChar = static_cast<char>(rand())});
+            ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
+            entt.addComponent<Foo>(foo);
+            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
+            entt.addComponent<BarNR>(bar);
+            TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+        }
+
+        for(int i = 0; i < 11; i++)
+        {
+            TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
+            TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+        }
+
+        TEST_NOT_EQUAL(ecs.archetypes[2].storageCapacity, initialCapacity);
+
+        const uint32_t deletedIndex = 5;
+        TEST_EQUAL(*entts[deletedIndex].getComponent<BarNR>(), bars[deletedIndex]);
+        entts[deletedIndex].removeComponent<Foo>();
+        TEST_EQUAL(*entts[deletedIndex].getComponent<BarNR>(), bars[deletedIndex]);
         entts[deletedIndex].removeComponent<BarNR>();
 
         for(int i = 0; i < entts.size(); i++)
@@ -352,6 +452,7 @@ class ECSTester
         testRegistration();
         testArchetypeCreation();
         testResizes();
+        testResizes2();
         fillTest();
     };
 };

@@ -122,7 +122,6 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
                 destroyFunc(&oldArchCompArray[indexInOldArchetype * componentInfo.size]);
             }
 
-            lastFind = newMask.find_next(lastFind);
             oldArchArrayIndex++;
         }
         else
@@ -134,6 +133,7 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
             // -> construct instead of move into
             newComponent = new(&newArchCompArray[indexInNewArchetype]) C(std::forward<Args>(args)...);
         }
+        lastFind = newMask.find_next(lastFind);
     }
     newArchetype->entityIDs.push_back(entity->id);
     const ArchetypeEntry updatedEntry{.archetypeIndex = newArchetypeIndex, .inArrayIndex = indexInNewArchetype};
@@ -226,7 +226,6 @@ void ECS::removeComponent(Entity* entity)
                 destroyFunc(&oldArchCompArray[indexInOldArchetype * componentInfo.size]);
             }
 
-            lastFind = newMask.find_next(lastFind);
             newArchArrayIndex++;
         }
         else
@@ -242,6 +241,7 @@ void ECS::removeComponent(Entity* entity)
                 destroyFunc(&oldArchCompArray[indexInOldArchetype * componentInfo.size]);
             }
         }
+        lastFind = newMask.find_next(lastFind);
     }
     newArchetype->entityIDs.push_back(entity->id);
     const ArchetypeEntry updatedEntry{.archetypeIndex = newArchetypeIndex, .inArrayIndex = indexInNewArchetype};
