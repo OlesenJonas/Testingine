@@ -30,10 +30,10 @@ namespace ECSHelpers
 
     // Using these instead of per component structs with virtual functions, will need to compare
     template <typename C>
-    void moveComponent(void* src, void* dst)
+    void moveConstructComponent(void* srcObject, void* dstptr)
     {
-        C& dstC = *(C*)dst;
-        dstC = std::move(*((C*)src));
+        // need to construct at location
+        C* newC = new(dstptr) C(std::move(*reinterpret_cast<C*>(srcObject)));
     }
 
     template <typename C>

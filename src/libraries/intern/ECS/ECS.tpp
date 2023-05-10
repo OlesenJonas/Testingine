@@ -24,7 +24,7 @@ void ECS::registerComponent()
     }
     else
     {
-        ComponentInfo info{sizeof(C), ECSHelpers::moveComponent<C>, ECSHelpers::destroyComponent<C>};
+        ComponentInfo info{sizeof(C), ECSHelpers::moveConstructComponent<C>, ECSHelpers::destroyComponent<C>};
         componentInfos.emplace_back(info);
     }
     assert(componentInfos.size() - 1 == newBitmaskIndex);
@@ -102,7 +102,7 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
             std::byte* oldArchCompArray = (std::byte*)(oldArchetype->componentArrays[oldArchArrayIndex]);
             std::byte* newArchCompArray = (std::byte*)(newArchetype->componentArrays[newArchArrayIndex]);
 
-            const ComponentInfo::MoveFunc_t moveFunc = componentInfo.moveFunc;
+            const ComponentInfo::MoveConstrFunc_t moveFunc = componentInfo.moveFunc;
             const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
             if(moveFunc == nullptr)
             {
@@ -114,10 +114,12 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
             }
             else
             {
+                // move component from old archetype into new archetype, then destroy component left overs in the
+                // old archetype
                 moveFunc(
                     &oldArchCompArray[indexInOldArchetype * componentInfo.size],
                     &newArchCompArray[indexInNewArchetype * componentInfo.size]);
-                // dont destroy, will be moved into when hole in Archetype is fixed!
+                destroyFunc(&oldArchCompArray[indexInOldArchetype * componentInfo.size]);
             }
 
             lastFind = newMask.find_next(lastFind);
@@ -148,6 +150,7 @@ void ECS::removeComponent(Entity* entity)
     auto archetypeEntryIt = entityLUT.find(entity->id);
     assert(archetypeEntryIt != entityLUT.end());
     ArchetypeEntry archEntry = archetypeEntryIt->second;
+    assert(archetypes[archEntry.archetypeIndex].entityIDs[archEntry.inArrayIndex] == entity->getID());
 
     Archetype* oldArchetype = &archetypes[archEntry.archetypeIndex];
     const ComponentMask oldMask = oldArchetype->componentMask;
@@ -180,8 +183,8 @@ void ECS::removeComponent(Entity* entity)
     newArchetype = &archetypes[newArchetypeIndex];
     assert(newArchetype->componentMask == newMask);
 
-    // check if storage left in new archetype
-    if(newArchetype->storageUsed >= newArchetype->storageCapacity)
+    // check if storage left in new archetype (unless its the empty archetype)
+    if(newMask.any() && newArchetype->storageUsed >= newArchetype->storageCapacity)
     {
         newArchetype->growStorage();
     }
@@ -197,14 +200,16 @@ void ECS::removeComponent(Entity* entity)
         const auto componentTypeID = lastFind;
         const auto& componentInfo = componentInfos[componentTypeID];
 
+        std::byte* oldArchCompArray = (std::byte*)(oldArchetype->componentArrays[oldArchArrayIndex]);
+
+        const ComponentInfo::MoveConstrFunc_t moveFunc = componentInfo.moveFunc;
+        const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
+
         if(newMask[componentTypeID])
         {
             // Component still exists in new archetype
-            std::byte* oldArchCompArray = (std::byte*)(oldArchetype->componentArrays[oldArchArrayIndex]);
             std::byte* newArchCompArray = (std::byte*)(newArchetype->componentArrays[newArchArrayIndex]);
 
-            const ComponentInfo::MoveFunc_t moveFunc = componentInfo.moveFunc;
-            const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
             if(moveFunc == nullptr)
             {
                 // type is trivially relocatable, just memcpy components into new array
@@ -218,7 +223,7 @@ void ECS::removeComponent(Entity* entity)
                 moveFunc(
                     &oldArchCompArray[indexInOldArchetype * componentInfo.size],
                     &newArchCompArray[indexInNewArchetype * componentInfo.size]);
-                // dont destroy, will be moved into when hole in Archetype is fixed!
+                destroyFunc(&oldArchCompArray[indexInOldArchetype * componentInfo.size]);
             }
 
             lastFind = newMask.find_next(lastFind);
@@ -228,7 +233,14 @@ void ECS::removeComponent(Entity* entity)
         {
             // Component does not exist in new archetype
             // so this must be the one being removed
-            // -- do nothing --
+            if(destroyFunc == nullptr)
+            {
+                // type is trivially relocatable, cant just leave memory for future free
+            }
+            else
+            {
+                destroyFunc(&oldArchCompArray[indexInOldArchetype * componentInfo.size]);
+            }
         }
     }
     newArchetype->entityIDs.push_back(entity->id);

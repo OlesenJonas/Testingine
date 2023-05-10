@@ -110,7 +110,7 @@ void ECS::Archetype::growStorage()
         std::byte* oldStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
         std::byte* newStorage = new std::byte[componentInfo.size * newCapacity];
 
-        const ComponentInfo::MoveFunc_t moveFunc = componentInfo.moveFunc;
+        const ComponentInfo::MoveConstrFunc_t moveFunc = componentInfo.moveFunc;
         const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
         if(moveFunc == nullptr)
         {
@@ -154,12 +154,12 @@ void ECS::Archetype::fixGap(uint32_t gapIndex)
 
         std::byte* componentStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
 
-        const ComponentInfo::MoveFunc_t moveFunc = componentInfo.moveFunc;
+        const ComponentInfo::MoveConstrFunc_t moveFunc = componentInfo.moveFunc;
         const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
         if(moveFunc == nullptr)
         {
             if(gapIndex != oldEndIndex)
-                // type is trivially relocatable, just memcpy components into new array
+                // type is trivially relocatable, just memcpy components into new entry
                 memcpy(
                     &componentStorage[gapIndex * componentInfo.size],
                     &componentStorage[oldEndIndex * componentInfo.size],
@@ -167,12 +167,11 @@ void ECS::Archetype::fixGap(uint32_t gapIndex)
         }
         else
         {
+            // move from old end into gap, and destroy old end
             if(gapIndex != oldEndIndex)
-                // move from old end into gap, and destroy old end
                 moveFunc(
                     &componentStorage[oldEndIndex * componentInfo.size],
                     &componentStorage[gapIndex * componentInfo.size]);
-            // destruction needs to happen anyways, even if gap is last element
             destroyFunc(&componentStorage[oldEndIndex * componentInfo.size]);
         }
 

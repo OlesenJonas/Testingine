@@ -104,10 +104,10 @@ struct ECS
 
     struct ComponentInfo
     {
-        using MoveFunc_t = void (*)(void* src, void* dst);
+        using MoveConstrFunc_t = void (*)(void* srcObject, void* dstptr);
         using DestroyFunc_t = void (*)(void*);
         size_t size = 0;
-        MoveFunc_t moveFunc = nullptr;
+        MoveConstrFunc_t moveFunc = nullptr;
         DestroyFunc_t destroyFunc = nullptr;
     };
 
