@@ -65,7 +65,7 @@ ECS::Archetype::Archetype(ComponentMask mask, ECS& ecs) : componentMask(mask), e
         {
             const auto componentTypeID = lastFind;
             const size_t componentSize = ecs.componentInfos[componentTypeID].size;
-            componentArrays[i] = new std::byte[componentSize * storageCapacity];
+            componentArrays[i] = malloc(componentSize * storageCapacity);
             lastFind = componentMask.find_next(lastFind);
         }
     }
@@ -84,15 +84,29 @@ ECS::Archetype::Archetype(Archetype&& other) noexcept
 
 ECS::Archetype::~Archetype()
 {
+    uint32_t componentArrayTypeIndex = componentMask.find_first();
     for(int i = 0; i < componentArrays.size(); i++)
     {
-        delete[]((std::byte*)componentArrays[i]);
+        ComponentInfo& componentInfo = ecs.componentInfos[componentArrayTypeIndex];
+        ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
+        if(destroyFunc != nullptr)
+        {
+            for(int j = 0; j < storageUsed; j++)
+            {
+                std::byte* byteArray = (std::byte*)componentArrays[i];
+                destroyFunc(&byteArray[j * componentInfo.size]);
+            }
+        }
+        // destruct all objects that still exist in array
+        free(componentArrays[i]);
+        componentArrayTypeIndex = componentMask.find_next(componentArrayTypeIndex);
     }
     // dont have to worry about fixing any relations (LUT entries etc)
     // since this is only called
     //      a) on ECS shutdown
     //      b) after ECS::archetypes has been resized, in which case
     //         this should be in a moved-from (empty) state anyways
+    //         where all links have already been updated
 }
 
 void ECS::Archetype::growStorage()
@@ -108,7 +122,7 @@ void ECS::Archetype::growStorage()
         const auto& componentInfo = ecs.componentInfos[componentTypeID];
 
         std::byte* oldStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
-        std::byte* newStorage = new std::byte[componentInfo.size * newCapacity];
+        std::byte* newStorage = (std::byte*)malloc(componentInfo.size * newCapacity);
 
         const ComponentInfo::MoveConstrFunc_t moveFunc = componentInfo.moveFunc;
         const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
@@ -132,7 +146,7 @@ void ECS::Archetype::growStorage()
         }
 
         componentArrays[i] = newStorage;
-        delete[] reinterpret_cast<std::byte*>(oldStorage);
+        free(oldStorage);
 
         lastFind = componentMask.find_next(lastFind);
     }
