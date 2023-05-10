@@ -182,7 +182,7 @@ void ECS::Archetype::fixGap(uint32_t gapIndex)
     assert(entityIDs.size() - 1 == oldEndIndex);
     entityIDs[gapIndex] = entityIDs[entityIDs.size() - 1];
     entityIDs.pop_back();
-    assert(entityIDs.size() == storageUsed);
+    assert(storageCapacity == 0 || entityIDs.size() == storageUsed);
 
     // Also need to update entityLUT information of filler entity
     if(gapIndex != oldEndIndex)

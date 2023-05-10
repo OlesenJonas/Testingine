@@ -241,7 +241,7 @@ void ECS::removeComponent(Entity* entity)
                 destroyFunc(&oldArchCompArray[indexInOldArchetype * componentInfo.size]);
             }
         }
-        lastFind = newMask.find_next(lastFind);
+        lastFind = oldMask.find_next(lastFind);
     }
     newArchetype->entityIDs.push_back(entity->id);
     const ArchetypeEntry updatedEntry{.archetypeIndex = newArchetypeIndex, .inArrayIndex = indexInNewArchetype};

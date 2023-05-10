@@ -311,6 +311,9 @@ class ECSTester
 
     static void testResizes2()
     {
+        // The same as testResizes() but this time the order of components being removed/added
+        // is swapped (registering them still happens in the same order, so that their bitmask indices are the
+        // same as in testResizes)
         ECS ecs;
         testInitialState(ecs);
         ecs.registerComponent<Foo>();
@@ -325,10 +328,10 @@ class ECSTester
                 bars.emplace_back(BarNR{.someVec = {rand() * 0.1234f}, .someChar = static_cast<char>(rand())});
             // bar = Bar{.v = {rand() * 0.1234f}, .z = static_cast<char>(rand());
             ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
-            entt.addComponent<Foo>(foo);
-            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
             entt.addComponent<BarNR>(bar);
             TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+            entt.addComponent<Foo>(foo);
+            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
         }
         uint32_t initialCapacity = ecs.archetypes[1].storageCapacity;
         for(int i = 1; i < initialCapacity; i++)
@@ -337,16 +340,16 @@ class ECSTester
             auto& bar =
                 bars.emplace_back(BarNR{.someVec = {rand() * 0.1234f}, .someChar = static_cast<char>(rand())});
             ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
-            entt.addComponent<Foo>(foo);
-            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
             entt.addComponent<BarNR>(bar);
             TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+            entt.addComponent<Foo>(foo);
+            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
         }
 
         for(int i = 0; i < 10; i++)
         {
-            TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
             TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+            TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
         }
 
         TEST_EQUAL(ecs.archetypes[0].storageUsed, 0);
@@ -358,44 +361,44 @@ class ECSTester
             auto& bar =
                 bars.emplace_back(BarNR{.someVec = {rand() * 0.1234f}, .someChar = static_cast<char>(rand())});
             ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
-            entt.addComponent<Foo>(foo);
-            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
             entt.addComponent<BarNR>(bar);
             TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+            entt.addComponent<Foo>(foo);
+            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
         }
 
         for(int i = 0; i < 11; i++)
         {
-            TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
             TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+            TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
         }
 
         TEST_NOT_EQUAL(ecs.archetypes[2].storageCapacity, initialCapacity);
 
         const uint32_t deletedIndex = 5;
-        TEST_EQUAL(*entts[deletedIndex].getComponent<BarNR>(), bars[deletedIndex]);
-        entts[deletedIndex].removeComponent<Foo>();
-        TEST_EQUAL(*entts[deletedIndex].getComponent<BarNR>(), bars[deletedIndex]);
+        TEST_EQUAL(*entts[deletedIndex].getComponent<Foo>(), foos[deletedIndex]);
         entts[deletedIndex].removeComponent<BarNR>();
+        TEST_EQUAL(*entts[deletedIndex].getComponent<Foo>(), foos[deletedIndex]);
+        entts[deletedIndex].removeComponent<Foo>();
 
         for(int i = 0; i < entts.size(); i++)
         {
             if(i != deletedIndex)
             {
-                TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
                 TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+                TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
             }
         }
-        entts[entts.size() - 1].removeComponent<Foo>();
         entts[entts.size() - 1].removeComponent<BarNR>();
+        entts[entts.size() - 1].removeComponent<Foo>();
         entts.pop_back();
 
         for(int i = 0; i < entts.size(); i++)
         {
             if(i != deletedIndex)
             {
-                TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
                 TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+                TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
             }
         }
     }
