@@ -1,1 +1,0 @@
-include(${CMAKE_MODULE_PATH}/DefaultExecutable.cmake)

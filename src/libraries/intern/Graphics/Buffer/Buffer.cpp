@@ -1,4 +1,5 @@
 #include "Buffer.hpp"
+#include <VMA/VMA.hpp>
 #include <intern/Graphics/Renderer/VulkanDebug.hpp>
 #include <intern/Graphics/Renderer/VulkanRenderer.hpp>
 #include <intern/ResourceManager/ResourceManager.hpp>

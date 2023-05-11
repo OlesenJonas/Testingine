@@ -13,9 +13,8 @@ add_compile_definitions(EXECUTABLE_NAME="${FOLDER_VAR}")
 
 # Define the executable
 add_executable(${PROJECT_NAME} ${SOURCES})
-target_link_libraries(${PROJECT_NAME} ${LIBS})
 
-# add_dependencies(${PROJECT_NAME} Shaders)
+target_link_libraries(${PROJECT_NAME} intern)
 
 IF(VULKAN_ENABLE_VALIDATION)
 	add_custom_command(

@@ -69,9 +69,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     # add_compile_options(/W4 /WX)
 endif()
 
+# "TODO: Decide on paths for release and copy files there post build
 add_compile_definitions(
 	$<$<CONFIG:DEBUG>:ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets">
-	$<$<CONFIG:RELEASE>:ASSETS_PATH="TODO:Decide on path and copy files there post build">
+	$<$<CONFIG:RELEASE>:ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets">
 )
 
 add_compile_definitions(

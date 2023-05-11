@@ -24,5 +24,6 @@ add_test(NAME "run_bitset_test" COMMAND $<TARGET_FILE:Bitset_test>)
 add_executable(ECS_test TestECS.cpp)
 # link needed libraries
 target_link_libraries(ECS_test intern)
+target_link_libraries(ECS_test EASTL)
 # Define the test
 add_test(NAME "run_ECS_test" COMMAND $<TARGET_FILE:ECS_test>)
