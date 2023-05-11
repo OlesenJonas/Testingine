@@ -1,9 +1,6 @@
 #pragma once
 
-#include <bitset>
 #include <cstdint>
-#include <intern/Misc/Macros.hpp>
-#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -63,7 +60,7 @@ struct ECS
 
       private:
         // only allow construction by ECS
-        Entity(ECS& ecs);
+        explicit Entity(ECS& ecs, EntityID id);
 
         EntityID id;
         // not sure if its worth it to store the reference here just for the nicer syntax of
@@ -96,6 +93,11 @@ struct ECS
     };
     static_assert(std::is_move_constructible<Archetype>::value);
 
+    /*
+        Represents where an entity is stored
+            archetypeIndex is the index into the ECS' "archetypes" array
+        and inArrayIndex is the index of the entity inside that archetype's component arrays
+    */
     struct ArchetypeEntry
     {
         uint32_t archetypeIndex = 0xFFFFFFFF;
@@ -104,6 +106,17 @@ struct ECS
 
     struct ComponentInfo
     {
+        // clang-format off
+        /*
+          Function that constructs a component of this type by moving another instance of this into it
+          - This constructs because it assumes that the destination memory is uninitialized, which is true in most cases.
+            Though in cases where a component in the middle of an array is deleted, a move "replace" (swapping with last and
+            decreasing size) to fix the gap would be enough.
+            In order to not need to differentiate though, everytime a component is removed the object is also fully destructed.
+            So essentially there may be cases where a destructor + constructor is called too much but it works for now and means
+            just a single function is needed here, instead of MoveConstruct() *and* Move()
+        */
+        // clang-format on
         using MoveConstrFunc_t = void (*)(void* srcObject, void* dstptr);
         using DestroyFunc_t = void (*)(void*);
         size_t size = 0;
@@ -113,13 +126,29 @@ struct ECS
 
     //------------------------ Private Members
 
+    /*
+        Growing counter for generating "unique" ids for entities
+        Very bare bones, doesnt hold under re-loading, serialization etc
+    */
     EntityID entityIDCounter = 0;
-    std::vector<ComponentInfo> componentInfos;
-    std::vector<Archetype> archetypes;
+    /*
+        Get the index of an archetype given a bitmask of components it should hold
+    */
     std::unordered_map<ComponentMask, uint32_t> archetypeLUT;
+    /*
+        Retrieve information about its storage from an entities' id
+    */
     std::unordered_map<EntityID, ArchetypeEntry> entityLUT;
+    /*
+        LUT to map a bitmask index to each unique type
+    */
     uint32_t bitmaskIndexCounter = 0;
     std::unordered_map<ECSHelpers::TypeKey, uint32_t> componentTypeKeyToBitmaskIndexLUT;
+    /*
+        Data arrays
+    */
+    std::vector<ComponentInfo> componentInfos;
+    std::vector<Archetype> archetypes;
 
 #ifdef TESTER_CLASS
     friend TESTER_CLASS;

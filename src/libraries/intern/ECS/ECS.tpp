@@ -1,23 +1,24 @@
 #pragma once
 
 #include "ECS.hpp"
-#include <intern/Misc/Concepts.hpp>
 
 template <typename C>
 void ECS::registerComponent()
 {
     // Try to cache a component type id for C
-    // ECSHelpers::TypeKey
     const ECSHelpers::TypeKey key = ECSHelpers::getTypeKey<C>();
     auto iter = componentTypeKeyToBitmaskIndexLUT.find(key);
-    assert(
-        iter == componentTypeKeyToBitmaskIndexLUT.end() &&
-        "Trying to register a component that has already been registered!");
+    if(iter != componentTypeKeyToBitmaskIndexLUT.end())
+    {
+        // do nothing if component was already registered
+        //  todo: warn?
+        return;
+    }
 
     uint32_t newBitmaskIndex = bitmaskIndexCounter++;
     componentTypeKeyToBitmaskIndexLUT.emplace(std::make_pair(key, newBitmaskIndex));
 
-    if constexpr(is_trivially_relocatable<C>)
+    if constexpr(ECSHelpers::is_trivially_relocatable<C>)
     {
         ComponentInfo info{sizeof(C), nullptr, nullptr};
         componentInfos.emplace_back(info);
@@ -46,6 +47,7 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
 {
     auto archetypeEntryIt = entityLUT.find(entity->id);
     assert(archetypeEntryIt != entityLUT.end());
+    // instead of asserting false, could also just register the component now...
     ArchetypeEntry archEntry = archetypeEntryIt->second;
 
     Archetype* oldArchetype = &archetypes[archEntry.archetypeIndex];
@@ -85,22 +87,24 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
         newArchetype->growStorage();
     }
 
-    // move into new archetype
+    // move components into new archetype
     const uint32_t indexInOldArchetype = archEntry.inArrayIndex;
-    const uint32_t indexInNewArchetype = newArchetype->storageUsed;
-    newArchetype->storageUsed++;
-    uint32_t lastFind = newMask.find_first();
-    uint32_t oldArchArrayIndex = 0;
-    for(uint32_t newArchArrayIndex = 0; newArchArrayIndex < newArchetypeCompCount; newArchArrayIndex++)
+    const uint32_t indexInNewArchetype = newArchetype->storageUsed++;
+    uint32_t currentBitmaskIndex = newMask.find_first();
+    uint32_t oldArchComponentArrayIndex = 0;
+    for(                                                    //
+        uint32_t newArchComponentArrayIndex = 0;            //
+        newArchComponentArrayIndex < newArchetypeCompCount; //
+        newArchComponentArrayIndex++                        //
+    )
     {
-        const auto componentTypeID = lastFind;
-        const auto& componentInfo = componentInfos[componentTypeID];
+        const auto& componentInfo = componentInfos[currentBitmaskIndex];
 
         // Component existed in old archetype
-        if(oldMask[componentTypeID])
+        if(oldMask[currentBitmaskIndex])
         {
-            std::byte* oldArchCompArray = (std::byte*)(oldArchetype->componentArrays[oldArchArrayIndex]);
-            std::byte* newArchCompArray = (std::byte*)(newArchetype->componentArrays[newArchArrayIndex]);
+            std::byte* oldArchCompArray = (std::byte*)(oldArchetype->componentArrays[oldArchComponentArrayIndex]);
+            std::byte* newArchCompArray = (std::byte*)(newArchetype->componentArrays[newArchComponentArrayIndex]);
 
             const ComponentInfo::MoveConstrFunc_t moveFunc = componentInfo.moveFunc;
             const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
@@ -122,18 +126,18 @@ C* ECS::addComponent(Entity* entity, Args&&... args)
                 destroyFunc(&oldArchCompArray[indexInOldArchetype * componentInfo.size]);
             }
 
-            oldArchArrayIndex++;
+            oldArchComponentArrayIndex++;
         }
         else
         {
             // Component did not exist in old archetype
             // so this must be the one being added
-            C* newArchCompArray = (C*)(newArchetype->componentArrays[newArchArrayIndex]);
+            C* newArchCompArray = (C*)(newArchetype->componentArrays[newArchComponentArrayIndex]);
             // this assumes the memory is "in destroyed state" (not sure about correct terminology)
             // -> construct instead of move into
             newComponent = new(&newArchCompArray[indexInNewArchetype]) C(std::forward<Args>(args)...);
         }
-        lastFind = newMask.find_next(lastFind);
+        currentBitmaskIndex = newMask.find_next(currentBitmaskIndex);
     }
     newArchetype->entityIDs.push_back(entity->id);
     const ArchetypeEntry updatedEntry{.archetypeIndex = newArchetypeIndex, .inArrayIndex = indexInNewArchetype};
@@ -189,26 +193,28 @@ void ECS::removeComponent(Entity* entity)
         newArchetype->growStorage();
     }
 
-    // move into new archetype
+    // move components into new archetype
     const uint32_t indexInOldArchetype = archEntry.inArrayIndex;
-    const uint32_t indexInNewArchetype = newArchetype->storageUsed;
-    newArchetype->storageUsed++;
-    uint32_t lastFind = oldMask.find_first();
-    uint32_t newArchArrayIndex = 0;
-    for(uint32_t oldArchArrayIndex = 0; oldArchArrayIndex < oldArchetypeCompCount; oldArchArrayIndex++)
+    const uint32_t indexInNewArchetype = newArchetype->storageUsed++;
+    uint32_t currentBitmaskIndex = oldMask.find_first();
+    uint32_t newArchComponentArrayIndex = 0;
+    for(                                                    //
+        uint32_t oldArchComponentArrayIndex = 0;            //
+        oldArchComponentArrayIndex < oldArchetypeCompCount; //
+        oldArchComponentArrayIndex++                        //
+    )
     {
-        const auto componentTypeID = lastFind;
-        const auto& componentInfo = componentInfos[componentTypeID];
+        const auto& componentInfo = componentInfos[currentBitmaskIndex];
 
-        std::byte* oldArchCompArray = (std::byte*)(oldArchetype->componentArrays[oldArchArrayIndex]);
+        std::byte* oldArchCompArray = (std::byte*)(oldArchetype->componentArrays[oldArchComponentArrayIndex]);
 
         const ComponentInfo::MoveConstrFunc_t moveFunc = componentInfo.moveFunc;
         const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
 
-        if(newMask[componentTypeID])
+        if(newMask[currentBitmaskIndex])
         {
             // Component still exists in new archetype
-            std::byte* newArchCompArray = (std::byte*)(newArchetype->componentArrays[newArchArrayIndex]);
+            std::byte* newArchCompArray = (std::byte*)(newArchetype->componentArrays[newArchComponentArrayIndex]);
 
             if(moveFunc == nullptr)
             {
@@ -226,7 +232,7 @@ void ECS::removeComponent(Entity* entity)
                 destroyFunc(&oldArchCompArray[indexInOldArchetype * componentInfo.size]);
             }
 
-            newArchArrayIndex++;
+            newArchComponentArrayIndex++;
         }
         else
         {
@@ -241,7 +247,7 @@ void ECS::removeComponent(Entity* entity)
                 destroyFunc(&oldArchCompArray[indexInOldArchetype * componentInfo.size]);
             }
         }
-        lastFind = oldMask.find_next(lastFind);
+        currentBitmaskIndex = oldMask.find_next(currentBitmaskIndex);
     }
     newArchetype->entityIDs.push_back(entity->id);
     const ArchetypeEntry updatedEntry{.archetypeIndex = newArchetypeIndex, .inArrayIndex = indexInNewArchetype};
@@ -257,7 +263,10 @@ C* ECS::getComponent(Entity* entity)
     Archetype& archetype = archetypes[entry.archetypeIndex];
     uint32_t componentTypeBitmaskIndex = bitmaskIndexFromComponentType<C>();
     if(!archetype.componentMask[componentTypeBitmaskIndex])
+    {
+        // todo: warn user, trying to retrieve component that entitiy doesnt hold
         return nullptr;
+    }
     // shift away all bits (including C::getID one) and count how many remain, thats the index
     // into the component array array
     const int highBitsToEliminate = MAX_COMPONENT_TYPES - componentTypeBitmaskIndex;

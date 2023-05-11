@@ -1,13 +1,13 @@
 #include "ECS.hpp"
-#include "ECS/ECS.hpp"
-#include "ECS/SharedTypes.hpp"
+#include "SharedTypes.hpp"
 
-ECS::Entity::Entity(ECS& ecs) : ecs(ecs)
+ECS::Entity::Entity(ECS& ecs, EntityID id) : ecs(ecs), id(id)
 {
 }
 
 ECS::ECS()
 {
+    // create "Empty" (no components) archetype to hold empty entities by default
     archetypes.emplace_back(ComponentMask{}, *this);
     assert(archetypes[0].componentMask.none());
     archetypeLUT.emplace(std::make_pair(ComponentMask{}, 0));
@@ -15,8 +15,7 @@ ECS::ECS()
 
 ECS::Entity ECS::createEntity()
 {
-    Entity entity{*this};
-    entity.id = entityIDCounter++;
+    Entity entity{*this, entityIDCounter++};
 
     Archetype& emptyArchetype = archetypes[0];
     uint32_t inArchetypeIndex = emptyArchetype.entityIDs.size();
@@ -37,10 +36,12 @@ EntityID ECS::Entity::getID() const
 uint32_t ECS::createArchetype(ComponentMask mask)
 {
     assert(archetypeLUT.find(mask) == archetypeLUT.end());
+
     Archetype& newArchetype = archetypes.emplace_back(mask, *this);
     uint32_t newArchetypeIndex = archetypes.size() - 1;
     archetypeLUT.emplace(std::make_pair(mask, newArchetypeIndex));
     assert(archetypeLUT.find(mask) != archetypeLUT.end());
+
     return newArchetypeIndex;
 }
 
@@ -60,13 +61,12 @@ ECS::Archetype::Archetype(ComponentMask mask, ECS& ecs) : componentMask(mask), e
         storageCapacity = 10;
         storageUsed = 0;
 
-        uint32_t lastFind = componentMask.find_first();
+        uint32_t currentBitmaskIndex = componentMask.find_first();
         for(int i = 0; i < componentCount; i++)
         {
-            const auto componentTypeID = lastFind;
-            const size_t componentSize = ecs.componentInfos[componentTypeID].size;
+            const size_t componentSize = ecs.componentInfos[currentBitmaskIndex].size;
             componentArrays[i] = malloc(componentSize * storageCapacity);
-            lastFind = componentMask.find_next(lastFind);
+            currentBitmaskIndex = componentMask.find_next(currentBitmaskIndex);
         }
     }
 }
@@ -84,10 +84,10 @@ ECS::Archetype::Archetype(Archetype&& other) noexcept
 
 ECS::Archetype::~Archetype()
 {
-    uint32_t componentArrayTypeIndex = componentMask.find_first();
+    uint32_t currentBitmaskIndex = componentMask.find_first();
     for(int i = 0; i < componentArrays.size(); i++)
     {
-        ComponentInfo& componentInfo = ecs.componentInfos[componentArrayTypeIndex];
+        ComponentInfo& componentInfo = ecs.componentInfos[currentBitmaskIndex];
         ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
         if(destroyFunc != nullptr)
         {
@@ -99,14 +99,14 @@ ECS::Archetype::~Archetype()
         }
         // destruct all objects that still exist in array
         free(componentArrays[i]);
-        componentArrayTypeIndex = componentMask.find_next(componentArrayTypeIndex);
+        currentBitmaskIndex = componentMask.find_next(currentBitmaskIndex);
     }
     // dont have to worry about fixing any relations (LUT entries etc)
     // since this is only called
     //      a) on ECS shutdown
-    //      b) after ECS::archetypes has been resized, in which case
+    //      b) after ecs.archetypes has been resized, in which case
     //         this should be in a moved-from (empty) state anyways
-    //         where all links have already been updated
+    //         where all links have already been updated outside
 }
 
 void ECS::Archetype::growStorage()
@@ -115,11 +115,10 @@ void ECS::Archetype::growStorage()
 
     const uint32_t componentCount = componentMask.count();
 
-    uint32_t lastFind = componentMask.find_first();
+    uint32_t currentBitmaskIndex = componentMask.find_first();
     for(int i = 0; i < componentCount; i++)
     {
-        const auto componentTypeID = lastFind;
-        const auto& componentInfo = ecs.componentInfos[componentTypeID];
+        const auto& componentInfo = ecs.componentInfos[currentBitmaskIndex];
 
         std::byte* oldStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
         std::byte* newStorage = (std::byte*)malloc(componentInfo.size * newCapacity);
@@ -148,7 +147,7 @@ void ECS::Archetype::growStorage()
         componentArrays[i] = newStorage;
         free(oldStorage);
 
-        lastFind = componentMask.find_next(lastFind);
+        currentBitmaskIndex = componentMask.find_next(currentBitmaskIndex);
     }
 
     storageCapacity = newCapacity;
@@ -160,11 +159,10 @@ void ECS::Archetype::fixGap(uint32_t gapIndex)
     if(!componentArrays.empty())
         storageUsed--;
     // move last group of components into gap to fill it
-    uint32_t lastFind = componentMask.find_first();
+    uint32_t currentBitmaskIndex = componentMask.find_first();
     for(int i = 0; i < componentMask.count(); i++)
     {
-        const auto componentTypeID = lastFind;
-        const auto& componentInfo = ecs.componentInfos[componentTypeID];
+        const auto& componentInfo = ecs.componentInfos[currentBitmaskIndex];
 
         std::byte* componentStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
 
@@ -189,12 +187,12 @@ void ECS::Archetype::fixGap(uint32_t gapIndex)
             destroyFunc(&componentStorage[oldEndIndex * componentInfo.size]);
         }
 
-        lastFind = componentMask.find_next(lastFind);
+        currentBitmaskIndex = componentMask.find_next(currentBitmaskIndex);
     }
 
     // do same swap and delete on the entityID vector
     assert(entityIDs.size() - 1 == oldEndIndex);
-    entityIDs[gapIndex] = entityIDs[entityIDs.size() - 1];
+    entityIDs[gapIndex] = entityIDs[oldEndIndex];
     entityIDs.pop_back();
     assert(storageCapacity == 0 || entityIDs.size() == storageUsed);
 
