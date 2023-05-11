@@ -1,12 +1,12 @@
 #pragma once
 
-#include <intern/Camera/Camera.hpp>
-#include <intern/ECS/ECS.hpp>
-#include <intern/Graphics/Renderer/VulkanRenderer.hpp>
-#include <intern/InputManager/InputManager.hpp>
-#include <intern/ResourceManager/ResourceManager.hpp>
-#include <intern/Scene/Scene.hpp>
-#include <intern/Window/Window.hpp>
+#include <ECS/ECS.hpp>
+#include <Engine/Camera/Camera.hpp>
+#include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
+#include <Engine/InputManager/InputManager.hpp>
+#include <Engine/ResourceManager/ResourceManager.hpp>
+#include <Engine/Scene/Scene.hpp>
+#include <Engine/Window/Window.hpp>
 
 class Engine
 {

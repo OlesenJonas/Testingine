@@ -2,9 +2,10 @@
 
 #include "DynamicBitset.hpp"
 
+#include <Engine/Misc/Concepts.hpp>
 #include <cassert>
-#include <intern/Misc/Concepts.hpp>
 #include <type_traits>
+
 
 /*
     not sure this is correct yet, will see

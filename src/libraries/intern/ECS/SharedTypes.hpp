@@ -3,6 +3,7 @@
 #include <EASTL/bitset.h>
 #include <cassert>
 #include <cstdint>
+#include <type_traits>
 
 using IDType = uint32_t;
 using EntityID = IDType;

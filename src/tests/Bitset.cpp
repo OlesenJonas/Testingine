@@ -1,6 +1,6 @@
+#include <Datastructures/DynamicBitset.hpp>
 #include <bitset>
 #include <cassert>
-#include <intern/Datastructures/DynamicBitset.hpp>
 #include <iostream>
 #include <vcruntime.h>
 

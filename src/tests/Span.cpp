@@ -1,5 +1,5 @@
+#include <Datastructures/Span.hpp>
 #include <initializer_list>
-#include <intern/Datastructures/Span.hpp>
 
 #include <type_traits>
 #include <vector>

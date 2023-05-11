@@ -7,9 +7,7 @@
 #include "Helpers.hpp"
 #include "SharedTypes.hpp"
 
-#ifdef TESTER_CLASS
-class TESTER_CLASS;
-#endif
+class ECSTester;
 
 struct ECS
 {
@@ -150,9 +148,7 @@ struct ECS
     std::vector<ComponentInfo> componentInfos;
     std::vector<Archetype> archetypes;
 
-#ifdef TESTER_CLASS
-    friend TESTER_CLASS;
-#endif
+    friend ECSTester;
 };
 
 #include "Entity.tpp"

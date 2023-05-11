@@ -1,6 +1,6 @@
+#include <Engine/Engine.hpp>
+#include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
 #include <glm/gtx/transform.hpp>
-#include <intern/Engine/Engine.hpp>
-#include <intern/Graphics/Renderer/VulkanRenderer.hpp>
 #include <vulkan/vulkan_core.h>
 
 void initScene()
@@ -107,8 +107,6 @@ void initScene()
 int main()
 {
     Engine engine;
-
-    VulkanRenderer& renderer = *engine.getRenderer();
 
     initScene();
 

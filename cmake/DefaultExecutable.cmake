@@ -14,7 +14,7 @@ add_compile_definitions(EXECUTABLE_NAME="${FOLDER_VAR}")
 # Define the executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-target_link_libraries(${PROJECT_NAME} intern)
+target_link_libraries(${PROJECT_NAME} Engine)
 
 IF(VULKAN_ENABLE_VALIDATION)
 	add_custom_command(
