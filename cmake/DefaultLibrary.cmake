@@ -17,11 +17,18 @@ if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Tests")
 endif()
 
 # main library
-add_library(${LIB} STATIC ${SOURCES})
-message(STATUS "Added Library: ${LIB}")
-target_include_directories(${LIB} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-get_filename_component(DIR_ONE_ABOVE ../ ABSOLUTE)
-target_include_directories(${LIB} PUBLIC ${DIR_ONE_ABOVE})
+if(NOT SOURCES)
+    add_library(${LIB} INTERFACE ${SOURCES})
+    message(STATUS "Added Library: ${LIB} (Header only)")
+    get_filename_component(DIR_ONE_ABOVE ../ ABSOLUTE)
+    target_include_directories(${LIB} INTERFACE ${DIR_ONE_ABOVE})
+else()
+    add_library(${LIB} STATIC ${SOURCES})
+    message(STATUS "Added Library: ${LIB}")
+    target_include_directories(${LIB} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    get_filename_component(DIR_ONE_ABOVE ../ ABSOLUTE)
+    target_include_directories(${LIB} PUBLIC ${DIR_ONE_ABOVE})
+endif()
 
 # tests
 if(LIBRARY_HAS_TESTS)
@@ -29,6 +36,7 @@ if(LIBRARY_HAS_TESTS)
 
     add_library(${LIB_TESTS} INTERFACE)
     target_link_libraries(${LIB_TESTS} INTERFACE ${LIB})
+    target_link_libraries(${LIB_TESTS} INTERFACE Testing)
     message(STATUS "Library has tests: ")
 
     file(GLOB Tests

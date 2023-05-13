@@ -1,36 +1,6 @@
 #include <ECS/ECS.hpp>
-
-#include <type_traits>
+#include <Testing/Check.hpp>
 #include <unordered_set>
-
-// could also implement an assertEqualExact(?) that requires exact T matches
-template <typename T1, typename T2>
-    requires std::is_convertible<T2, T1>::value
-inline void assertEqual(T1 left, T2 right, const char* file = "", int line = -1)
-{
-    if(left != right)
-    {
-        // very useful if testing is done with debug builds
-        printf("assertEqual failed: %s line %d \n", file, line);
-        assert(false);
-        exit(-1);
-    }
-}
-template <typename T1, typename T2>
-    requires std::is_convertible<T2, T1>::value
-inline void assertNotEqual(T1 left, T2 right, const char* file = "", int line = -1)
-{
-    if(left == right)
-    {
-        // very useful if testing is done with debug builds
-        printf("assertNotEqual failed: %s line %d \n", file, line);
-        assert(false);
-        exit(-1);
-    }
-}
-#define TEST_EQUAL(x, y) assertEqual(x, y, __FILE__, __LINE__)
-#define TEST_NOT_EQUAL(x, y) assertNotEqual(x, y, __FILE__, __LINE__)
-
 /*
     These tests werent created systematically and are definitly not exhaustive!
 */
@@ -52,24 +22,28 @@ class ECSTester
         distinctValues.insert(ECSHelpers::getTypeKey<Foo>());
         distinctValues.insert(ECSHelpers::getTypeKey<Bar>());
         distinctValues.insert(ECSHelpers::getTypeKey<decltype(ECSTester::testKeyGen)>());
-        TEST_EQUAL(distinctValues.size(), 5);
+        bool res = CheckEqual(distinctValues.size(), 5);
+        assert(res);
     }
 
     static void testInitialState(ECS& ecs)
     {
-        TEST_EQUAL(ecs.entityIDCounter, 0);
-        TEST_EQUAL(ecs.componentInfos.size(), 0);
-        TEST_EQUAL(ecs.archetypes.size(), 1);
-        TEST_EQUAL(ecs.archetypeLUT.size(), 1);
-        TEST_EQUAL(ecs.entityLUT.size(), 0);
+        bool res = true;
+        res &= CheckEqual(ecs.entityIDCounter, 0);
+        res &= CheckEqual(ecs.componentInfos.size(), 0);
+        res &= CheckEqual(ecs.archetypes.size(), 1);
+        res &= CheckEqual(ecs.archetypeLUT.size(), 1);
+        res &= CheckEqual(ecs.entityLUT.size(), 0);
         ComponentMask emptyMask;
-        TEST_EQUAL(emptyMask.none(), true);
-        TEST_EQUAL(ecs.archetypes[0].componentMask, emptyMask);
-        TEST_EQUAL(ecs.archetypeLUT.find(emptyMask)->second, 0);
+        res &= CheckEqual(emptyMask.none(), true);
+        res &= CheckEqual(ecs.archetypes[0].componentMask, emptyMask);
+        res &= CheckEqual(ecs.archetypeLUT.find(emptyMask)->second, 0);
+        assert(res);
     }
 
     static void testRegistration()
     {
+        bool res = true;
         ECS ecs;
         testInitialState(ecs);
 
@@ -79,21 +53,22 @@ class ECSTester
         };
         ecs.registerComponent<Foo>();
 
-        TEST_EQUAL(ecs.componentInfos.size(), 1);
+        // res &= CheckEqual(ecs.componentInfos.size(), 1);
+        Check::Equal(ecs.componentInfos.size(), 1);
         ECS::ComponentInfo& info = ecs.componentInfos[0];
-        TEST_EQUAL(info.size, sizeof(Foo));
+        res &= CheckEqual(info.size, sizeof(Foo));
         // Foo is trivially relocatable
-        TEST_EQUAL(info.moveFunc, nullptr);
-        TEST_EQUAL(info.destroyFunc, nullptr);
-        TEST_EQUAL(ecs.bitmaskIndexFromComponentType<Foo>(), 0);
+        res &= CheckEqual(info.moveFunc, nullptr);
+        res &= CheckEqual(info.destroyFunc, nullptr);
+        res &= CheckEqual(ecs.bitmaskIndexFromComponentType<Foo>(), 0);
         // Everything else must be unchanged
-        TEST_EQUAL(ecs.archetypes.size(), 1);
-        TEST_EQUAL(ecs.archetypeLUT.size(), 1);
-        TEST_EQUAL(ecs.entityLUT.size(), 0);
+        res &= CheckEqual(ecs.archetypes.size(), 1);
+        res &= CheckEqual(ecs.archetypeLUT.size(), 1);
+        res &= CheckEqual(ecs.entityLUT.size(), 0);
         ComponentMask emptyMask;
-        TEST_EQUAL(emptyMask.none(), true);
-        TEST_EQUAL(ecs.archetypes[0].componentMask, emptyMask);
-        TEST_EQUAL(ecs.archetypeLUT.find(emptyMask)->second, 0);
+        res &= CheckEqual(emptyMask.none(), true);
+        res &= CheckEqual(ecs.archetypes[0].componentMask, emptyMask);
+        res &= CheckEqual(ecs.archetypeLUT.find(emptyMask)->second, 0);
 
         struct Bar
         {
@@ -103,23 +78,24 @@ class ECSTester
         static_assert(!ECSHelpers::is_trivially_relocatable<Bar>);
         ecs.registerComponent<Bar>();
 
-        TEST_EQUAL(ecs.componentInfos.size(), 2);
+        res &= CheckEqual(ecs.componentInfos.size(), 2);
         info = ecs.componentInfos[1];
-        TEST_EQUAL(info.size, sizeof(Bar));
+        res &= CheckEqual(info.size, sizeof(Bar));
         // Foo is trivially relocatable
-        TEST_NOT_EQUAL(info.moveFunc, nullptr);
-        TEST_NOT_EQUAL(info.destroyFunc, nullptr);
-        TEST_EQUAL(ecs.bitmaskIndexFromComponentType<Bar>(), 1);
+        res &= CheckNotEqual(info.moveFunc, nullptr);
+        res &= CheckNotEqual(info.destroyFunc, nullptr);
+        res &= CheckEqual(ecs.bitmaskIndexFromComponentType<Bar>(), 1);
         // Everything else must be unchanged
-        TEST_EQUAL(ecs.archetypes.size(), 1);
-        TEST_EQUAL(ecs.archetypeLUT.size(), 1);
-        TEST_EQUAL(ecs.entityLUT.size(), 0);
-        TEST_EQUAL(ecs.archetypes[0].componentMask, emptyMask);
-        TEST_EQUAL(ecs.archetypeLUT.find(emptyMask)->second, 0);
+        res &= CheckEqual(ecs.archetypes.size(), 1);
+        res &= CheckEqual(ecs.archetypeLUT.size(), 1);
+        res &= CheckEqual(ecs.entityLUT.size(), 0);
+        res &= CheckEqual(ecs.archetypes[0].componentMask, emptyMask);
+        res &= CheckEqual(ecs.archetypeLUT.find(emptyMask)->second, 0);
     }
 
     static void testArchetypeCreation()
     {
+        bool res = true;
         ECS ecs;
         testInitialState(ecs);
 
@@ -135,64 +111,64 @@ class ECSTester
             auto operator<=>(const Bar&) const = default;
         };
         ecs.registerComponent<Bar>();
-        TEST_EQUAL(ecs.componentInfos.size(), 2);
+        res &= CheckEqual(ecs.componentInfos.size(), 2);
 
         auto entt = ecs.createEntity();
-        TEST_EQUAL(entt.getID(), 0);
+        res &= CheckEqual(entt.getID(), 0);
 
         Foo foo{.x = rand(), .y = 13};
         entt.addComponent<Foo>(foo);
 
         ComponentMask fooMask;
         fooMask.set(ecs.bitmaskIndexFromComponentType<Foo>());
-        TEST_EQUAL(ecs.entityLUT.size(), 1);
-        TEST_EQUAL(ecs.archetypes.size(), 2);
-        TEST_EQUAL(ecs.archetypeLUT.size(), 2);
+        res &= CheckEqual(ecs.entityLUT.size(), 1);
+        res &= CheckEqual(ecs.archetypes.size(), 2);
+        res &= CheckEqual(ecs.archetypeLUT.size(), 2);
         uint32_t fooArchetypeIndex = ecs.archetypeLUT.at(fooMask);
-        TEST_EQUAL(fooArchetypeIndex, ecs.entityLUT.at(entt.getID()).archetypeIndex);
+        res &= CheckEqual(fooArchetypeIndex, ecs.entityLUT.at(entt.getID()).archetypeIndex);
         ECS::Archetype* fooArchetype = &ecs.archetypes[fooArchetypeIndex];
-        TEST_EQUAL(fooArchetype->componentMask, fooMask);
-        TEST_EQUAL(fooArchetype->entityIDs.size(), 1);
-        TEST_EQUAL(fooArchetype->entityIDs[0], entt.getID());
-        TEST_EQUAL(fooArchetype->storageUsed, 1);
+        res &= CheckEqual(fooArchetype->componentMask, fooMask);
+        res &= CheckEqual(fooArchetype->entityIDs.size(), 1);
+        res &= CheckEqual(fooArchetype->entityIDs[0], entt.getID());
+        res &= CheckEqual(fooArchetype->storageUsed, 1);
         Foo* gotFoo = entt.getComponent<Foo>();
-        TEST_EQUAL(*gotFoo, foo);
+        res &= CheckEqual(*gotFoo, foo);
 
         auto entt2 = ecs.createEntity();
-        TEST_EQUAL(entt2.getID(), 1);
+        res &= CheckEqual(entt2.getID(), 1);
         entt2.addComponent<Bar>();
         // test bar only archetype
         ComponentMask barMask;
         barMask.set(ecs.bitmaskIndexFromComponentType<Bar>());
-        TEST_EQUAL(ecs.entityLUT.size(), 2);
-        TEST_EQUAL(ecs.archetypes.size(), 3);
-        TEST_EQUAL(ecs.archetypeLUT.size(), 3);
+        res &= CheckEqual(ecs.entityLUT.size(), 2);
+        res &= CheckEqual(ecs.archetypes.size(), 3);
+        res &= CheckEqual(ecs.archetypeLUT.size(), 3);
         ECS::Archetype& barArchetype = ecs.archetypes[ecs.entityLUT.at(entt2.getID()).archetypeIndex];
-        TEST_EQUAL(barArchetype.componentMask, barMask);
-        TEST_EQUAL(barArchetype.entityIDs.size(), 1);
-        TEST_EQUAL(barArchetype.entityIDs[0], entt2.getID());
-        TEST_EQUAL(barArchetype.storageUsed, 1);
+        res &= CheckEqual(barArchetype.componentMask, barMask);
+        res &= CheckEqual(barArchetype.entityIDs.size(), 1);
+        res &= CheckEqual(barArchetype.entityIDs[0], entt2.getID());
+        res &= CheckEqual(barArchetype.storageUsed, 1);
         Bar* gotBar = entt2.getComponent<Bar>();
-        TEST_EQUAL(*gotBar, Bar{});
+        res &= CheckEqual(*gotBar, Bar{});
 
         entt.addComponent<Bar>();
         fooArchetype = &ecs.archetypes[fooArchetypeIndex];
-        TEST_EQUAL(fooArchetype->entityIDs.size(), 0);
-        TEST_EQUAL(fooArchetype->storageUsed, 0);
+        res &= CheckEqual(fooArchetype->entityIDs.size(), 0);
+        res &= CheckEqual(fooArchetype->storageUsed, 0);
         // test foo+bar archetype
         ComponentMask foobarMask = fooMask | barMask;
-        TEST_EQUAL(ecs.entityLUT.size(), 2);
-        TEST_EQUAL(ecs.archetypes.size(), 4);
-        TEST_EQUAL(ecs.archetypeLUT.size(), 4);
+        res &= CheckEqual(ecs.entityLUT.size(), 2);
+        res &= CheckEqual(ecs.archetypes.size(), 4);
+        res &= CheckEqual(ecs.archetypeLUT.size(), 4);
         ECS::Archetype& foobarArchetype = ecs.archetypes[ecs.entityLUT.at(entt.getID()).archetypeIndex];
-        TEST_EQUAL(foobarArchetype.componentMask, foobarMask);
-        TEST_EQUAL(foobarArchetype.entityIDs.size(), 1);
-        TEST_EQUAL(foobarArchetype.entityIDs[0], entt.getID());
-        TEST_EQUAL(foobarArchetype.storageUsed, 1);
+        res &= CheckEqual(foobarArchetype.componentMask, foobarMask);
+        res &= CheckEqual(foobarArchetype.entityIDs.size(), 1);
+        res &= CheckEqual(foobarArchetype.entityIDs[0], entt.getID());
+        res &= CheckEqual(foobarArchetype.storageUsed, 1);
         gotFoo = entt.getComponent<Foo>();
         gotBar = entt.getComponent<Bar>();
-        TEST_EQUAL(*gotFoo, foo);
-        TEST_EQUAL(*gotBar, Bar{});
+        res &= CheckEqual(*gotFoo, foo);
+        res &= CheckEqual(*gotBar, Bar{});
     }
 
     struct Foo
@@ -211,7 +187,7 @@ class ECSTester
 
     static void testResizes()
     {
-
+        bool res = true;
         ECS ecs;
         testInitialState(ecs);
         ecs.registerComponent<Foo>();
@@ -227,9 +203,9 @@ class ECSTester
             // bar = Bar{.v = {rand() * 0.1234f}, .z = static_cast<char>(rand());
             ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
             entt.addComponent<Foo>(foo);
-            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
+            res &= CheckEqual(*entt.getComponent<Foo>(), foo);
             entt.addComponent<BarNR>(bar);
-            TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+            res &= CheckEqual(*entt.getComponent<BarNR>(), bar);
         }
         uint32_t initialCapacity = ecs.archetypes[1].storageCapacity;
         for(int i = 1; i < initialCapacity; i++)
@@ -239,20 +215,20 @@ class ECSTester
                 bars.emplace_back(BarNR{.someVec = {rand() * 0.1234f}, .someChar = static_cast<char>(rand())});
             ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
             entt.addComponent<Foo>(foo);
-            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
+            res &= CheckEqual(*entt.getComponent<Foo>(), foo);
             entt.addComponent<BarNR>(bar);
-            TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+            res &= CheckEqual(*entt.getComponent<BarNR>(), bar);
         }
 
         for(int i = 0; i < 10; i++)
         {
-            TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
-            TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+            res &= CheckEqual(*entts[i].getComponent<Foo>(), foos[i]);
+            res &= CheckEqual(*entts[i].getComponent<BarNR>(), bars[i]);
         }
 
-        TEST_EQUAL(ecs.archetypes[0].storageUsed, 0);
-        TEST_EQUAL(ecs.archetypes[1].storageUsed, 0);
-        TEST_EQUAL(ecs.archetypes[2].storageUsed, ecs.archetypes[2].storageCapacity);
+        res &= CheckEqual(ecs.archetypes[0].storageUsed, 0);
+        res &= CheckEqual(ecs.archetypes[1].storageUsed, 0);
+        res &= CheckEqual(ecs.archetypes[2].storageUsed, ecs.archetypes[2].storageCapacity);
         // Force growing storage
         {
             auto& foo = foos.emplace_back(Foo{.x = rand(), .y = rand()});
@@ -260,37 +236,37 @@ class ECSTester
                 bars.emplace_back(BarNR{.someVec = {rand() * 0.1234f}, .someChar = static_cast<char>(rand())});
             ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
             entt.addComponent<Foo>(foo);
-            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
+            res &= CheckEqual(*entt.getComponent<Foo>(), foo);
             entt.addComponent<BarNR>(bar);
-            TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+            res &= CheckEqual(*entt.getComponent<BarNR>(), bar);
         }
 
         for(int i = 0; i < 11; i++)
         {
-            TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
-            TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+            res &= CheckEqual(*entts[i].getComponent<Foo>(), foos[i]);
+            res &= CheckEqual(*entts[i].getComponent<BarNR>(), bars[i]);
         }
 
-        TEST_NOT_EQUAL(ecs.archetypes[2].storageCapacity, initialCapacity);
+        res &= CheckNotEqual(ecs.archetypes[2].storageCapacity, initialCapacity);
 
         const uint32_t deletedIndex = 5;
-        TEST_EQUAL(*entts[deletedIndex].getComponent<BarNR>(), bars[deletedIndex]);
+        res &= CheckEqual(*entts[deletedIndex].getComponent<BarNR>(), bars[deletedIndex]);
         entts[deletedIndex].removeComponent<Foo>();
-        TEST_EQUAL(*entts[deletedIndex].getComponent<BarNR>(), bars[deletedIndex]);
+        res &= CheckEqual(*entts[deletedIndex].getComponent<BarNR>(), bars[deletedIndex]);
         entts[deletedIndex].removeComponent<BarNR>();
 
         const uint32_t deletedIndex2 = 7;
-        TEST_EQUAL(*entts[deletedIndex2].getComponent<Foo>(), foos[deletedIndex2]);
+        res &= CheckEqual(*entts[deletedIndex2].getComponent<Foo>(), foos[deletedIndex2]);
         entts[deletedIndex2].removeComponent<BarNR>();
-        TEST_EQUAL(*entts[deletedIndex2].getComponent<Foo>(), foos[deletedIndex2]);
+        res &= CheckEqual(*entts[deletedIndex2].getComponent<Foo>(), foos[deletedIndex2]);
         entts[deletedIndex2].removeComponent<Foo>();
 
         for(int i = 0; i < entts.size(); i++)
         {
             if(i != deletedIndex && i != deletedIndex2)
             {
-                TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
-                TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+                res &= CheckEqual(*entts[i].getComponent<Foo>(), foos[i]);
+                res &= CheckEqual(*entts[i].getComponent<BarNR>(), bars[i]);
             }
         }
         entts[entts.size() - 1].removeComponent<Foo>();
@@ -301,14 +277,16 @@ class ECSTester
         {
             if(i != deletedIndex && i != deletedIndex2)
             {
-                TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
-                TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
+                res &= CheckEqual(*entts[i].getComponent<Foo>(), foos[i]);
+                res &= CheckEqual(*entts[i].getComponent<BarNR>(), bars[i]);
             }
         }
+        assert(res);
     }
 
     static void testResizes2()
     {
+        bool res = true;
         // The same as testResizes() but this time the order of components being removed/added
         // is swapped (registering them still happens in the same order, so that their bitmask indices are the
         // same as in testResizes)
@@ -327,9 +305,9 @@ class ECSTester
             // bar = Bar{.v = {rand() * 0.1234f}, .z = static_cast<char>(rand());
             ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
             entt.addComponent<BarNR>(bar);
-            TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+            res &= CheckEqual(*entt.getComponent<BarNR>(), bar);
             entt.addComponent<Foo>(foo);
-            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
+            res &= CheckEqual(*entt.getComponent<Foo>(), foo);
         }
         uint32_t initialCapacity = ecs.archetypes[1].storageCapacity;
         for(int i = 1; i < initialCapacity; i++)
@@ -339,20 +317,20 @@ class ECSTester
                 bars.emplace_back(BarNR{.someVec = {rand() * 0.1234f}, .someChar = static_cast<char>(rand())});
             ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
             entt.addComponent<BarNR>(bar);
-            TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+            res &= CheckEqual(*entt.getComponent<BarNR>(), bar);
             entt.addComponent<Foo>(foo);
-            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
+            res &= CheckEqual(*entt.getComponent<Foo>(), foo);
         }
 
         for(int i = 0; i < 10; i++)
         {
-            TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
-            TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
+            res &= CheckEqual(*entts[i].getComponent<BarNR>(), bars[i]);
+            res &= CheckEqual(*entts[i].getComponent<Foo>(), foos[i]);
         }
 
-        TEST_EQUAL(ecs.archetypes[0].storageUsed, 0);
-        TEST_EQUAL(ecs.archetypes[1].storageUsed, 0);
-        TEST_EQUAL(ecs.archetypes[2].storageUsed, ecs.archetypes[2].storageCapacity);
+        res &= CheckEqual(ecs.archetypes[0].storageUsed, 0);
+        res &= CheckEqual(ecs.archetypes[1].storageUsed, 0);
+        res &= CheckEqual(ecs.archetypes[2].storageUsed, ecs.archetypes[2].storageCapacity);
         // Force growing storage
         {
             auto& foo = foos.emplace_back(Foo{.x = rand(), .y = rand()});
@@ -360,31 +338,31 @@ class ECSTester
                 bars.emplace_back(BarNR{.someVec = {rand() * 0.1234f}, .someChar = static_cast<char>(rand())});
             ECS::Entity& entt = entts.emplace_back(ecs.createEntity());
             entt.addComponent<BarNR>(bar);
-            TEST_EQUAL(*entt.getComponent<BarNR>(), bar);
+            res &= CheckEqual(*entt.getComponent<BarNR>(), bar);
             entt.addComponent<Foo>(foo);
-            TEST_EQUAL(*entt.getComponent<Foo>(), foo);
+            res &= CheckEqual(*entt.getComponent<Foo>(), foo);
         }
 
         for(int i = 0; i < 11; i++)
         {
-            TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
-            TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
+            res &= CheckEqual(*entts[i].getComponent<BarNR>(), bars[i]);
+            res &= CheckEqual(*entts[i].getComponent<Foo>(), foos[i]);
         }
 
-        TEST_NOT_EQUAL(ecs.archetypes[2].storageCapacity, initialCapacity);
+        res &= CheckNotEqual(ecs.archetypes[2].storageCapacity, initialCapacity);
 
         const uint32_t deletedIndex = 5;
-        TEST_EQUAL(*entts[deletedIndex].getComponent<Foo>(), foos[deletedIndex]);
+        res &= CheckEqual(*entts[deletedIndex].getComponent<Foo>(), foos[deletedIndex]);
         entts[deletedIndex].removeComponent<BarNR>();
-        TEST_EQUAL(*entts[deletedIndex].getComponent<Foo>(), foos[deletedIndex]);
+        res &= CheckEqual(*entts[deletedIndex].getComponent<Foo>(), foos[deletedIndex]);
         entts[deletedIndex].removeComponent<Foo>();
 
         for(int i = 0; i < entts.size(); i++)
         {
             if(i != deletedIndex)
             {
-                TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
-                TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
+                res &= CheckEqual(*entts[i].getComponent<BarNR>(), bars[i]);
+                res &= CheckEqual(*entts[i].getComponent<Foo>(), foos[i]);
             }
         }
         entts[entts.size() - 1].removeComponent<BarNR>();
@@ -395,10 +373,11 @@ class ECSTester
         {
             if(i != deletedIndex)
             {
-                TEST_EQUAL(*entts[i].getComponent<BarNR>(), bars[i]);
-                TEST_EQUAL(*entts[i].getComponent<Foo>(), foos[i]);
+                res &= CheckEqual(*entts[i].getComponent<BarNR>(), bars[i]);
+                res &= CheckEqual(*entts[i].getComponent<Foo>(), foos[i]);
             }
         }
+        assert(res);
     }
 
     static void fillTest()
@@ -415,6 +394,7 @@ class ECSTester
             auto operator<=>(const Bar&) const = default;
         };
 
+        bool res = true;
         ECS ecs;
         testInitialState(ecs);
         ecs.registerComponent<Foo>();
@@ -431,19 +411,20 @@ class ECSTester
         {
             auto& foo = foos.emplace_back(Foo{.x = rand(), .y = rand()});
             entts[i].addComponent<Foo>(foo);
-            TEST_EQUAL(*entts[i].getComponent<Foo>(), foo);
+            res &= CheckEqual(*entts[i].getComponent<Foo>(), foo);
         }
         for(int i = 0; i < 10; i++)
         {
             auto& bar = bars.emplace_back(Bar{.x = rand() * 0.1234f, .z = static_cast<char>(rand())});
             entts[i].addComponent<Bar>(bar);
-            TEST_EQUAL(*entts[i].getComponent<Bar>(), bar);
+            res &= CheckEqual(*entts[i].getComponent<Bar>(), bar);
             // check that elements that are still left in just foo archetype still have correct values
             for(int j = i + 1; j < 10; j++)
             {
-                TEST_EQUAL(*entts[j].getComponent<Foo>(), foos[j]);
+                res &= CheckEqual(*entts[j].getComponent<Foo>(), foos[j]);
             }
         }
+        assert(res);
     }
 
     static void runTests()
