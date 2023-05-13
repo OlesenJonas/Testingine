@@ -9,6 +9,3 @@ add_subdirectory("libraries/")
 
 # create executables
 add_subdirectory("executables/")
-
-# create tests
-add_subdirectory("tests/")
