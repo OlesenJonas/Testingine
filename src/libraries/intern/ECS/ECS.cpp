@@ -1,5 +1,24 @@
 #include "ECS.hpp"
-#include "SharedTypes.hpp"
+#include <cassert>
+
+std::size_t ECS::ComponentMaskHash::operator()(const ComponentMask& key) const
+{
+    static_assert(std::is_same_v<ComponentMask::word_type, uint64_t>);
+    // eastl bitset guarantees that any bits > size are kept at 0, dont have to worry about that
+    if constexpr(ComponentMask::kWordCount == 1)
+    {
+        return key.mWord[0];
+    }
+    else
+    {
+        uint64_t hash = 0;
+        for(int i = 0; i < key.kWordCount; i++)
+        {
+            hash ^= key.mWord[i];
+        }
+        return hash;
+    }
+}
 
 ECS::Entity::Entity(ECS& ecs, EntityID id) : ecs(ecs), id(id)
 {
@@ -28,7 +47,7 @@ ECS::Entity ECS::createEntity()
     return entity;
 }
 
-EntityID ECS::Entity::getID() const
+ECS::EntityID ECS::Entity::getID() const
 {
     return id;
 }

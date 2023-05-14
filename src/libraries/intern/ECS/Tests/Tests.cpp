@@ -34,7 +34,7 @@ class ECSTester
         res &= CheckEqual(ecs.archetypes.size(), 1);
         res &= CheckEqual(ecs.archetypeLUT.size(), 1);
         res &= CheckEqual(ecs.entityLUT.size(), 0);
-        ComponentMask emptyMask;
+        ECS::ComponentMask emptyMask;
         res &= CheckEqual(emptyMask.none(), true);
         res &= CheckEqual(ecs.archetypes[0].componentMask, emptyMask);
         res &= CheckEqual(ecs.archetypeLUT.find(emptyMask)->second, 0);
@@ -65,7 +65,7 @@ class ECSTester
         res &= CheckEqual(ecs.archetypes.size(), 1);
         res &= CheckEqual(ecs.archetypeLUT.size(), 1);
         res &= CheckEqual(ecs.entityLUT.size(), 0);
-        ComponentMask emptyMask;
+        ECS::ComponentMask emptyMask;
         res &= CheckEqual(emptyMask.none(), true);
         res &= CheckEqual(ecs.archetypes[0].componentMask, emptyMask);
         res &= CheckEqual(ecs.archetypeLUT.find(emptyMask)->second, 0);
@@ -119,7 +119,7 @@ class ECSTester
         Foo foo{.x = rand(), .y = 13};
         entt.addComponent<Foo>(foo);
 
-        ComponentMask fooMask;
+        ECS::ComponentMask fooMask;
         fooMask.set(ecs.bitmaskIndexFromComponentType<Foo>());
         res &= CheckEqual(ecs.entityLUT.size(), 1);
         res &= CheckEqual(ecs.archetypes.size(), 2);
@@ -138,7 +138,7 @@ class ECSTester
         res &= CheckEqual(entt2.getID(), 1);
         entt2.addComponent<Bar>();
         // test bar only archetype
-        ComponentMask barMask;
+        ECS::ComponentMask barMask;
         barMask.set(ecs.bitmaskIndexFromComponentType<Bar>());
         res &= CheckEqual(ecs.entityLUT.size(), 2);
         res &= CheckEqual(ecs.archetypes.size(), 3);
@@ -156,7 +156,7 @@ class ECSTester
         res &= CheckEqual(fooArchetype->entityIDs.size(), 0);
         res &= CheckEqual(fooArchetype->storageUsed, 0);
         // test foo+bar archetype
-        ComponentMask foobarMask = fooMask | barMask;
+        ECS::ComponentMask foobarMask = fooMask | barMask;
         res &= CheckEqual(ecs.entityLUT.size(), 2);
         res &= CheckEqual(ecs.archetypes.size(), 4);
         res &= CheckEqual(ecs.archetypeLUT.size(), 4);

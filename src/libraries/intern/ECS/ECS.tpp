@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ECS.hpp"
+#include <cassert>
 
 template <typename C>
 void ECS::registerComponent()

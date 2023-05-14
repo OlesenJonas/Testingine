@@ -1,11 +1,11 @@
 #pragma once
 
+#include <EASTL/bitset.h>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
 
 #include "Helpers.hpp"
-#include "SharedTypes.hpp"
 
 class ECSTester;
 
@@ -18,6 +18,13 @@ struct ECS
     struct ArchetypeEntry;
 
   public:
+    using EntityID = uint32_t;
+    // just here to prevent copy paste errors
+    static_assert(std::is_unsigned_v<EntityID>);
+    constexpr static uint32_t MAX_COMPONENT_TYPES = 32;
+    // not sure if making this a bitmask is actually a net win, some things are simpler, some more complicated
+    using ComponentMask = eastl::bitset<MAX_COMPONENT_TYPES, uint64_t>;
+
     ECS();
 
     Entity createEntity();
@@ -41,6 +48,11 @@ struct ECS
     uint32_t createArchetype(ComponentMask mask);
 
     //------------------------ Struct Definitions
+
+    struct ComponentMaskHash
+    {
+        std::size_t operator()(const ComponentMask& key) const;
+    };
 
     struct Entity
     {
@@ -132,7 +144,7 @@ struct ECS
     /*
         Get the index of an archetype given a bitmask of components it should hold
     */
-    std::unordered_map<ComponentMask, uint32_t> archetypeLUT;
+    std::unordered_map<ComponentMask, uint32_t, ComponentMaskHash, std::equal_to<>> archetypeLUT;
     /*
         Retrieve information about its storage from an entities' id
     */
