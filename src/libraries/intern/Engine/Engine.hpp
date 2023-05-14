@@ -11,13 +11,10 @@
 class Engine
 {
   public:
+    CREATE_STATIC_GETTER(Engine);
+
     Engine();
     ~Engine();
-
-    [[nodiscard]] static inline Engine* get()
-    {
-        return ptr;
-    }
 
     bool isRunning() const;
 
@@ -50,7 +47,6 @@ class Engine
   private:
     bool _isRunning = true;
 
-    inline static Engine* ptr = nullptr;
     InputManager inputManager;
     Window mainWindow;
     VulkanRenderer renderer;

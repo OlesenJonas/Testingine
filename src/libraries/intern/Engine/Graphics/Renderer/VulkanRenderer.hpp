@@ -126,8 +126,6 @@ class VulkanRenderer
         uint32_t materialInstanceParamsBuffer;
     };
 
-    std::vector<RenderObject> renderables;
-
     void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
     // Waits until all currently submitted GPU commands are executed
     void waitForWorkFinished();
@@ -147,4 +145,6 @@ class VulkanRenderer
     void savePipelineCache();
 
     size_t padUniformBufferSize(size_t originalSize);
+
+    std::vector<RenderObject> renderables;
 };

@@ -1,5 +1,5 @@
 #include <Engine/Engine.hpp>
-#include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
+#include <Engine/Scene/Scene.hpp>
 #include <glm/gtx/transform.hpp>
 #include <vulkan/vulkan_core.h>
 
@@ -70,38 +70,48 @@ void initScene()
 
     // Scene
 
-    auto& renderables = VulkanRenderer::get()->renderables;
+    Scene& scene = Engine::get()->scene;
 
-    const auto& newRenderable = renderables.emplace_back(RenderObject{
-        .mesh = rm->getMesh("monkey"),
-        .materialInstance = solidMaterialInstance,
-        .transformMatrix = glm::mat4{1.0f},
-    });
-    assert(newRenderable.mesh.isValid());
-    assert(newRenderable.materialInstance.isValid());
+    auto monkey = scene.addRenderable();
+    {
+        RenderInfo* renderInfo = monkey.getRenderInfo();
+        renderInfo->mesh = monkeyMesh;
+        renderInfo->materialInstance = solidMaterialInstance;
+        assert(renderInfo->mesh.isValid());
+        assert(renderInfo->materialInstance.isValid());
+    }
 
     for(int x = -20; x <= 20; x++)
     {
         for(int y = -20; y <= 20; y++)
         {
-            glm::mat4 translation = glm::translate(glm::vec3{x, 0, y});
-            glm::mat4 scale = glm::scale(glm::vec3{0.2f});
+            glm::vec3 translation{x, 0, y};
+            glm::vec3 scale{0.2f};
 
-            const auto& newRenderable = renderables.emplace_back(RenderObject{
-                .mesh = rm->getMesh("triangle"),
-                .materialInstance = solidMaterialInstance,
-                .transformMatrix = translation * scale,
-            });
-            assert(newRenderable.mesh.isValid());
-            assert(newRenderable.materialInstance.isValid());
+            auto newRenderable = scene.addRenderable();
+            {
+                RenderInfo* renderInfo = newRenderable.getRenderInfo();
+                renderInfo->mesh = triangleMesh;
+                renderInfo->materialInstance = solidMaterialInstance;
+                Transform* transform = newRenderable.getTransform();
+                transform->scale = scale;
+                transform->position = translation;
+                transform->calculateLocalTransformMatrix();
+                assert(renderInfo->mesh.isValid());
+                assert(renderInfo->materialInstance.isValid());
+            }
         }
     }
 
-    RenderObject map;
-    map.mesh = rm->getMesh("empire");
-    map.materialInstance = texturedMaterialInstance;
-    map.transformMatrix = glm::translate(glm::vec3{5.0f, -10.0f, 0.0f});
-    renderables.push_back(map);
+    auto map = scene.addRenderable();
+    {
+        RenderInfo* renderInfo = map.getRenderInfo();
+        renderInfo->mesh = lostEmpireMesh;
+        renderInfo->materialInstance = texturedMaterialInstance;
+        Transform* transform = map.getTransform();
+        transform->position = glm::vec3{5.0f, -10.0f, 0.0f};
+        transform->calculateLocalTransformMatrix();
+    }
 }
 
 int main()

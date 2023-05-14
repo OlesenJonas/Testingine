@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.2)
 include(DefaultLibrary)
 target_link_libraries(${LIB} PRIVATE EASTL)
+target_link_libraries(${LIB} PRIVATE Datastructures)
 target_link_libraries(${LIB_TESTS} INTERFACE EASTL)

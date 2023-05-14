@@ -5,9 +5,9 @@
 
 template <typename C, typename... Args>
     requires std::constructible_from<C, Args...>
-void ECS::Entity::addComponent(Args&&... args)
+C* ECS::Entity::addComponent(Args&&... args)
 {
-    ecs.addComponent<C>(this, std::forward<Args>(args)...);
+    return ecs.addComponent<C>(this, std::forward<Args>(args)...);
 };
 
 template <typename C>

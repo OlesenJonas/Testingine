@@ -1,45 +1,61 @@
 #pragma once
 
-#include <Datastructures/Pool.hpp>
-#include <glm/glm.hpp>
-#include <vector>
+#include "DefaultComponents.hpp"
 
-struct Mesh;
-struct MaterialInstance;
+#include <ECS/ECS.hpp>
 
-// inspired by https://www.david-colson.com/2020/02/09/making-a-simple-ecs.html
+/*
+    TODO:
+        (re)think what ownership of a Renderable means, and clarify that
+            (Currently it means nothing, even the Entity member is just a handle and doesnt actually own anything)
+        not sure how to make sure that stuff gets properly deleted, and when thats even requried
+        also what about leaking entities?
+            I guess the scene should store all entities somewhere, so if a renderable object gets deleted,
+            its still possible to retrieve the underlying entity later on
+            (imagine function creates and alters renderable, then exists. Renderable should still be part of scene
+            and may need to be changed later)
 
-struct MeshObject
+        Not sure if I even want the SceneObject/Renderable/etc inheritence...
+            Perhaps usign the raw entitys isnt that bad, would just need to find a way to combine that with scene
+            hierarchy somehow
+*/
+
+class Renderable;
+class Scene;
+
+class SceneObject
 {
-    Handle<Mesh> mesh;
-    Handle<MaterialInstance> material;
+  public:
+    Transform* getTransform();
 
-    uint32_t transformIndex = 0xFFFFFFFF;
+  private:
+    explicit SceneObject(ECS::Entity entity);
+    ECS::Entity entity;
+
+    friend Renderable;
+    friend Scene;
+};
+
+struct Renderable : public SceneObject
+{
+  public:
+    RenderInfo* getRenderInfo();
+
+  private:
+    explicit Renderable(ECS::Entity entity);
+
+    friend Scene;
 };
 
 class Scene
 {
   public:
-    // TODO: real ECS, but for now only transform and transform hierarchy are needed
-    struct TransformComponent
-    {
-        glm::vec3 position;
-        glm::vec3 scale{1.0f, 1.0f, 1.0f};
-        glm::vec3 angle; // switch to quaternions
+    Scene(ECS& ecs);
 
-        glm::mat4 localTransform{1.0f};
-
-        uint32_t parent = 0;
-        std::vector<uint32_t> children;
-    };
-
-    Scene();
-    // todo: dont return a reference, that will break on vector growth
-    //       but works for now, and when adding a "real" ECS this will be changed
-    MeshObject& createMeshObject();
+    Renderable addRenderable();
 
   private:
-    // todo: ComponentPool type? (would it differ from the other Pool structure?)
-    std::vector<TransformComponent> transforms;
-    std::vector<MeshObject> meshObjects;
+    // root is handled as an entity without any additional components and the identity transform
+    ECS::Entity root;
+    ECS& ecs;
 };

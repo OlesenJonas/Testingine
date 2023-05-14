@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Datastructures/Concepts.hpp>
 #include <EASTL/bitset.h>
 #include <cstdint>
 #include <unordered_map>
@@ -12,12 +13,12 @@ class ECSTester;
 struct ECS
 {
   private:
-    struct Entity;
     struct ComponentInfo;
     struct Archetype;
     struct ArchetypeEntry;
 
   public:
+    struct Entity;
     using EntityID = uint32_t;
     // just here to prevent copy paste errors
     static_assert(std::is_unsigned_v<EntityID>);
@@ -32,9 +33,18 @@ struct ECS
     template <typename C>
     void registerComponent();
 
+    template <typename... Types, typename Func>
+        requires(sizeof...(Types) > 0) &&      //
+                isDistinct<Types...>::value && //
+                std::invocable<Func, std::add_pointer_t<Types>...>
+    void forEach(Func func);
+
   private:
     template <typename C>
     uint32_t bitmaskIndexFromComponentType();
+
+    template <typename C>
+    ComponentMask componentMaskFromComponentType();
 
     template <typename C, typename... Args>
     C* addComponent(Entity* entity, Args&&... args);
@@ -47,20 +57,19 @@ struct ECS
 
     uint32_t createArchetype(ComponentMask mask);
 
+    template <int index, typename T, typename... Rest>
+    void fillForEachTuple(
+        std::vector<void*>& arrays, const ComponentMask& mask, std::tuple<T*, std::add_pointer_t<Rest>...>& tuple);
+
     //------------------------ Struct Definitions
-
-    struct ComponentMaskHash
-    {
-        std::size_t operator()(const ComponentMask& key) const;
-    };
-
+  public:
     struct Entity
     {
         EntityID getID() const;
 
         template <typename C, typename... Args>
             requires std::constructible_from<C, Args...>
-        void addComponent(Args&&... args);
+        C* addComponent(Args&&... args);
 
         template <typename C>
         void removeComponent();
@@ -81,6 +90,12 @@ struct ECS
         ECS& ecs;
 
         friend ECS;
+    };
+
+  private:
+    struct ComponentMaskHash
+    {
+        std::size_t operator()(const ComponentMask& key) const;
     };
 
     struct Archetype

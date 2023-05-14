@@ -3,7 +3,7 @@
 #include <ImGui/imgui_impl_glfw.h>
 #include <ImGui/imgui_impl_vulkan.h>
 
-Engine::Engine() : mainWindow(1200, 800, "Vulkan Test", {{GLFW_MAXIMIZED, GLFW_TRUE}})
+Engine::Engine() : mainWindow(1200, 800, "Vulkan Test", {{GLFW_MAXIMIZED, GLFW_TRUE}}), scene(ecs)
 {
     ptr = this;
 
