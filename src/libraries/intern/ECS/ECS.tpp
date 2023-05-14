@@ -2,6 +2,7 @@
 
 #include "ECS.hpp"
 #include <Datastructures/Span.hpp>
+#include <array>
 #include <cassert>
 
 template <typename C>
@@ -33,9 +34,10 @@ void ECS::registerComponent()
     assert(componentInfos.size() - 1 == newBitmaskIndex);
 }
 
-template <int index, typename T, typename... Rest>
+// todo: instead of typename... Types, just use typename Tuple. dont really need the pack here anymore I think
+template <int index, typename... Types>
 void ECS::fillForEachTuple(
-    std::vector<void*>& arrays, const ComponentMask& mask, std::tuple<T*, std::add_pointer_t<Rest>...>& tuple)
+    std::vector<void*>& arrays, const ComponentMask& mask, std::tuple<std::add_pointer_t<Types>...>& tuple)
 {
     // todo:
     //      dont like this being called here again... (its also used for generating combinedMask)
@@ -43,18 +45,20 @@ void ECS::fillForEachTuple(
     //          filling the tuple definitly cant! depends on the layout of the archetype
     //          but maybe its possible to cache just the indices corresponding to the types somewhere!
     //              (Maybe in a System() type aswell? See other comment)
-    const uint32_t componentTypeBitmaskIndex = bitmaskIndexFromComponentType<T>();
+    const uint32_t componentTypeBitmaskIndex = bitmaskIndexFromComponentType<
+        std::remove_pointer_t<std::tuple_element_t<index, std::remove_reference_t<decltype(tuple)>>>>();
     const int highBitsToEliminate = MAX_COMPONENT_TYPES - componentTypeBitmaskIndex;
     ComponentMask tempMask = mask;
     tempMask <<= highBitsToEliminate;
     const uint32_t arrayIndex = tempMask.count();
 
-    // std::get<index>(tuple) = arrayIndex;
+    std::get<index>(tuple) =
+        (std::tuple_element_t<index, std::remove_reference_t<decltype(tuple)>>)arrays[arrayIndex];
 
-    if(sizeof...(Rest) > 0)
+    if constexpr(index < sizeof...(Types) - 1)
     {
         // cant pass full tuple, since now only Rest... is being used, ie theres one Tuple element too much
-        fillForEachTuple<1, Rest...>(arrays, mask, tuple);
+        fillForEachTuple<index + 1, Types...>(arrays, mask, tuple);
     }
 }
 
@@ -69,19 +73,21 @@ void ECS::forEach(Func func)
     //       currently the mask is calculated on every run !!!
     ComponentMask combinedMask = (componentMaskFromComponentType<Types>() | ...);
     // will be filled with the component arrays of each archetype
+    //      way to do this without void*, thats not completly verbose?
     using PtrTuple = std::tuple<std::add_pointer_t<Types>...>;
     PtrTuple dataPointers;
 
     // run the func for all ements inside every archetype that has the required components
     for(auto& arch : archetypes)
     {
-        if(arch.storageUsed == 0 || (arch.componentMask & combinedMask).none())
+        if(arch.storageUsed == 0 || (arch.componentMask & combinedMask) != combinedMask)
             continue;
 
         // also not happy with this part, would it be simpler without the bitmask?
         fillForEachTuple<0, Types...>(arch.componentArrays, arch.componentMask, dataPointers);
+
+        std::apply(func, dataPointers);
     }
-    // #error TODO: IMPLEMENT
 };
 
 template <typename C>

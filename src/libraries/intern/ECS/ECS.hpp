@@ -57,9 +57,9 @@ struct ECS
 
     uint32_t createArchetype(ComponentMask mask);
 
-    template <int index, typename T, typename... Rest>
+    template <int index, typename... Types>
     void fillForEachTuple(
-        std::vector<void*>& arrays, const ComponentMask& mask, std::tuple<T*, std::add_pointer_t<Rest>...>& tuple);
+        std::vector<void*>& arrays, const ComponentMask& mask, std::tuple<std::add_pointer_t<Types>...>& tuple);
 
     //------------------------ Struct Definitions
   public:
