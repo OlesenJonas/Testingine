@@ -45,9 +45,13 @@ struct ECS
             That could relocate internal storage which would break the given pointers!
     */
     template <typename... Types, typename Func>
-        requires(sizeof...(Types) > 0) &&                                    //
+        requires(sizeof...(Types) >= 2) &&                                   //
                 isDistinct<Types...>::value &&                               //
                 std::invocable<Func, std::add_pointer_t<Types>..., uint32_t> //
+    void forEach(Func func);
+    // Overload if only requesting a single component, since thats a lot easier
+    template <typename Type, typename Func>
+        requires std::invocable<Func, std::add_pointer_t<Type>, uint32_t> //
     void forEach(Func func);
 
   private:

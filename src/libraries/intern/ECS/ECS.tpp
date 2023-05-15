@@ -54,7 +54,7 @@ void ECS::fillPtrTuple(
 }
 
 template <typename... Types, typename Func>
-    requires(sizeof...(Types) > 0) &&                                    //
+    requires(sizeof...(Types) >= 2) &&                                   //
             isDistinct<Types...>::value &&                               //
             std::invocable<Func, std::add_pointer_t<Types>..., uint32_t> //
 void ECS::forEach(Func func)
@@ -80,6 +80,33 @@ void ECS::forEach(Func func)
         fillPtrTuple<Types...>(bitmaskIndices, arch, dataPointers, std::make_index_sequence<sizeof...(Types)>{});
 
         std::apply(func, std::tuple_cat(dataPointers, std::make_tuple<uint32_t>(arch.storageUsed)));
+    }
+};
+
+template <typename Type, typename Func>
+    requires std::invocable<Func, std::add_pointer_t<Type>, uint32_t> //
+void ECS::forEach(Func func)
+{
+    // todo: could add a ECS::System type, that calculates this mask once on startup and stores it.
+    //       then a system.run() could call ecs.forEach(system) or smth like that and just use the cached mask
+    //       currently the mask and indices are calculated on every run !!!
+    uint32_t bitmaskIndex = bitmaskIndexFromComponentType<Type>();
+    ComponentMask combinedMask;
+    combinedMask.set(bitmaskIndex);
+
+    // run the func for all ements inside every archetype that has the required components
+    for(auto& arch : archetypes)
+    {
+        if(arch.storageUsed == 0 || (arch.componentMask & combinedMask) != combinedMask)
+            continue;
+
+        std::apply(
+            func,
+            std::make_tuple<Type*, uint32_t>(
+                (Type*)arch.componentArrays[arch.getArrayIndex(bitmaskIndex)], //
+                arch.storageUsed                                               //
+                )                                                              //
+        );
     }
 };
 
