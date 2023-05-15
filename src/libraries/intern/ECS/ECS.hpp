@@ -34,6 +34,16 @@ struct ECS
     template <typename C>
     void registerComponent();
 
+    /*
+        Execute something for all entities holding the requested components
+        The given callable needs to have the signature:
+            f(T1*, ..., TN*, uint32_t count) when the template arguments of forEach are <T1,...,TN>
+        - This function can be called multiple times internally! (once for each archetype containing all requested
+            components). For that reason "count" may not necessarily be the total amount of entities with those
+            components.
+        - This function must not create, delete, change existing entities!
+            That could relocate internal storage which would break the given pointers!
+    */
     template <typename... Types, typename Func>
         requires(sizeof...(Types) > 0) &&                                    //
                 isDistinct<Types...>::value &&                               //

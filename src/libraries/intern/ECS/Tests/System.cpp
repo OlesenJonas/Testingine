@@ -61,7 +61,7 @@ void testChange()
 
     std::vector<ECS::Entity> fooOnlyEntts;
     std::vector<Foo> foosOnly;
-    for(int i = 0; i < 5; i++)
+    for(int i = 0; i < 11; i++)
     {
         auto& entt = fooOnlyEntts.emplace_back(ecs.createEntity());
         auto& foo = foosOnly.emplace_back(Foo{.i = i});
@@ -71,7 +71,7 @@ void testChange()
     std::vector<ECS::Entity> fooAndBarEntts;
     std::vector<Foo> fooAndBarFoos;
     std::vector<Bar> fooAndBarBars;
-    for(int i = 10; i < 15; i++)
+    for(int i = 10; i < 21; i++)
     {
         auto& entt = fooAndBarEntts.emplace_back(ecs.createEntity());
         auto& bar = fooAndBarBars.emplace_back(Bar{.i = 2 * i});
