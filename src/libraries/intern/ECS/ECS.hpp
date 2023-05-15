@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Datastructures/ArrayHelpers.hpp>
 #include <Datastructures/Concepts.hpp>
 #include <EASTL/bitset.h>
 #include <cstdint>
@@ -57,9 +58,16 @@ struct ECS
 
     uint32_t createArchetype(ComponentMask mask);
 
-    template <int index, typename... Types>
-    void fillForEachTuple(
-        std::vector<void*>& arrays, const ComponentMask& mask, std::tuple<std::add_pointer_t<Types>...>& tuple);
+    template <typename... Types, std::size_t... I>
+    void fillBitmaskAndIndices(
+        ArrayReference<uint32_t, sizeof...(Types)> indices, ComponentMask& mask, std::index_sequence<I...>);
+
+    template <typename... Types, std::size_t... I>
+    void fillPtrTuple(
+        ArrayReference<uint32_t, sizeof...(Types)> indices,
+        ECS::Archetype& archetype,
+        std::tuple<std::add_pointer_t<Types>...>& tuple,
+        std::index_sequence<I...>);
 
     //------------------------ Struct Definitions
   public:
@@ -115,6 +123,7 @@ struct ECS
 
         void growStorage();
         void fixGap(uint32_t gapIndex);
+        uint32_t getArrayIndex(uint32_t bitmaskIndex);
     };
     static_assert(std::is_move_constructible<Archetype>::value);
 

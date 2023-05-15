@@ -224,3 +224,13 @@ void ECS::Archetype::fixGap(uint32_t gapIndex)
         iter->second.inArrayIndex = gapIndex;
     }
 }
+
+uint32_t ECS::Archetype::getArrayIndex(uint32_t bitmaskIndex)
+{
+    // shift away all bits (including bitmaskIndex one) and count how many remain, thats the index
+    // into the component array array
+    const int highBitsToEliminate = MAX_COMPONENT_TYPES - bitmaskIndex;
+    ComponentMask mask = componentMask;
+    mask <<= highBitsToEliminate;
+    return mask.count();
+}

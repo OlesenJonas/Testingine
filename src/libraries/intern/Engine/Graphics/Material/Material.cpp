@@ -1,5 +1,5 @@
 #include "Material.hpp"
-#include <Datastructures/ArraySize.hpp>
+#include <Datastructures/ArrayHelpers.hpp>
 #include <Engine/Graphics/Renderer/VulkanDebug.hpp>
 #include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
 #include <Engine/Graphics/Shaders/Shaders.hpp>

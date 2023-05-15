@@ -1,6 +1,6 @@
 #include "MaterialInstance.hpp"
 
-#include <Datastructures/ArraySize.hpp>
+#include <Datastructures/ArrayHelpers.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 
 Handle<MaterialInstance> ResourceManager::createMaterialInstance(Handle<Material> material)

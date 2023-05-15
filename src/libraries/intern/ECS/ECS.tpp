@@ -34,46 +34,39 @@ void ECS::registerComponent()
     assert(componentInfos.size() - 1 == newBitmaskIndex);
 }
 
-// todo: instead of typename... Types, just use typename Tuple. dont really need the pack here anymore I think
-template <int index, typename... Types>
-void ECS::fillForEachTuple(
-    std::vector<void*>& arrays, const ComponentMask& mask, std::tuple<std::add_pointer_t<Types>...>& tuple)
+template <typename... Types, std::size_t... I>
+void ECS::fillBitmaskAndIndices(
+    ArrayReference<uint32_t, sizeof...(Types)> indices, ComponentMask& mask, std::index_sequence<I...>)
 {
-    // todo:
-    //      dont like this being called here again... (its also used for generating combinedMask)
-    //      Cant both things be done at the same time somehow? Would be nice
-    //          filling the tuple definitly cant! depends on the layout of the archetype
-    //          but maybe its possible to cache just the indices corresponding to the types somewhere!
-    //              (Maybe in a System() type aswell? See other comment)
-    const uint32_t componentTypeBitmaskIndex = bitmaskIndexFromComponentType<
-        std::remove_pointer_t<std::tuple_element_t<index, std::remove_reference_t<decltype(tuple)>>>>();
-    const int highBitsToEliminate = MAX_COMPONENT_TYPES - componentTypeBitmaskIndex;
-    ComponentMask tempMask = mask;
-    tempMask <<= highBitsToEliminate;
-    const uint32_t arrayIndex = tempMask.count();
+    //(ab-)using the fact that assignment returns the left operand to combine both operations
+    (mask.set(indices[I] = bitmaskIndexFromComponentType<Types>()), ...);
+}
 
-    std::get<index>(tuple) =
-        (std::tuple_element_t<index, std::remove_reference_t<decltype(tuple)>>)arrays[arrayIndex];
-
-    if constexpr(index < sizeof...(Types) - 1)
-    {
-        // cant pass full tuple, since now only Rest... is being used, ie theres one Tuple element too much
-        fillForEachTuple<index + 1, Types...>(arrays, mask, tuple);
-    }
+template <typename... Types, std::size_t... I>
+void ECS::fillPtrTuple(
+    ArrayReference<uint32_t, sizeof...(Types)> indices,
+    ECS::Archetype& archetype,
+    std::tuple<std::add_pointer_t<Types>...>& tuple,
+    std::index_sequence<I...>)
+{
+    ((std::get<I>(tuple) = (Types*)archetype.componentArrays[archetype.getArrayIndex(indices[I])]), ...);
 }
 
 template <typename... Types, typename Func>
-    requires(sizeof...(Types) > 0) &&      //
-            isDistinct<Types...>::value && //
-            std::invocable<Func, std::add_pointer_t<Types>...>
+    requires(sizeof...(Types) > 0) &&                          //
+            isDistinct<Types...>::value &&                     //
+            std::invocable<Func, std::add_pointer_t<Types>...> //
 void ECS::forEach(Func func)
 {
     // todo: could add a ECS::System type, that calculates this mask once on startup and stores it.
     //       then a system.run() could call ecs.forEach(system) or smth like that and just use the cached mask
-    //       currently the mask is calculated on every run !!!
-    ComponentMask combinedMask = (componentMaskFromComponentType<Types>() | ...);
+    //       currently the mask and indices are calculated on every run !!!
+    // std::array<uint32_t, sizeof...(Types)> bitmaskIndices;
+    uint32_t bitmaskIndices[sizeof...(Types)];
+    ComponentMask combinedMask;
+    fillBitmaskAndIndices<Types...>(bitmaskIndices, combinedMask, std::make_index_sequence<sizeof...(Types)>{});
+
     // will be filled with the component arrays of each archetype
-    //      way to do this without void*, thats not completly verbose?
     using PtrTuple = std::tuple<std::add_pointer_t<Types>...>;
     PtrTuple dataPointers;
 
@@ -83,8 +76,7 @@ void ECS::forEach(Func func)
         if(arch.storageUsed == 0 || (arch.componentMask & combinedMask) != combinedMask)
             continue;
 
-        // also not happy with this part, would it be simpler without the bitmask?
-        fillForEachTuple<0, Types...>(arch.componentArrays, arch.componentMask, dataPointers);
+        fillPtrTuple<Types...>(bitmaskIndices, arch, dataPointers, std::make_index_sequence<sizeof...(Types)>{});
 
         std::apply(func, dataPointers);
     }
@@ -334,12 +326,7 @@ C* ECS::getComponent(Entity* entity)
         // todo: warn user, trying to retrieve component that entitiy doesnt hold
         return nullptr;
     }
-    // shift away all bits (including C::getID one) and count how many remain, thats the index
-    // into the component array array
-    const int highBitsToEliminate = MAX_COMPONENT_TYPES - componentTypeBitmaskIndex;
-    ComponentMask mask = archetype.componentMask;
-    mask <<= highBitsToEliminate;
-    const auto arrayIndex = mask.count();
+    uint32_t arrayIndex = archetype.getArrayIndex(componentTypeBitmaskIndex);
     assert(entry.inArrayIndex < archetype.storageUsed);
     C* array = reinterpret_cast<C*>(archetype.componentArrays[arrayIndex]);
     return &(array[entry.inArrayIndex]);
