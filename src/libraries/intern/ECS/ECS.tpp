@@ -2,7 +2,6 @@
 
 #include "ECS.hpp"
 #include <Datastructures/Span.hpp>
-#include <array>
 #include <cassert>
 
 template <typename C>
@@ -39,6 +38,8 @@ void ECS::fillBitmaskAndIndices(
     ArrayReference<uint32_t, sizeof...(Types)> indices, ComponentMask& mask, std::index_sequence<I...>)
 {
     //(ab-)using the fact that assignment returns the left operand to combine both operations
+    //  In case I forget how this works: (f(Pack), ...) is a fold expression that expands to
+    //  (f(Pack[0]),...,f(Pack[N]))
     (mask.set(indices[I] = bitmaskIndexFromComponentType<Types>()), ...);
 }
 
@@ -53,9 +54,9 @@ void ECS::fillPtrTuple(
 }
 
 template <typename... Types, typename Func>
-    requires(sizeof...(Types) > 0) &&                          //
-            isDistinct<Types...>::value &&                     //
-            std::invocable<Func, std::add_pointer_t<Types>...> //
+    requires(sizeof...(Types) > 0) &&                                    //
+            isDistinct<Types...>::value &&                               //
+            std::invocable<Func, std::add_pointer_t<Types>..., uint32_t> //
 void ECS::forEach(Func func)
 {
     // todo: could add a ECS::System type, that calculates this mask once on startup and stores it.
@@ -78,7 +79,7 @@ void ECS::forEach(Func func)
 
         fillPtrTuple<Types...>(bitmaskIndices, arch, dataPointers, std::make_index_sequence<sizeof...(Types)>{});
 
-        std::apply(func, dataPointers);
+        std::apply(func, std::tuple_cat(dataPointers, std::make_tuple<uint32_t>(arch.storageUsed)));
     }
 };
 

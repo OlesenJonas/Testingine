@@ -35,9 +35,9 @@ struct ECS
     void registerComponent();
 
     template <typename... Types, typename Func>
-        requires(sizeof...(Types) > 0) &&      //
-                isDistinct<Types...>::value && //
-                std::invocable<Func, std::add_pointer_t<Types>...>
+        requires(sizeof...(Types) > 0) &&                                    //
+                isDistinct<Types...>::value &&                               //
+                std::invocable<Func, std::add_pointer_t<Types>..., uint32_t> //
     void forEach(Func func);
 
   private:
