@@ -11,6 +11,7 @@
 #include "Init/VulkanSwapchainSetup.hpp"
 #include "ResourceManager/ResourceManager.hpp"
 #include "VulkanDebug.hpp"
+#include <Engine/Scene/DefaultComponents.hpp>
 
 #include <Datastructures/Span.hpp>
 #include <Engine.hpp>
@@ -585,7 +586,20 @@ void VulkanRenderer::draw()
     VkRect2D scissor{.offset = {0, 0}, .extent = swapchainExtent};
     vkCmdSetScissor(curFrameData.mainCommandBuffer, 0, 1, &scissor);
 
-    // todo: sort before
+    renderables.clear();
+    Engine::get()->ecs.forEach<RenderInfo, Transform>(
+        [&](RenderInfo* renderinfos, Transform* transforms, uint32_t count)
+        {
+            for(int i = 0; i < count; i++)
+            {
+                const RenderInfo& rinfo = renderinfos[i];
+                const Transform& transform = transforms[i];
+                // should be localToWorld instead of localTransform, but transform hierachy is not yet
+                // implemented!
+                renderables.emplace_back(rinfo.mesh, rinfo.materialInstance, transform.localTransform);
+            }
+        });
+    // todo: sort before passing to drawObjects
     drawObjects(curFrameData.mainCommandBuffer, renderables.data(), renderables.size());
 
     vkCmdEndRendering(curFrameData.mainCommandBuffer);
