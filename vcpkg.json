@@ -4,6 +4,7 @@
     "dependencies": [
         "glfw3",
         "glm",
-        "eastl"
+        "eastl",
+        "daw-json-link"
     ]
 }

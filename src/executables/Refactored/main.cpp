@@ -118,7 +118,9 @@ int main()
 {
     Engine engine;
 
-    initScene();
+    // initScene();
+
+    Engine::get()->scene.load("C:/Users/jonas/Documents/Models/NormalTestglTF/NormalTangentTest.gltf");
 
     while(engine.isRunning())
     {

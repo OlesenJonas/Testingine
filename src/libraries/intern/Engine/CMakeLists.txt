@@ -20,6 +20,7 @@ target_link_libraries(Engine PRIVATE stb)
 target_link_libraries(Engine PRIVATE EASTL)
 target_link_libraries(Engine PRIVATE Datastructures)
 target_link_libraries(Engine PRIVATE ECS)
+target_link_libraries(Engine PRIVATE daw::daw-json-link)
 
 IF(VULKAN_ENABLE_VALIDATION)
     message(STATUS "Compiling with vulkan validation enabled")

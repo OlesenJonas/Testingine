@@ -52,6 +52,8 @@ class Scene
   public:
     Scene(ECS& ecs);
 
+    void load(std::string path);
+
     Renderable addRenderable();
 
   private:
