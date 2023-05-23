@@ -3,7 +3,6 @@
 #include <TinyOBJ/tiny_obj_loader.h>
 #include <iostream>
 
-
 VertexInputDescription VertexInputDescription::getDefault()
 {
     VertexInputDescription description;
@@ -124,17 +123,33 @@ Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name
         }
     }
 
-    return createMesh(vertexPositions, vertexAttributes, meshName);
+    return createMesh(vertexPositions, vertexAttributes, {}, meshName);
 }
 
 Handle<Mesh> ResourceManager::createMesh(
-    Span<glm::vec3> vertexPositions, Span<Mesh::VertexAttributes> vertexAttributes, std::string_view name)
+    Span<glm::vec3> vertexPositions,
+    Span<Mesh::VertexAttributes> vertexAttributes,
+    Span<uint32_t> indices,
+    std::string_view name)
 {
     assert(vertexAttributes.size() == vertexPositions.size());
 
     // todo: handle naming collisions
     auto iterator = nameToMeshLUT.find(name);
     assert(iterator == nameToMeshLUT.end());
+
+    std::vector<uint32_t> trivialIndices{};
+    if(indices.empty())
+    {
+        trivialIndices.resize(vertexAttributes.size());
+        // dont want to pull <algorithm> for iota here
+        for(int i = 0; i < trivialIndices.size(); i++)
+        {
+            trivialIndices[i] = i;
+        }
+        indices = trivialIndices;
+    }
+    assert(indices.size() == vertexAttributes.size());
 
     Handle<Buffer> positionBufferHandle = createBuffer(
         {
@@ -166,9 +181,25 @@ Handle<Mesh> ResourceManager::createMesh(
         },
         std::string{name} + "_attributesBuffer");
 
+    Handle<Buffer> indexBufferHandle = createBuffer(
+        {
+            .info =
+                {
+                    .size = indices.size() * sizeof(indices[0]),
+                    .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    .memoryAllocationInfo =
+                        {
+                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                        },
+                },
+            .initialData = indices.data(),
+        },
+        std::string{name} + "_indexBuffer");
+
     Handle<Mesh> newMeshHandle = meshPool.insert(Mesh{
         .name{name},
-        .vertexCount = uint32_t(vertexPositions.size()),
+        .indexCount = uint32_t(indices.size()),
+        .indexBuffer = indexBufferHandle,
         .positionBuffer = positionBufferHandle,
         .attributeBuffer = attributesBufferHandle});
 

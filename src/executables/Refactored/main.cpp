@@ -22,7 +22,7 @@ void initScene()
     triangleVertexAttributes[1].color = {0.0f, 1.0f, 0.0f};
     triangleVertexAttributes[2].color = {0.0f, 1.0f, 0.0f};
 
-    auto triangleMesh = rm->createMesh(triangleVertexPositions, triangleVertexAttributes, "triangle");
+    auto triangleMesh = rm->createMesh(triangleVertexPositions, triangleVertexAttributes, {}, "triangle");
 
     auto monkeyMesh = rm->createMesh(ASSETS_PATH "/vkguide/monkey_smooth.obj", "monkey");
 
@@ -118,9 +118,9 @@ int main()
 {
     Engine engine;
 
-    // initScene();
+    initScene();
 
-    Engine::get()->scene.load("C:/Users/jonas/Documents/Models/NormalTestglTF/NormalTangentTest.gltf");
+    // Engine::get()->scene.load("C:/Users/jonas/Documents/Models/NormalTestglTF/NormalTangentTest.gltf");
 
     while(engine.isRunning())
     {

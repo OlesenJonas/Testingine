@@ -733,7 +733,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
     Handle<Material> lastMaterial = Handle<Material>::Invalid();
     Handle<MaterialInstance> lastMaterialInstance = Handle<MaterialInstance>::Invalid();
-    uint32_t vertCount = 0;
+    uint32_t indexCount = 0;
 
     for(int i = 0; i < count; i++)
     {
@@ -771,16 +771,18 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
         if(objectMesh != lastMesh)
         {
             Mesh* newMesh = rm->get(objectMesh);
-            vertCount = newMesh->vertexCount;
+            indexCount = newMesh->indexCount;
+            Buffer* indexBuffer = rm->get(newMesh->indexBuffer);
             Buffer* positionBuffer = rm->get(newMesh->positionBuffer);
             Buffer* attributeBuffer = rm->get(newMesh->attributeBuffer);
             const VkBuffer buffers[2] = {positionBuffer->buffer, attributeBuffer->buffer};
             const VkDeviceSize offsets[2] = {0, 0};
+            vkCmdBindIndexBuffer(cmd, indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
             vkCmdBindVertexBuffers(cmd, 0, 2, &buffers[0], &offsets[0]);
             lastMesh = objectMesh;
         }
 
-        vkCmdDraw(cmd, vertCount, 1, 0, i);
+        vkCmdDrawIndexed(cmd, indexCount, 1, 0, 0, 0);
     }
 }
 

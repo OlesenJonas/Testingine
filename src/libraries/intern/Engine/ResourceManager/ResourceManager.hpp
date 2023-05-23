@@ -29,8 +29,12 @@ class ResourceManager
     Handle<Buffer> createBuffer(Buffer::CreateInfo info, std::string_view name = "");
 
     Handle<Mesh> createMesh(const char* file, std::string_view name = "");
+    // indices can be {}, but then a trivial index list will still be used!
     Handle<Mesh> createMesh(
-        Span<glm::vec3> vertexPositions, Span<Mesh::VertexAttributes> vertexAttributes, std::string_view name);
+        Span<glm::vec3> vertexPositions,
+        Span<Mesh::VertexAttributes> vertexAttributes,
+        Span<uint32_t> indices,
+        std::string_view name);
 
     Handle<Texture> createTexture(const char* file, VkImageUsageFlags usage, std::string_view name = "");
     Handle<Texture> createTexture(Texture::Info info, std::string_view name);
