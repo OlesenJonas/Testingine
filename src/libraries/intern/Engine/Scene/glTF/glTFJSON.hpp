@@ -3,6 +3,31 @@
 #include "glTF.hpp"
 #include <daw/json/daw_json_link.h>
 
+template <typename T, T defaultValue>
+    requires std::is_arithmetic_v<T>
+struct NumberWithDefaultConstructor
+{
+    inline T operator()()
+    {
+        return defaultValue;
+    }
+    inline T operator()(T value)
+    {
+        return value;
+    }
+};
+
+namespace daw::json
+{
+    template <JSONNAMETYPE Name, typename T, T defaultValue>
+    using json_number_or_default = json_number_null<
+        Name,
+        T,
+        number_opts_def,
+        JsonNullable::Nullable,
+        NumberWithDefaultConstructor<T, defaultValue>>;
+};
+
 #define JSONType(T)                                                                                               \
     template <>                                                                                                   \
     struct daw::json::json_data_contract<T>
@@ -113,11 +138,11 @@ JSONType(glTF::Sampler)
 
 JSONType(glTF::BufferView)
 {
-    using type = json_member_list<                              //
-        json_number<"buffer", uint32_t>,                        //
-        json_number<"byteOffset", uint32_t>,                    //
-        json_number<"byteLength", uint32_t>,                    //
-        json_number_null<"byteStride", std::optional<uint32_t>> //
+    using type = json_member_list<                        //
+        json_number<"buffer", uint32_t>,                  //
+        json_number<"byteOffset", uint32_t>,              //
+        json_number<"byteLength", uint32_t>,              //
+        json_number_or_default<"byteStride", uint32_t, 0> //
         >;
 };
 

@@ -11,6 +11,11 @@
 
 void Scene::load(std::string path)
 {
+    /*
+        todo:
+            confirm its actually a gltf file
+    */
+
     std::filesystem::path basePath{path};
     basePath = basePath.parent_path();
 
@@ -19,7 +24,7 @@ void Scene::load(std::string path)
 
     ResourceManager* rm = Engine::get()->getResourceManager();
 
-    // Load samplers
+    // create samplers
     std::vector<Handle<Sampler>> samplers;
     samplers.resize(json.samplers.size());
     for(int i = 0; i < json.samplers.size(); i++)
@@ -34,7 +39,7 @@ void Scene::load(std::string path)
         });
     }
 
-    // Load textures
+    // Load & create textures
     std::vector<Handle<Texture>> textures;
     textures.resize(json.images.size());
     for(int i = 0; i < json.images.size(); i++)
@@ -43,7 +48,7 @@ void Scene::load(std::string path)
         textures[i] = rm->createTexture(imagePath.generic_string().c_str(), VK_IMAGE_USAGE_SAMPLED_BIT);
     }
 
-    // Load buffers
+    // Load buffers (to CPU)
     std::vector<std::vector<char>> buffers;
     buffers.resize(json.buffers.size());
     for(int i = 0; i < json.buffers.size(); i++)

@@ -117,7 +117,7 @@ struct glTF::BufferView
     uint32_t bufferIndex;
     uint32_t byteOffset;
     uint32_t byteLength;
-    std::optional<uint32_t> byteStride;
+    uint32_t byteStride;
 };
 
 struct glTF::Buffer
