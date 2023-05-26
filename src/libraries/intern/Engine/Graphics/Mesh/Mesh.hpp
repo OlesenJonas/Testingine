@@ -24,7 +24,7 @@ struct Mesh
     struct VertexAttributes
     {
         glm::vec3 normal;
-        glm::vec3 color;
+        glm::vec3 color{0.f, 0.f, 0.f};
         glm::vec2 uv;
     };
 

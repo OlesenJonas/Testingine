@@ -1,9 +1,11 @@
 #include "Engine.hpp"
-#include "ImGui/imgui.h"
+#include <Engine/Scene/DefaultComponents.hpp>
+#include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_glfw.h>
 #include <ImGui/imgui_impl_vulkan.h>
 
-Engine::Engine() : mainWindow(1200, 800, "Vulkan Test", {{GLFW_MAXIMIZED, GLFW_TRUE}}), scene(ecs)
+Engine::Engine()
+    : mainWindow(1200, 800, "Vulkan Test", {{GLFW_MAXIMIZED, GLFW_TRUE}}), sceneRoot(ecs.createEntity())
 {
     ptr = this;
 
@@ -13,6 +15,22 @@ Engine::Engine() : mainWindow(1200, 800, "Vulkan Test", {{GLFW_MAXIMIZED, GLFW_T
 
     resourceManager.init();
     renderer.init();
+
+    ecs.registerComponent<Transform>();
+    ecs.registerComponent<Hierarchy>();
+    ecs.registerComponent<RenderInfo>();
+
+    sceneRoot.addComponent<Transform>();
+    sceneRoot.addComponent<Hierarchy>();
+
+    // default resources
+    resourceManager.createMaterial(
+        {
+            .vertexShader = {.sourcePath = SHADERS_PATH "/PBRBasic.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/PBRBasic.frag"},
+        },
+        "PBRBasic");
+    assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);
 
     mainCamera =
         Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <glm/glm.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <optional>
 #include <string>
 #include <vector>
@@ -42,6 +45,9 @@ struct glTF::Node
 {
     std::optional<int> meshIndex = 0xFFFFFFFF;
     std::optional<std::vector<int>> childNodeIndices;
+    glm::vec3 translation;
+    glm::vec4 rotationAsVec;
+    glm::vec3 scale;
 };
 
 struct glTF::PrimitiveAttributes
@@ -55,7 +61,7 @@ struct glTF::PrimitiveAttributes
 struct glTF::Primitive
 {
     PrimitiveAttributes attributes;
-    int indexAccessor;
+    std::optional<int> indexAccessor;
     int materialIndex;
 };
 
@@ -72,6 +78,36 @@ struct glTF::Accessor
     uint32_t componentType;
     uint32_t count;
     std::string type;
+
+    enum ComponentType
+    {
+        sint8 = 5120,
+        uint8 = 5121,
+        sint16 = 5122,
+        uint16 = 5123,
+        uint32 = 5125,
+        f32 = 5126,
+    };
+
+    static constexpr std::string_view scalar = "SCALAR";
+    static constexpr std::string_view vec2 = "VEC2";
+    static constexpr std::string_view vec3 = "VEC3";
+    static constexpr std::string_view vec4 = "VEC4";
+    // todo: matrix types
+
+    static constexpr std::array<uint32_t, 7> componentTypeByteSizes{
+        sizeof(int8_t),
+        sizeof(uint8_t),
+        sizeof(int16_t),
+        sizeof(uint16_t),
+        sizeof(int32_t),
+        sizeof(uint32_t),
+        sizeof(float)};
+
+    static inline constexpr uint32_t getComponentTypeSize(ComponentType type)
+    {
+        return componentTypeByteSizes[type - ComponentType::sint8];
+    }
 };
 
 struct glTF::TextureParams
@@ -141,5 +177,5 @@ struct glTF::Main
     std::vector<BufferView> bufferViews;
     std::vector<Buffer> buffers;
 
-    static const Main load(std::string path);
+    static Main load(std::string path);
 };

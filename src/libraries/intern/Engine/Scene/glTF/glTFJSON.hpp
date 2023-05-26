@@ -4,8 +4,7 @@
 #include <daw/json/daw_json_link.h>
 
 template <typename T, T defaultValue>
-    requires std::is_arithmetic_v<T>
-struct NumberWithDefaultConstructor
+struct ValueOrDefault
 {
     inline T operator()()
     {
@@ -21,16 +20,37 @@ namespace daw::json
 {
     template <JSONNAMETYPE Name, typename T, T defaultValue>
     using json_number_or_default = json_number_null<
-        Name,
-        T,
-        number_opts_def,
-        JsonNullable::Nullable,
-        NumberWithDefaultConstructor<T, defaultValue>>;
+        Name,                             //
+        T,                                //
+        number_opts_def,                  //
+        JsonNullable::Nullable,           //
+        ValueOrDefault<T, defaultValue>>; //
+};
+
+namespace daw::json
+{
+    template <JSONNAMETYPE Name, typename T, T defaultValue>
+        requires std::is_default_constructible_v<T>
+    using json_class_or_default = json_class_null< //
+        Name,                                      //
+        T,                                         //
+        JsonNullable::Nullable,                    //
+        ValueOrDefault<T, defaultValue>>;          //
 };
 
 #define JSONType(T)                                                                                               \
     template <>                                                                                                   \
     struct daw::json::json_data_contract<T>
+
+JSONType(glm::vec3)
+{
+    using type = json_ordered_member_list<float, float, float>;
+};
+
+JSONType(glm::vec4)
+{
+    using type = json_ordered_member_list<float, float, float, float>;
+};
 
 JSONType(glTF::AssetInfo)
 {
@@ -44,9 +64,12 @@ JSONType(glTF::Scene)
 
 JSONType(glTF::Node)
 {
-    using type = json_member_list<                    //
-        json_number_null<"mesh", std::optional<int>>, //
-        json_array_null<"nodes", std::vector<int>>    //
+    using type = json_member_list<                                                   //
+        json_number_null<"mesh", std::optional<int>>,                                //
+        json_array_null<"children", std::vector<int>>,                               //
+        json_class_or_default<"translation", glm::vec3, glm::vec3{0.0f}>,            //
+        json_class_or_default<"rotation", glm::vec4, glm::vec4{0.f, 0.f, 0.f, 1.f}>, //
+        json_class_or_default<"scale", glm::vec3, glm::vec3{1.f, 1.f, 1.f}>          //
         >;
 };
 
@@ -63,7 +86,7 @@ JSONType(glTF::Primitive)
 {
     using type = json_member_list<                           //
         json_class<"attributes", glTF::PrimitiveAttributes>, //
-        json_number<"indices", int>,                         //
+        json_number_null<"indices", std::optional<int>>,     //
         json_number<"material", int>                         //                                  //
         >;
 };
@@ -78,12 +101,12 @@ JSONType(glTF::Mesh)
 
 JSONType(glTF::Accessor)
 {
-    using type = json_member_list<              //
-        json_number<"bufferView", uint32_t>,    //
-        json_number<"byteOffset", uint32_t>,    //
-        json_number<"componentType", uint32_t>, //
-        json_number<"count", uint32_t>,         //
-        json_string<"type">                     //
+    using type = json_member_list<                         //
+        json_number<"bufferView", uint32_t>,               //
+        json_number_or_default<"byteOffset", uint32_t, 0>, //
+        json_number<"componentType", uint32_t>,            //
+        json_number<"count", uint32_t>,                    //
+        json_string<"type">                                //
         >;
 };
 
@@ -138,11 +161,11 @@ JSONType(glTF::Sampler)
 
 JSONType(glTF::BufferView)
 {
-    using type = json_member_list<                        //
-        json_number<"buffer", uint32_t>,                  //
-        json_number<"byteOffset", uint32_t>,              //
-        json_number<"byteLength", uint32_t>,              //
-        json_number_or_default<"byteStride", uint32_t, 0> //
+    using type = json_member_list<                         //
+        json_number<"buffer", uint32_t>,                   //
+        json_number_or_default<"byteOffset", uint32_t, 0>, //
+        json_number<"byteLength", uint32_t>,               //
+        json_number_or_default<"byteStride", uint32_t, 0>  //
         >;
 };
 

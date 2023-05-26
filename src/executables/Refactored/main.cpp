@@ -1,4 +1,5 @@
 #include <Engine/Engine.hpp>
+#include <Engine/Scene/DefaultComponents.hpp>
 #include <Engine/Scene/Scene.hpp>
 #include <glm/gtx/transform.hpp>
 #include <vulkan/vulkan_core.h>
@@ -8,6 +9,7 @@ void initScene()
     // Resources
 
     ResourceManager* rm = ResourceManager::get();
+    ECS& ecs = Engine::get()->ecs;
 
     std::vector<glm::vec3> triangleVertexPositions;
     std::vector<Mesh::VertexAttributes> triangleVertexAttributes;
@@ -70,11 +72,10 @@ void initScene()
 
     // Scene
 
-    Scene& scene = Engine::get()->scene;
-
-    auto monkey = scene.addRenderable();
+    auto monkey = ecs.createEntity();
     {
-        RenderInfo* renderInfo = monkey.getRenderInfo();
+        monkey.addComponent<Transform>();
+        auto* renderInfo = monkey.addComponent<RenderInfo>();
         renderInfo->mesh = monkeyMesh;
         renderInfo->materialInstance = solidMaterialInstance;
         assert(renderInfo->mesh.isValid());
@@ -88,12 +89,12 @@ void initScene()
             glm::vec3 translation{x, 0, y};
             glm::vec3 scale{0.2f};
 
-            auto newRenderable = scene.addRenderable();
+            auto newRenderable = ecs.createEntity();
             {
-                RenderInfo* renderInfo = newRenderable.getRenderInfo();
+                auto* renderInfo = newRenderable.addComponent<RenderInfo>();
                 renderInfo->mesh = triangleMesh;
                 renderInfo->materialInstance = solidMaterialInstance;
-                Transform* transform = newRenderable.getTransform();
+                auto* transform = newRenderable.addComponent<Transform>();
                 transform->scale = scale;
                 transform->position = translation;
                 transform->calculateLocalTransformMatrix();
@@ -103,12 +104,12 @@ void initScene()
         }
     }
 
-    auto map = scene.addRenderable();
+    auto map = ecs.createEntity();
     {
-        RenderInfo* renderInfo = map.getRenderInfo();
+        auto* renderInfo = map.addComponent<RenderInfo>();
         renderInfo->mesh = lostEmpireMesh;
         renderInfo->materialInstance = texturedMaterialInstance;
-        Transform* transform = map.getTransform();
+        auto* transform = map.addComponent<Transform>();
         transform->position = glm::vec3{5.0f, -10.0f, 0.0f};
         transform->calculateLocalTransformMatrix();
     }
@@ -118,9 +119,11 @@ int main()
 {
     Engine engine;
 
-    initScene();
+    // initScene();
 
-    // Engine::get()->scene.load("C:/Users/jonas/Documents/Models/NormalTestglTF/NormalTangentTest.gltf");
+    // not sure I like this bein called like this.
+    //  would engine.loadScene(...) make more sense?
+    Scene::load("C:/Users/jonas/Documents/Models/NormalTestglTF/NormalTangentTest.gltf");
 
     while(engine.isRunning())
     {

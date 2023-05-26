@@ -42,7 +42,7 @@ class Engine
     }
 
     ECS ecs;
-    Scene scene;
+    ECS::Entity sceneRoot;
 
   private:
     bool _isRunning = true;

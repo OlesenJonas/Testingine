@@ -149,7 +149,6 @@ Handle<Mesh> ResourceManager::createMesh(
         }
         indices = trivialIndices;
     }
-    assert(indices.size() == vertexAttributes.size());
 
     Handle<Buffer> positionBufferHandle = createBuffer(
         {
