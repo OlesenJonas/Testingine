@@ -30,6 +30,7 @@ struct ECS
     ECS();
 
     Entity createEntity();
+    Entity getEntity(EntityID id);
 
     template <typename C>
     void registerComponent();
@@ -88,6 +89,7 @@ struct ECS
     struct Entity
     {
         EntityID getID() const;
+        ECS& getECS();
 
         template <typename C, typename... Args>
             requires std::constructible_from<C, Args...>

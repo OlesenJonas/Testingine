@@ -594,9 +594,7 @@ void VulkanRenderer::draw()
             {
                 const RenderInfo& rinfo = renderinfos[i];
                 const Transform& transform = transforms[i];
-                // should be localToWorld instead of localTransform, but transform hierachy is not yet
-                // implemented!
-                renderables.emplace_back(rinfo.mesh, rinfo.materialInstance, transform.localTransform);
+                renderables.emplace_back(rinfo.mesh, rinfo.materialInstance, transform.localToWorld);
             }
         });
     // todo: sort before passing to drawObjects

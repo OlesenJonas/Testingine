@@ -47,9 +47,20 @@ ECS::Entity ECS::createEntity()
     return entity;
 }
 
+ECS::Entity ECS::getEntity(ECS::EntityID id)
+{
+    assert(entityLUT.find(id) != entityLUT.end());
+    return Entity{*this, id};
+}
+
 ECS::EntityID ECS::Entity::getID() const
 {
     return id;
+}
+
+ECS& ECS::Entity::getECS()
+{
+    return ecs;
 }
 
 uint32_t ECS::createArchetype(ComponentMask mask)

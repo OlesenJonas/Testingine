@@ -282,18 +282,32 @@ void Scene::load(std::string path)
     }
 
     ECS& ecs = Engine::get()->ecs;
-
+    ECS::Entity sceneRoot = Engine::get()->sceneRoot;
     // Load scene(s)
     //  just the first one for now, not sure how to handle multiple
-    //  and if im even planning on using files with multiple
+    //  (and if im even planning on using files with multiple)
     {
         for(uint32_t rootIndex : gltf.scenes[0].nodeIndices)
         {
-            parseNode(meshes, materialInstances, gltf, ecs, rootIndex, Engine::get()->sceneRoot);
+            ECS::Entity rootNode = parseNode(meshes, materialInstances, gltf, ecs, rootIndex, sceneRoot);
+
+            updateTransformHierarchy(rootNode, glm::mat4{1.0f});
         }
     }
 
-    // UPDATE TRANSFORM HIERARCHY !!!
-
     BREAKPOINT;
+}
+
+void Scene::updateTransformHierarchy(ECS::Entity entity, glm::mat4 parentToWorld)
+{
+    ECS& ecs = entity.getECS();
+
+    auto* transform = entity.getComponent<Transform>();
+    transform->localToWorld = parentToWorld * transform->localTransform;
+
+    auto* hierarchy = entity.getComponent<Hierarchy>();
+    for(auto& childID : hierarchy->children)
+    {
+        updateTransformHierarchy(ecs.getEntity(childID), transform->localToWorld);
+    }
 }
