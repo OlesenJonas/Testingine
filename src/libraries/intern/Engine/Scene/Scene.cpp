@@ -269,13 +269,15 @@ void Scene::load(std::string path)
         const glTF::Material& material = gltf.materials[i];
         const glTF::Texture& normalTextureGLTF = gltf.textures[material.normalTexture.index];
 
-        const Handle<Texture> normalTexture = textures[normalTextureGLTF.sourceIndex];
-        const Handle<Sampler> normalSampler = samplers[normalTextureGLTF.samplerIndex];
+        const Handle<Texture> normalTextureHandle = textures[normalTextureGLTF.sourceIndex];
+        const Handle<Sampler> normalSamplerHandle = samplers[normalTextureGLTF.samplerIndex];
 
         auto materialInstanceHandle = rm->createMaterialInstance(basicPBRMaterial);
         MaterialInstance* matInst = rm->get(materialInstanceHandle);
-        matInst->parameters.setResource("normalTexture", rm->get(normalTexture)->sampledResourceIndex);
-        matInst->parameters.setResource("normalSampler", rm->get(normalSampler)->resourceIndex);
+        Texture* normalTex = rm->get(normalTextureHandle);
+        Sampler* normalSampler = rm->get(normalSamplerHandle);
+        matInst->parameters.setResource("normalTexture", normalTex->sampledResourceIndex);
+        matInst->parameters.setResource("normalSampler", normalSampler->resourceIndex);
         matInst->parameters.pushChanges();
 
         materialInstances[i] = materialInstanceHandle;

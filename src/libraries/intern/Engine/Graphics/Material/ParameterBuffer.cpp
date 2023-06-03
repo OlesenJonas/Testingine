@@ -18,7 +18,7 @@ void ParameterBuffer::setResource(std::string_view name, uint32_t index)
         return;
     }
     const auto& parameterInfo = iterator->second;
-    auto* ptr = (uint32_t*)&(cpuBuffer[parameterInfo.byteOffsetInBuffer]);
+    auto* ptr = (uint32_t*)(&(cpuBuffer[parameterInfo.byteOffsetInBuffer]));
     *ptr = index;
 }
 

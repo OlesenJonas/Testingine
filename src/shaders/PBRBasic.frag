@@ -25,9 +25,9 @@ layout (push_constant) uniform constants
 
 void main()
 {
-    // const TextureHandle colorTexture = getMaterialInstanceParams(bindlessIndices.materialParamsBuffer).colorTexture;
-    // const SamplerHandle blockySampler = getMaterialInstanceParams(bindlessIndices.materialParamsBuffer).blockySampler;
-    // vec3 color = texture(sampler2D(Texture2D(colorTexture),Samplers[blockySampler.index]), texCoord).xyz;
-    vec3 color = vec3(1.0);
+    const TextureHandle normalTexture = getMaterialInstanceParams(bindlessIndices.materialInstanceParamsBuffer).normalTexture;
+    const SamplerHandle normalSampler = getMaterialInstanceParams(bindlessIndices.materialInstanceParamsBuffer).normalSampler;
+    vec3 color = texture(sampler2D(Texture2D(normalTexture),Samplers[normalSampler.index]), texCoord).xyz;
+    // vec3 color = texture(sampler2D(global_texture2D[2],Samplers[normalSampler.index]), texCoord).xyz;
     fragColor = vec4(color, 1.0);
 }
