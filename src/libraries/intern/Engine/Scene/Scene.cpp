@@ -90,8 +90,9 @@ void Scene::load(std::string path)
     textures.resize(gltf.images.size());
     for(int i = 0; i < gltf.images.size(); i++)
     {
+        // todo: mark textures used for baseColor in an earlier step, then load only those as non-linear
         std::filesystem::path imagePath = basePath / gltf.images[i].uri;
-        textures[i] = rm->createTexture(imagePath.generic_string().c_str(), VK_IMAGE_USAGE_SAMPLED_BIT);
+        textures[i] = rm->createTexture(imagePath.generic_string().c_str(), VK_IMAGE_USAGE_SAMPLED_BIT, true);
     }
 
     // Load buffers (CPU)

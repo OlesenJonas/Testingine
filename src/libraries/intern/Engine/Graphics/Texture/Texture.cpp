@@ -8,7 +8,8 @@
 #include <stb/stb_image.h>
 #include <vulkan/vulkan_core.h>
 
-Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFlags usage, std::string_view name)
+Handle<Texture>
+ResourceManager::createTexture(const char* file, VkImageUsageFlags usage, bool dataIsLinear, std::string_view name)
 {
     std::string_view fileView{file};
     auto lastDirSep = fileView.find_last_of("/\\");
@@ -31,7 +32,7 @@ Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFla
     }
     void* pixelPtr = pixels;
     VkDeviceSize imageSize = texWidth * texHeight * 4;
-    VkFormat imageFormat = VK_FORMAT_R8G8B8A8_SRGB;
+    VkFormat imageFormat = dataIsLinear ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB;
     VkExtent3D imageExtent{
         .width = (uint32_t)texWidth,
         .height = (uint32_t)texHeight,
@@ -41,7 +42,9 @@ Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFla
     Handle<Texture> newTextureHandle = texturePool.insert(Texture{
         .info =
             {
+                // specifying non-default values only
                 .size = imageExtent,
+                .format = imageFormat,
                 .usage = usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
             },
     });
@@ -51,15 +54,15 @@ Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFla
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = nullptr,
 
-        .imageType = VK_IMAGE_TYPE_2D,
-        .format = imageFormat,
-        .extent = imageExtent,
+        .imageType = tex->info.imageType,
+        .format = tex->info.format,
+        .extent = tex->info.size,
 
-        .mipLevels = 1,
-        .arrayLayers = 1,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .mipLevels = tex->info.mipLevels,
+        .arrayLayers = tex->info.arrayLayers,
+        .samples = tex->info.samples,
+        .tiling = tex->info.tiling,
+        .usage = tex->info.usage,
     };
 
     VmaAllocationCreateInfo imgAllocInfo{
@@ -179,7 +182,7 @@ Handle<Texture> ResourceManager::createTexture(const char* file, VkImageUsageFla
         .pNext = nullptr,
         .image = tex->image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = VK_FORMAT_R8G8B8A8_SRGB,
+        .format = tex->info.format,
         .components =
             VkComponentMapping{
                 .r = VK_COMPONENT_SWIZZLE_IDENTITY,
