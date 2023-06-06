@@ -146,7 +146,7 @@ void Scene::load(std::string path)
 
         std::vector<Mesh::VertexAttributes> vertexAttributes;
         vertexAttributes.resize(vertexCount);
-        std::vector<glm::vec3> vertexPositions;
+        std::vector<Mesh::PositionType> vertexPositions;
         vertexPositions.resize(vertexCount);
 
         // read positions
@@ -255,6 +255,36 @@ void Scene::load(std::string path)
             indices.resize(vertexAttributes.size());
             for(int j = 0; j < indices.size(); j++)
                 indices[j] = j;
+        }
+
+        // read or create tangents
+        {
+            const bool glTFhasTangents = primitive.attributes.tangentAccessor.has_value();
+            if(glTFhasTangents)
+            {
+                const glTF::Accessor& accessor = gltf.accessors[primitive.attributes.tangentAccessor.value()];
+                const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
+                char* startAddress =
+                    &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
+
+                // tangents must be of type float4
+                assert(accessor.componentType == glTF::Accessor::f32);
+                assert(accessor.type == glTF::Accessor::vec4);
+                // for mesh attributes this should be != 0
+                //       todo: if some files *do* have stride == 0, need to lookup stride for tight packing from
+                //       size(componentType)*size(type)
+                assert(bufferView.byteStride != 0);
+
+                for(int j = 0; j < vertexCount; j++)
+                {
+                    vertexAttributes[j].tangent =
+                        *((glm::vec4*)(startAddress + static_cast<size_t>(j * bufferView.byteStride)));
+                }
+            }
+            else
+            {
+                Mesh::generateTangents(vertexPositions, vertexAttributes, indices);
+            }
         }
 
         meshes[i] = rm->createMesh(vertexPositions, vertexAttributes, indices, mesh.name);
