@@ -119,6 +119,8 @@ int main()
 {
     Engine engine;
 
+    glm::quat rotAroundY = glm::quat_cast(glm::rotate(glm::radians(90.0f), glm::vec3{0.f, 1.f, 0.f}));
+
     // initScene();
 
     // not sure I like this bein called like this.
