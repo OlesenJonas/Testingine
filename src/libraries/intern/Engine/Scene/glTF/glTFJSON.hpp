@@ -152,11 +152,11 @@ JSONType(glTF::Image)
 
 JSONType(glTF::Sampler)
 {
-    using type = json_member_list<          //
-        json_number<"magFilter", uint32_t>, //
-        json_number<"minFilter", uint32_t>, //
-        json_number<"wrapS", uint32_t>,     //
-        json_number<"wrapT", uint32_t>      //
+    using type = json_member_list<                           //
+        json_number_or_default<"magFilter", uint32_t, 9729>, //
+        json_number_or_default<"minFilter", uint32_t, 9987>, //
+        json_number_or_default<"wrapS", uint32_t, 10497>,    //
+        json_number_or_default<"wrapT", uint32_t, 10497>     //
         >;
 };
 

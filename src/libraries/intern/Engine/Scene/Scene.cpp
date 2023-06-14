@@ -158,15 +158,11 @@ void Scene::load(std::string path)
             // Position must be of type float3
             assert(positionAccessor.componentType == glTF::Accessor::f32);
             assert(positionAccessor.type == glTF::Accessor::vec3);
-            // for mesh attributes this should be != 0
-            //       todo: if some files *do* have stride == 0, need to lookup stride for tight packing from
-            //       size(componentType)*size(type)
-            assert(bufferView.byteStride != 0);
+            auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 3;
 
             for(int j = 0; j < vertexCount; j++)
             {
-                vertexPositions[j] =
-                    *((glm::vec3*)(startAddress + static_cast<size_t>(j * bufferView.byteStride)));
+                vertexPositions[j] = *((glm::vec3*)(startAddress + static_cast<size_t>(j * effectiveStride)));
             }
         }
 
@@ -179,15 +175,12 @@ void Scene::load(std::string path)
             // normals must be of type float3
             assert(accessor.componentType == glTF::Accessor::f32);
             assert(accessor.type == glTF::Accessor::vec3);
-            // for mesh attributes this should be != 0
-            //       todo: if some files *do* have stride == 0, need to lookup stride for tight packing from
-            //       size(componentType)*size(type)
-            assert(bufferView.byteStride != 0);
+            auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 3;
 
             for(int j = 0; j < vertexCount; j++)
             {
                 vertexAttributes[j].normal =
-                    *((glm::vec3*)(startAddress + static_cast<size_t>(j * bufferView.byteStride)));
+                    *((glm::vec3*)(startAddress + static_cast<size_t>(j * effectiveStride)));
             }
         }
 
@@ -200,15 +193,11 @@ void Scene::load(std::string path)
             // uvs must be of type float2
             assert(accessor.componentType == glTF::Accessor::f32);
             assert(accessor.type == glTF::Accessor::vec2);
-            // for mesh attributes this should be != 0
-            //       todo: if some files *do* have stride == 0, need to lookup stride for tight packing from
-            //       size(componentType)*size(type)
-            assert(bufferView.byteStride != 0);
+            auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 2;
 
             for(int j = 0; j < vertexCount; j++)
             {
-                vertexAttributes[j].uv =
-                    *((glm::vec2*)(startAddress + static_cast<size_t>(j * bufferView.byteStride)));
+                vertexAttributes[j].uv = *((glm::vec2*)(startAddress + static_cast<size_t>(j * effectiveStride)));
             }
         }
 
@@ -259,7 +248,10 @@ void Scene::load(std::string path)
 
         // read or create tangents
         {
-            const bool glTFhasTangents = primitive.attributes.tangentAccessor.has_value();
+            // const bool glTFhasTangents = primitive.attributes.tangentAccessor.has_value();
+            // glTF contains OpenGL style UV based tangents, and I dont know yet how to convert to vk style UV
+            // -based tangents, so just regenerate them here
+            const bool glTFhasTangents = false;
             if(glTFhasTangents)
             {
                 const glTF::Accessor& accessor = gltf.accessors[primitive.attributes.tangentAccessor.value()];
@@ -270,15 +262,12 @@ void Scene::load(std::string path)
                 // tangents must be of type float4
                 assert(accessor.componentType == glTF::Accessor::f32);
                 assert(accessor.type == glTF::Accessor::vec4);
-                // for mesh attributes this should be != 0
-                //       todo: if some files *do* have stride == 0, need to lookup stride for tight packing from
-                //       size(componentType)*size(type)
-                assert(bufferView.byteStride != 0);
+                auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 4;
 
                 for(int j = 0; j < vertexCount; j++)
                 {
                     vertexAttributes[j].tangent =
-                        *((glm::vec4*)(startAddress + static_cast<size_t>(j * bufferView.byteStride)));
+                        *((glm::vec4*)(startAddress + static_cast<size_t>(j * effectiveStride)));
                 }
             }
             else

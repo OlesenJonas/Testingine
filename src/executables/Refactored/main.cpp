@@ -125,7 +125,7 @@ int main()
 
     // not sure I like this bein called like this.
     //  would engine.loadScene(...) make more sense?
-    Scene::load("C:/Users/jonas/Documents/Models/NormalTestglTF/NormalTangentTest.gltf");
+    Scene::load("C:/Users/jonas/Documents/Models/NormalTangentMirrorTestglTF/NormalTangentMirrorTest.gltf");
 
     while(engine.isRunning())
     {
