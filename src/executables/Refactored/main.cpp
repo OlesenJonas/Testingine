@@ -31,7 +31,7 @@ void initScene()
     auto lostEmpireMesh = ResourceManager::get()->createMesh(ASSETS_PATH "/vkguide/lost_empire.obj", "empire");
 
     auto lostEmpireTex = rm->createTexture(
-        ASSETS_PATH "/vkguide/lost_empire-RGBA.png", VK_IMAGE_USAGE_SAMPLED_BIT, "empire_diffuse");
+        ASSETS_PATH "/vkguide/lost_empire-RGBA.png", VK_IMAGE_USAGE_SAMPLED_BIT, false, "empire_diffuse");
 
     auto linearSampler = rm->createSampler({
         .magFilter = VK_FILTER_LINEAR,
@@ -74,7 +74,7 @@ void initScene()
 
     auto monkey = ecs.createEntity();
     {
-        monkey.addComponent<Transform>();
+        auto* transform = monkey.addComponent<Transform>();
         auto* renderInfo = monkey.addComponent<RenderInfo>();
         renderInfo->mesh = monkeyMesh;
         renderInfo->materialInstance = solidMaterialInstance;
@@ -98,6 +98,14 @@ void initScene()
                 transform->scale = scale;
                 transform->position = translation;
                 transform->calculateLocalTransformMatrix();
+                // dont like having to call this manually
+                transform->localToWorld = transform->localTransform;
+                /*
+                    maybe a wrapper around entt + default component creation like
+                    scene.addObject() that just conatins Transform+Hierarchy component (and default parenting
+                    settings) would be nice
+                */
+
                 assert(renderInfo->mesh.isValid());
                 assert(renderInfo->materialInstance.isValid());
             }
@@ -112,6 +120,7 @@ void initScene()
         auto* transform = map.addComponent<Transform>();
         transform->position = glm::vec3{5.0f, -10.0f, 0.0f};
         transform->calculateLocalTransformMatrix();
+        transform->localToWorld = transform->localTransform;
     }
 }
 
@@ -121,11 +130,11 @@ int main()
 
     glm::quat rotAroundY = glm::quat_cast(glm::rotate(glm::radians(90.0f), glm::vec3{0.f, 1.f, 0.f}));
 
-    // initScene();
+    initScene();
 
     // not sure I like this bein called like this.
     //  would engine.loadScene(...) make more sense?
-    Scene::load("C:/Users/jonas/Documents/Models/NormalTangentMirrorTestglTF/NormalTangentMirrorTest.gltf");
+    // Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf");
 
     while(engine.isRunning())
     {

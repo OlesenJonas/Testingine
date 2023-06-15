@@ -531,7 +531,7 @@ void VulkanRenderer::draw()
             },
         });
 
-    float flash = abs(sin(frameNumber / 120.0f));
+    float flash = abs(sin(frameNumber / 1200.0f));
     VkClearValue clearValue{.color = {0.0f, 0.0f, flash, 1.0f}};
     VkClearValue depthClear{.depthStencil = {.depth = 1.0f}};
 
@@ -693,7 +693,7 @@ void VulkanRenderer::draw()
     frameNumber++;
 }
 
-// TODO: refactor to take span?
+// TODO: take span
 void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int count)
 {
     ResourceManager* rm = ResourceManager::get();

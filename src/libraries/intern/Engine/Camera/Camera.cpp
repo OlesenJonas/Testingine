@@ -8,7 +8,8 @@
 #include <glm/gtx/dual_quaternion.hpp>
 #include <glm/gtx/string_cast.hpp>
 
-Camera::Camera(float aspect, float nearDistance, float farDistance) : cam_near(near), cam_far(far), aspect(aspect)
+Camera::Camera(float aspect, float nearDistance, float farDistance)
+    : cam_near(nearDistance), cam_far(farDistance), aspect(aspect)
 {
     // default mode is ORBIT
     const glm::vec3 viewVec = posFromPolar(theta, phi);

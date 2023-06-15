@@ -23,5 +23,10 @@ Window::Window(int width, int height, const char* title, std::initializer_list<W
     }
 
     glfwWindow = glfwCreateWindow(width, height, title, nullptr, nullptr);
+
+    // retrieve the actual window size in case any flags caused the window to be created with a size thats
+    // different from the passed parameters
+    glfwGetWindowSize(glfwWindow, &this->width, &this->height);
+
     assert(glfwWindow != nullptr);
 }

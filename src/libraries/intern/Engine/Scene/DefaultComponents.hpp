@@ -13,7 +13,7 @@ struct Transform
 {
     glm::vec3 position;
     glm::vec3 scale{1.0f, 1.0f, 1.0f};
-    glm::quat orientation{0.f, 0.f, 0.f, 1.f};
+    glm::quat orientation;
 
     glm::mat4 localTransform{1.0f};
     glm::mat4 localToWorld{1.0f};

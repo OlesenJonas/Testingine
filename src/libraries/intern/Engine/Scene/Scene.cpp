@@ -248,10 +248,7 @@ void Scene::load(std::string path)
 
         // read or create tangents
         {
-            // const bool glTFhasTangents = primitive.attributes.tangentAccessor.has_value();
-            // glTF contains OpenGL style UV based tangents, and I dont know yet how to convert to vk style UV
-            // -based tangents, so just regenerate them here
-            const bool glTFhasTangents = false;
+            const bool glTFhasTangents = primitive.attributes.tangentAccessor.has_value();
             if(glTFhasTangents)
             {
                 const glTF::Accessor& accessor = gltf.accessors[primitive.attributes.tangentAccessor.value()];
@@ -268,6 +265,7 @@ void Scene::load(std::string path)
                 {
                     vertexAttributes[j].tangent =
                         *((glm::vec4*)(startAddress + static_cast<size_t>(j * effectiveStride)));
+                    vertexAttributes[j].tangent.w *= -1;
                 }
             }
             else
