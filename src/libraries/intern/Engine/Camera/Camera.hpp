@@ -67,7 +67,7 @@ class Camera
 
   private:
     Mode mode = Mode::ORBIT;
-    glm::vec3 position{0.0f, 0.0f, 1.0f};
+    glm::vec3 position{0.0f, 0.0f, 0.0f};
     float phi = 0.0f;
     float theta = glm::pi<float>() * 0.5;
     float radius = 1.0f;
