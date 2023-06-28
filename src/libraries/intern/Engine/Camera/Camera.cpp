@@ -162,7 +162,17 @@ const std::array<glm::mat4, 6>& Camera::getMatrices()
 
 glm::vec3 Camera::getPosition() const
 {
-    return position;
+    if(mode == Mode::ORBIT)
+    {
+        const glm::vec3 viewVec = posFromPolar(theta, phi);
+        return position + radius * viewVec;
+    }
+    else if(mode == Mode::FLY)
+    {
+        return position;
+    }
+    BREAKPOINT;
+    return glm::vec3{0.0f};
 }
 glm::vec2 Camera::getRotation() const
 {

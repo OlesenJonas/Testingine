@@ -124,7 +124,7 @@ struct glTF::PBRMetalRoughParams
 
 struct glTF::Material
 {
-    PBRMetalRoughParams metallicRoughness;
+    PBRMetalRoughParams pbrMetallicRoughness;
     TextureParams occlusionTexture;
     TextureParams normalTexture;
     // todo: parse other members

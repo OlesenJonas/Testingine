@@ -10,20 +10,17 @@
 #include "VertexAttributes.glsl"
 
 //todo: reorder, sort whatever
-layout (location = 0) out vec3 outColor;
-layout (location = 1) out vec2 texCoord;
-layout (location = 2) out vec3 vNormalWS;
-layout (location = 3) out vec4 vTangentWS;
+layout (location = 0) out vec3 vPositionWS;
+layout (location = 1) out vec3 outColor;
+layout (location = 2) out vec2 texCoord;
+layout (location = 3) out vec3 vNormalWS;
+layout (location = 4) out vec4 vTangentWS;
 
+//todo: move into include file!
 ReadStorageBuffer(Transform,
     mat4 modelMatrices[];
 );
 
-UniformBuffer(CameraData,
-    mat4 view;
-    mat4 proj;
-    mat4 projView;
-);
 
 layout (push_constant, std430) uniform constants
 {
@@ -33,7 +30,7 @@ layout (push_constant, std430) uniform constants
 void main()
 {
     const mat4 modelMatrix = getBuffer(Transform, bindlessIndices.transformBuffer).modelMatrices[bindlessIndices.transformIndex];
-    const mat4 transformMatrix = getBuffer(CameraData, bindlessIndices.RenderInfoBuffer).projView * modelMatrix;
+    const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
     gl_Position = transformMatrix * vec4(vPosition, 1.0);
     outColor = vColor;
     texCoord = vTexCoord;

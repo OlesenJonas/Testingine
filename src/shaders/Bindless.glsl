@@ -62,14 +62,23 @@ layout (set = SAMPLED_IMG_SET, binding = GLOBAL_SAMPLER_COUNT) uniform texture2D
 
 #define Texture2D(TextureHandle) global_texture2D[TextureHandle.index]
 
+//---------------- Pre-existing buffers
+
+UniformBuffer(RenderPassData,
+    mat4 view;
+    mat4 proj;
+    mat4 projView;
+    vec3 cameraPositionWS;
+);
+
 //----------------
 
 struct BindlessIndices
 {
     // Frame globals
-    BufferHandle FrameDataBuffer;
+    BufferHandle frameDataBuffer;
     // Resolution, matrices (differs in eg. shadow and default pass)
-    BufferHandle RenderInfoBuffer;
+    BufferHandle renderPassDataBuffer;
     // Buffer with object transforms and index into that buffer
     BufferHandle transformBuffer;
     uint transformIndex;

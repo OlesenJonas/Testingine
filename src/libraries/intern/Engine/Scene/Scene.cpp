@@ -86,13 +86,29 @@ void Scene::load(std::string path)
     }
 
     // Load & create textures ("images" in glTF)
+    // first find out which textures arent linear (all those that are used as basecolor textures)
+    std::vector<bool> textureIsLinear;
+    textureIsLinear.resize(gltf.images.size());
+    for(int i = 0; i < textureIsLinear.size(); i++)
+    {
+        textureIsLinear[i] = true;
+    }
+    for(int i = 0; i < gltf.materials.size(); i++)
+    {
+        const glTF::Material& material = gltf.materials[i];
+        const glTF::Texture& baseColorTextureGLTF =
+            gltf.textures[material.pbrMetallicRoughness.baseColorTexture.index];
+        textureIsLinear[baseColorTextureGLTF.sourceIndex] = false;
+    }
+
     std::vector<Handle<Texture>> textures;
     textures.resize(gltf.images.size());
     for(int i = 0; i < gltf.images.size(); i++)
     {
         // todo: mark textures used for baseColor in an earlier step, then load only those as non-linear
         std::filesystem::path imagePath = basePath / gltf.images[i].uri;
-        textures[i] = rm->createTexture(imagePath.generic_string().c_str(), VK_IMAGE_USAGE_SAMPLED_BIT, true);
+        textures[i] =
+            rm->createTexture(imagePath.generic_string().c_str(), VK_IMAGE_USAGE_SAMPLED_BIT, textureIsLinear[i]);
     }
 
     // Load buffers (CPU)
@@ -285,17 +301,43 @@ void Scene::load(std::string path)
     for(int i = 0; i < gltf.materials.size(); i++)
     {
         const glTF::Material& material = gltf.materials[i];
-        const glTF::Texture& normalTextureGLTF = gltf.textures[material.normalTexture.index];
-
-        const Handle<Texture> normalTextureHandle = textures[normalTextureGLTF.sourceIndex];
-        const Handle<Sampler> normalSamplerHandle = samplers[normalTextureGLTF.samplerIndex];
-
         auto materialInstanceHandle = rm->createMaterialInstance(basicPBRMaterial);
         MaterialInstance* matInst = rm->get(materialInstanceHandle);
+
+        const glTF::Texture& normalTextureGLTF = gltf.textures[material.normalTexture.index];
+        const Handle<Texture> normalTextureHandle = textures[normalTextureGLTF.sourceIndex];
+        const Handle<Sampler> normalSamplerHandle = samplers[normalTextureGLTF.samplerIndex];
         Texture* normalTex = rm->get(normalTextureHandle);
         Sampler* normalSampler = rm->get(normalSamplerHandle);
         matInst->parameters.setResource("normalTexture", normalTex->sampledResourceIndex);
         matInst->parameters.setResource("normalSampler", normalSampler->resourceIndex);
+
+        const glTF::Texture& baseColorTextureGLTF =
+            gltf.textures[material.pbrMetallicRoughness.baseColorTexture.index];
+        const Handle<Texture> baseColorTextureHandle = textures[baseColorTextureGLTF.sourceIndex];
+        const Handle<Sampler> baseColorSamplerHandle = samplers[baseColorTextureGLTF.samplerIndex];
+        Texture* baseColorTex = rm->get(baseColorTextureHandle);
+        Sampler* baseColorSampler = rm->get(baseColorSamplerHandle);
+        matInst->parameters.setResource("baseColorTexture", baseColorTex->sampledResourceIndex);
+        matInst->parameters.setResource("baseColorSampler", baseColorSampler->resourceIndex);
+
+        const glTF::Texture& metalRoughTextureGLTF =
+            gltf.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index];
+        const Handle<Texture> metalRoughTextureHandle = textures[metalRoughTextureGLTF.sourceIndex];
+        const Handle<Sampler> metalRoughSamplerHandle = samplers[metalRoughTextureGLTF.samplerIndex];
+        Texture* metalRoughTex = rm->get(metalRoughTextureHandle);
+        Sampler* metalRoughSampler = rm->get(metalRoughSamplerHandle);
+        matInst->parameters.setResource("metalRoughTexture", metalRoughTex->sampledResourceIndex);
+        matInst->parameters.setResource("metalRoughSampler", metalRoughSampler->resourceIndex);
+
+        const glTF::Texture& occlusionTextureGLTF = gltf.textures[material.occlusionTexture.index];
+        const Handle<Texture> occlusionTextureHandle = textures[occlusionTextureGLTF.sourceIndex];
+        const Handle<Sampler> occlusionSamplerHandle = samplers[occlusionTextureGLTF.samplerIndex];
+        Texture* occlusionTex = rm->get(occlusionTextureHandle);
+        Sampler* occlusionSampler = rm->get(occlusionSamplerHandle);
+        matInst->parameters.setResource("occlusionTexture", occlusionTex->sampledResourceIndex);
+        matInst->parameters.setResource("occlusionSampler", occlusionSampler->resourceIndex);
+
         matInst->parameters.pushChanges();
 
         materialInstances[i] = materialInstanceHandle;

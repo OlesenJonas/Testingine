@@ -130,11 +130,11 @@ int main()
 
     glm::quat rotAroundY = glm::quat_cast(glm::rotate(glm::radians(90.0f), glm::vec3{0.f, 1.f, 0.f}));
 
-    initScene();
+    // initScene();
 
     // not sure I like this bein called like this.
     //  would engine.loadScene(...) make more sense?
-    // Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf");
+    Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf");
 
     while(engine.isRunning())
     {

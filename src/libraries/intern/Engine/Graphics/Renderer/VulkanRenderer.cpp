@@ -370,7 +370,7 @@ void VulkanRenderer::initGlobalBuffers()
         perFrameData[i].cameraBuffer = rm->createBuffer(Buffer::CreateInfo{
             .info =
                 {
-                    .size = sizeof(GPUCameraData),
+                    .size = sizeof(RenderPassData),
                     .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                     .memoryAllocationInfo =
                         {
@@ -699,17 +699,17 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     ResourceManager* rm = ResourceManager::get();
 
     Camera* mainCamera = Engine::get()->getCamera();
-    // todo: resize GPUCameraData to use all the matrices Camera stores and then simply memcpy from
-    // mainCamera.getMatrices directly
-    GPUCameraData camData;
-    camData.proj = mainCamera->getProj();
-    camData.view = mainCamera->getView();
-    camData.projView = mainCamera->getProjView();
+
+    RenderPassData renderPassData;
+    renderPassData.proj = mainCamera->getProj();
+    renderPassData.view = mainCamera->getView();
+    renderPassData.projView = mainCamera->getProjView();
+    renderPassData.cameraPositionWS = mainCamera->getPosition();
 
     Buffer* cameraBuffer = rm->get(getCurrentFrameData().cameraBuffer);
 
     void* data = cameraBuffer->allocInfo.pMappedData;
-    memcpy(data, &camData, sizeof(GPUCameraData));
+    memcpy(data, &renderPassData, sizeof(renderPassData));
 
     Buffer* transformBuffer = rm->get(getCurrentFrameData().objectBuffer);
 

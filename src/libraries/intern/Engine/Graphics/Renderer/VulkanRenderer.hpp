@@ -19,11 +19,14 @@
 #include <string>
 #include <unordered_map>
 
-struct GPUCameraData
+// todo: store somewhere else and keep synced with shader code version of struct
+struct RenderPassData
 {
     glm::mat4 view;
     glm::mat4 proj;
     glm::mat4 projView;
+    glm::vec3 cameraPositionWS;
+    float pad;
 };
 
 struct GPUObjectData
