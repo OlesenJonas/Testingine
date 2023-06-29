@@ -3,17 +3,21 @@
 #include <VMA/VMA.hpp>
 #include <vulkan/vulkan_core.h>
 
+#include <Datastructures/Span.hpp>
+#include <string>
+
 struct Texture
 {
     struct Info
     {
+        // todo: have a global string buffer and store only view into that here!
+        std::string debugName = ""; // NOLINT
+
         VkExtent3D size = {1, 1, 1};
         VkFormat format;
         VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
         VkImageUsageFlags usage = 0;
 
-        // todo: maybe create Texture3D, TextureArray etc C++ classes
-        //       and only store the relevant fields in those
         VkImageType imageType = VK_IMAGE_TYPE_2D;
         uint32_t mipLevels = 1;
         uint32_t arrayLayers = 1;
@@ -22,6 +26,12 @@ struct Texture
 
         // TODO: split completly, have image view as seperate object!
         VkImageAspectFlags viewAspect = VK_IMAGE_ASPECT_COLOR_BIT;
+
+        /*
+            do not try to access this after the texture has been constructed
+            no lifetime guarantees
+        */
+        Span<uint8_t> initialData;
     };
 
     // todo: should be private and no setter available

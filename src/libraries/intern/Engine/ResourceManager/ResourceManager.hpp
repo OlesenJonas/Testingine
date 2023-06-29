@@ -36,9 +36,9 @@ class ResourceManager
         Span<uint32_t> indices,
         std::string_view name);
 
+    Handle<Texture> createTexture(Texture::Info&& info);
     Handle<Texture>
     createTexture(const char* file, VkImageUsageFlags usage, bool dataIsLinear, std::string_view name = "");
-    Handle<Texture> createTexture(Texture::Info info, std::string_view name);
     // Handle<Texture> createTextureView(Handle<Texture> texture, TextureView::Info info, std::string_view name);
 
     Handle<Material> createMaterial(Material::CreateInfo crInfo, std::string_view name = "");

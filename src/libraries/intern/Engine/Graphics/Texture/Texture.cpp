@@ -4,6 +4,7 @@
 #include <Engine/Engine.hpp>
 #include <Engine/Graphics/Renderer/VulkanDebug.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
+#include <format>
 #include <iostream>
 #include <stb/stb_image.h>
 #include <vulkan/vulkan_core.h>
@@ -39,197 +40,28 @@ ResourceManager::createTexture(const char* file, VkImageUsageFlags usage, bool d
         .depth = 1,
     };
 
-    Handle<Texture> newTextureHandle = texturePool.insert(Texture{
-        .info =
-            {
-                // specifying non-default values only
-                .size = imageExtent,
-                .format = imageFormat,
-                .usage = usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-            },
+    Handle<Texture> newTextureHandle = createTexture(Texture::Info{
+        // specifying non-default values only
+        .debugName = std::string{texName},
+        .size = imageExtent,
+        .format = imageFormat,
+        .usage = usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .initialData = {pixels, imageSize},
     });
-    Texture* tex = texturePool.get(newTextureHandle);
-
-    VkImageCreateInfo imageCrInfo{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .pNext = nullptr,
-
-        .imageType = tex->info.imageType,
-        .format = tex->info.format,
-        .extent = tex->info.size,
-
-        .mipLevels = tex->info.mipLevels,
-        .arrayLayers = tex->info.arrayLayers,
-        .samples = tex->info.samples,
-        .tiling = tex->info.tiling,
-        .usage = tex->info.usage,
-    };
-
-    VmaAllocationCreateInfo imgAllocInfo{
-        .usage = VMA_MEMORY_USAGE_AUTO,
-        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-    };
-    VmaAllocator& allocator = Engine::get()->getRenderer()->allocator;
-    vmaCreateImage(allocator, &imageCrInfo, &imgAllocInfo, &tex->image, &tex->allocation, nullptr);
-
-    // Upload the pixel buffer through staging buffer, see the createBuffer(...) function for todos on how to
-    // improve this
-    // allocate staging buffer
-    VkBufferCreateInfo stagingBufferInfo = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .pNext = nullptr,
-        .size = imageSize,
-        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-    };
-    VmaAllocationCreateInfo vmaallocCrInfo = {
-        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        .usage = VMA_MEMORY_USAGE_AUTO,
-        .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-    };
-    AllocatedBuffer stagingBuffer;
-    VkResult res = vmaCreateBuffer(
-        Engine::get()->getRenderer()->allocator,
-        &stagingBufferInfo,
-        &vmaallocCrInfo,
-        &stagingBuffer.buffer,
-        &stagingBuffer.allocation,
-        &stagingBuffer.allocInfo);
-    assert(res == VK_SUCCESS);
-
-    void* data = nullptr;
-    vmaMapMemory(allocator, stagingBuffer.allocation, &data);
-    memcpy(data, pixelPtr, imageSize);
-    vmaUnmapMemory(allocator, stagingBuffer.allocation);
 
     stbi_image_free(pixels);
-
-    Engine::get()->getRenderer()->immediateSubmit(
-        [&](VkCommandBuffer cmd)
-        {
-            VkImageSubresourceRange range{
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            };
-
-            VkImageMemoryBarrier imageBarrierToTransfer{
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                .srcAccessMask = 0,
-                .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .image = tex->image,
-                .subresourceRange = range,
-            };
-
-            vkCmdPipelineBarrier(
-                cmd,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                0,
-                0,
-                nullptr,
-                0,
-                nullptr,
-                1,
-                &imageBarrierToTransfer);
-
-            VkBufferImageCopy copyRegion{
-                .bufferOffset = 0,
-                .bufferRowLength = 0,
-                .bufferImageHeight = 0,
-                .imageSubresource =
-                    {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
-                .imageExtent = imageExtent,
-            };
-
-            vkCmdCopyBufferToImage(
-                cmd, stagingBuffer.buffer, tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
-            VkImageMemoryBarrier imageBarrierToReadable{
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .image = tex->image,
-                .subresourceRange = range,
-            };
-
-            vkCmdPipelineBarrier(
-                cmd,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                0,
-                0,
-                nullptr,
-                0,
-                nullptr,
-                1,
-                &imageBarrierToReadable);
-        });
-
-    // immediate submit also waits on device idle so staging buffer is not being used here anymore
-    vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
-
-    nameToTextureLUT.insert({std::string{texName}, newTextureHandle});
-
-    // create an image view covering the whole image
-    VkImageViewCreateInfo imageInfo{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .pNext = nullptr,
-        .image = tex->image,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = tex->info.format,
-        .components =
-            VkComponentMapping{
-                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                .a = VK_COMPONENT_SWIZZLE_IDENTITY,
-            },
-        .subresourceRange =
-            {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-    };
-
-    vkCreateImageView(Engine::get()->getRenderer()->device, &imageInfo, nullptr, &tex->imageView);
-
-    setDebugName(tex->image, (std::string{texName} + "_image").c_str());
-    setDebugName(tex->imageView, (std::string{texName} + "_mainView").c_str());
-
-    auto& renderer = *VulkanRenderer::get();
-    // todo:
-    // currently user needs to guarantee that same image is never accessed as storage and sampled image at
-    // the same time (since it cant be in both layouts at the same time). Probably better to add another usage flag
-    // that explicitly indicates that both kinds of access can happen at the same time, in which case the layout
-    // for both should be just "GENERAL"
-    if(tex->info.usage & VK_IMAGE_USAGE_SAMPLED_BIT)
-    {
-        tex->sampledResourceIndex = renderer.bindlessManager.createSampledImageBinding(
-            tex->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    }
-    if(tex->info.usage & VK_IMAGE_USAGE_STORAGE_BIT)
-    {
-        tex->storageResourceIndex =
-            renderer.bindlessManager.createStorageImageBinding(tex->imageView, VK_IMAGE_LAYOUT_GENERAL);
-    }
-
-    std::cout << "Texture loaded successfully " << file << std::endl;
 
     return newTextureHandle;
 }
 
-Handle<Texture> ResourceManager::createTexture(Texture::Info info, std::string_view name)
+Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
 {
-    // todo: handle naming collisions
+    // todo: handle naming collisions and also dont just use a random name...
+    std::string name = info.debugName;
+    if(name.empty())
+    {
+        name = "Texture" + std::format("{:03}", rand() % 199);
+    }
     auto iterator = nameToMeshLUT.find(name);
     assert(iterator == nameToMeshLUT.end());
 
@@ -257,6 +89,122 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info info, std::string_v
     };
     VmaAllocator& allocator = Engine::get()->getRenderer()->allocator;
     vmaCreateImage(allocator, &imageCrInfo, &imgAllocInfo, &tex->image, &tex->allocation, nullptr);
+
+    if(!info.initialData.empty())
+    {
+        /*
+            TODO:
+                rewrite all of the data upload functionality (also in create mesh etc)
+                Have one large staging buffer in CPU memory that just gets reused all the time
+                while handing out chunks and tracking when theyre done being used.
+                Also read book section about async transfer queue
+        */
+        /*
+            Upload the pixel data through staging buffer, see the createBuffer(...) function for todos on how to
+            improve this
+        */
+
+        // allocate staging buffer
+        VkBufferCreateInfo stagingBufferInfo = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = nullptr,
+            .size = info.initialData.size(),
+            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        };
+        VmaAllocationCreateInfo vmaallocCrInfo = {
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            .usage = VMA_MEMORY_USAGE_AUTO,
+            .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        };
+        AllocatedBuffer stagingBuffer;
+        VkResult res = vmaCreateBuffer(
+            Engine::get()->getRenderer()->allocator,
+            &stagingBufferInfo,
+            &vmaallocCrInfo,
+            &stagingBuffer.buffer,
+            &stagingBuffer.allocation,
+            &stagingBuffer.allocInfo);
+        assert(res == VK_SUCCESS);
+
+        void* data = nullptr;
+        vmaMapMemory(allocator, stagingBuffer.allocation, &data);
+        memcpy(data, info.initialData.data(), info.initialData.size());
+        vmaUnmapMemory(allocator, stagingBuffer.allocation);
+
+        Engine::get()->getRenderer()->immediateSubmit(
+            [&](VkCommandBuffer cmd)
+            {
+                VkImageSubresourceRange range{
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                };
+
+                VkImageMemoryBarrier imageBarrierToTransfer{
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                    .srcAccessMask = 0,
+                    .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .image = tex->image,
+                    .subresourceRange = range,
+                };
+
+                vkCmdPipelineBarrier(
+                    cmd,
+                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    0,
+                    0,
+                    nullptr,
+                    0,
+                    nullptr,
+                    1,
+                    &imageBarrierToTransfer);
+
+                VkBufferImageCopy copyRegion{
+                    .bufferOffset = 0,
+                    .bufferRowLength = 0,
+                    .bufferImageHeight = 0,
+                    .imageSubresource =
+                        {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                         .mipLevel = 0,
+                         .baseArrayLayer = 0,
+                         .layerCount = 1},
+                    .imageExtent = info.size,
+                };
+
+                vkCmdCopyBufferToImage(
+                    cmd, stagingBuffer.buffer, tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+                VkImageMemoryBarrier imageBarrierToReadable{
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                    .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                    .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    .image = tex->image,
+                    .subresourceRange = range,
+                };
+
+                vkCmdPipelineBarrier(
+                    cmd,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    0,
+                    0,
+                    nullptr,
+                    0,
+                    nullptr,
+                    1,
+                    &imageBarrierToReadable);
+            });
+
+        // immediate submit also waits on device idle so staging buffer is not being used here anymore
+        vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+    }
 
     nameToTextureLUT.insert({std::string{name}, newTextureHandle});
 
