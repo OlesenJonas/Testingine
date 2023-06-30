@@ -25,8 +25,8 @@ layout (push_constant, std430) uniform constants
 
 void main()
 {
-    mat4 modelMatrix = getBuffer(Transform, bindlessIndices.transformBuffer).modelMatrices[bindlessIndices.transformIndex];
-    mat4 transformMatrix = getBuffer(CameraData, bindlessIndices.RenderInfoBuffer).projView * modelMatrix;
+    const mat4 modelMatrix = getBuffer(Transform, bindlessIndices.transformBuffer).modelMatrices[bindlessIndices.transformIndex];
+    const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
     gl_Position = transformMatrix * vec4(vPosition, 1.0);
     outColor = vColor;
     texCoord = vTexCoord;

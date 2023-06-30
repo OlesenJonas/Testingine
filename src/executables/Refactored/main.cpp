@@ -127,6 +127,7 @@ void initScene()
 int main()
 {
     Engine engine;
+    ResourceManager* rm = engine.getResourceManager();
 
     glm::quat rotAroundY = glm::quat_cast(glm::rotate(glm::radians(90.0f), glm::vec3{0.f, 1.f, 0.f}));
 
@@ -135,6 +136,46 @@ int main()
     // not sure I like this bein called like this.
     //  would engine.loadScene(...) make more sense?
     Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf");
+
+    auto linearSampler = rm->createSampler({
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    });
+
+    auto hdri = engine.getResourceManager()->createTexture(
+        ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr", VK_IMAGE_USAGE_SAMPLED_BIT, true);
+
+    auto defaultCube = rm->getMesh("DefaultCube");
+
+    /*
+        todo:
+            load by default on engine init!
+    */
+    auto skyboxMat = rm->createMaterial(
+        {
+            .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
+        },
+        "skyboxMat");
+    auto skyboxMatInst = rm->createMaterialInstance(skyboxMat);
+    {
+        auto inst = rm->get(skyboxMatInst);
+        inst->parameters.setResource("equirectangularMap", rm->get(hdri)->sampledResourceIndex);
+        inst->parameters.setResource("defaultSampler", rm->get(linearSampler)->resourceIndex);
+        inst->parameters.pushChanges();
+    }
+
+    // todo: createEntity takes initial set of components as arguments and returns all the pointers as []-thingy
+    auto skybox = engine.ecs.createEntity();
+    {
+        auto* transform = skybox.addComponent<Transform>();
+        auto* renderInfo = skybox.addComponent<RenderInfo>();
+        renderInfo->mesh = defaultCube;
+        renderInfo->materialInstance = skyboxMatInst;
+    }
 
     while(engine.isRunning())
     {

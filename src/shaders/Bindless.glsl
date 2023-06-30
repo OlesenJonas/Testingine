@@ -64,12 +64,15 @@ layout (set = SAMPLED_IMG_SET, binding = GLOBAL_SAMPLER_COUNT) uniform texture2D
 
 //---------------- Pre-existing buffers
 
+//encapsulate inside another struct? just so its possible to store the value?
 UniformBuffer(RenderPassData,
     mat4 view;
     mat4 proj;
     mat4 projView;
     vec3 cameraPositionWS;
 );
+
+#define CurrentRenderPassData getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer)
 
 //----------------
 

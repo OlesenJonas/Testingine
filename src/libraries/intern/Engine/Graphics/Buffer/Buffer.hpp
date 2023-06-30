@@ -17,7 +17,7 @@ struct Buffer
     struct CreateInfo
     {
         Info info;
-        void* initialData = nullptr;
+        const void* initialData = nullptr;
     };
 
     // todo: should be private and no setter available

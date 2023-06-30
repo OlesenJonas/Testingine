@@ -1,6 +1,7 @@
 #include "Texture.hpp"
 #include "Graphics/Renderer/VulkanRenderer.hpp"
 #include "Graphics/Texture/Texture.hpp"
+#include "IO/HDR.hpp"
 #include <Engine/Engine.hpp>
 #include <Engine/Graphics/Renderer/VulkanDebug.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
@@ -21,6 +22,16 @@ ResourceManager::createTexture(const char* file, VkImageUsageFlags usage, bool d
     // todo: handle naming collisions
     auto iterator = nameToMeshLUT.find(texName);
     assert(iterator == nameToMeshLUT.end());
+
+    std::string_view extension = fileView.substr(extensionStart);
+
+    if(extension == ".hdr")
+    {
+        return HDR::load(fileView, texName, usage);
+    }
+
+    // else just use default stbi_load for now
+    //   TODO: refactor and split into multiple functions
 
     int texWidth = 0;
     int texHeight = 0;
@@ -250,6 +261,12 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
     }
 
     return newTextureHandle;
+}
+
+Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
+    int32_t width, int32_t height, Handle<Texture> equirectangularSource, std::string_view debugName)
+{
+    return {};
 }
 
 void ResourceManager::deleteTexture(Handle<Texture> handle)

@@ -1,5 +1,6 @@
 #include "Engine.hpp"
 #include <Engine/Scene/DefaultComponents.hpp>
+#include <Graphics/Mesh/Cube.hpp>
 #include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_glfw.h>
 #include <ImGui/imgui_impl_vulkan.h>
@@ -31,6 +32,9 @@ Engine::Engine()
         },
         "PBRBasic");
     assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);
+
+    resourceManager.createMesh(Cube::positions, Cube::attributes, Cube::indices, "DefaultCube");
+    assert(resourceManager.get(resourceManager.getMesh("DefaultCube")) != nullptr);
 
     mainCamera =
         Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};

@@ -136,9 +136,9 @@ Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name
 }
 
 Handle<Mesh> ResourceManager::createMesh(
-    Span<glm::vec3> vertexPositions,
-    Span<Mesh::VertexAttributes> vertexAttributes,
-    Span<uint32_t> indices,
+    Span<const Mesh::PositionType> vertexPositions,
+    Span<const Mesh::VertexAttributes> vertexAttributes,
+    Span<const uint32_t> indices,
     std::string_view name)
 {
     assert(vertexAttributes.size() == vertexPositions.size());

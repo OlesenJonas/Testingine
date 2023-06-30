@@ -31,15 +31,17 @@ class ResourceManager
     Handle<Mesh> createMesh(const char* file, std::string_view name = "");
     // indices can be {}, but then a trivial index list will still be used!
     Handle<Mesh> createMesh(
-        Span<glm::vec3> vertexPositions,
-        Span<Mesh::VertexAttributes> vertexAttributes,
-        Span<uint32_t> indices,
+        Span<const Mesh::PositionType> vertexPositions,
+        Span<const Mesh::VertexAttributes> vertexAttributes,
+        Span<const uint32_t> indices,
         std::string_view name);
 
     Handle<Texture> createTexture(Texture::Info&& info);
     Handle<Texture>
     createTexture(const char* file, VkImageUsageFlags usage, bool dataIsLinear, std::string_view name = "");
     // Handle<Texture> createTextureView(Handle<Texture> texture, TextureView::Info info, std::string_view name);
+    Handle<Texture> createCubemapFromEquirectangular(
+        int32_t width, int32_t height, Handle<Texture> equirectangularSource, std::string_view debugName);
 
     Handle<Material> createMaterial(Material::CreateInfo crInfo, std::string_view name = "");
     Handle<MaterialInstance> createMaterialInstance(Handle<Material> material);
