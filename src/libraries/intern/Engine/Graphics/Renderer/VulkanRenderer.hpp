@@ -76,8 +76,8 @@ class VulkanRenderer
     VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
     Handle<Texture> depthTexture;
 
-    VkQueue graphicsQueue;
-    uint32_t graphicsQueueFamily;
+    VkQueue graphicsAndComputeQueue;
+    uint32_t graphicsAndComputeQueueFamily;
 
     VkPipelineCache pipelineCache;
     const std::string_view pipelineCacheFile = "vkpipelinecache";

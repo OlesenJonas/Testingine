@@ -4,6 +4,7 @@
 #include <Datastructures/Pool.hpp>
 #include <Datastructures/Span.hpp>
 #include <Engine/Graphics/Buffer/Buffer.hpp>
+#include <Engine/Graphics/Compute/ComputeShader.hpp>
 #include <Engine/Graphics/Material/Material.hpp>
 #include <Engine/Graphics/Material/MaterialInstance.hpp>
 #include <Engine/Graphics/Mesh/Mesh.hpp>
@@ -19,6 +20,7 @@
     The objects themselves should only hold CPU information and POD meta data
         //todo: that is probably violated in some structs, need to clean this and decide better what to put where!
 */
+
 class ResourceManager
 {
   public:
@@ -39,26 +41,37 @@ class ResourceManager
     Handle<Texture> createTexture(Texture::Info&& info);
     Handle<Texture>
     createTexture(const char* file, VkImageUsageFlags usage, bool dataIsLinear, std::string_view name = "");
-    // Handle<Texture> createTextureView(Handle<Texture> texture, TextureView::Info info, std::string_view name);
     Handle<Texture> createCubemapFromEquirectangular(
-        int32_t width, int32_t height, Handle<Texture> equirectangularSource, std::string_view debugName);
+        uint32_t cubeResolution, Handle<Texture> equirectangularSource, std::string_view debugName);
+
+    // Handle<Texture> createTextureView(Handle<Texture> texture, TextureView::Info info, std::string_view name);
 
     Handle<Material> createMaterial(Material::CreateInfo crInfo, std::string_view name = "");
     Handle<MaterialInstance> createMaterialInstance(Handle<Material> material);
 
+    Handle<ComputeShader> createComputeShader(std::string_view path, std::string_view debugName);
+
     Handle<Sampler> createSampler(Sampler::Info&& info);
 
     // todo: track resource usage so no stuff thats in use gets deleted
-    // todo: rename all these to just free(Handle<...>)?
-    void deleteBuffer(Handle<Buffer> handle);
-    void deleteMesh(Handle<Mesh> handle);
-    void deleteTexture(Handle<Texture> handle);
-    // like here
+    void free(Handle<Buffer> handle);
+    void free(Handle<Mesh> handle);
+    void free(Handle<Texture> handle);
     void free(Handle<Material> handle);
     void free(Handle<MaterialInstance> handle);
+    void free(Handle<ComputeShader> handle);
     // no explicit free function for samplers, since they could be used in multiple places
     // and usages arent tracked yet!
 
+  private:
+    Pool<Buffer> bufferPool{10};
+    Pool<Mesh> meshPool{10};
+    Pool<Texture> texturePool{10};
+    Pool<Material> materialPool{10};
+    Pool<MaterialInstance> materialInstancePool{10};
+    Pool<ComputeShader> computeShaderPool{10};
+
+  public:
     // Accessing -----------------
 
 #define HANDLE_TO_PTR_GETTER(T, pool)                                                                             \
@@ -71,6 +84,7 @@ class ResourceManager
     HANDLE_TO_PTR_GETTER(Texture, texturePool);
     HANDLE_TO_PTR_GETTER(Material, materialPool);
     HANDLE_TO_PTR_GETTER(MaterialInstance, materialInstancePool);
+    HANDLE_TO_PTR_GETTER(ComputeShader, computeShaderPool);
     // Samplers dont use pool, so special getter needed
     inline Sampler* get(Handle<Sampler> handle)
     {
@@ -96,12 +110,6 @@ class ResourceManager
     std::unordered_map<std::string, Handle<Mesh>, StringHash, std::equal_to<>> nameToMeshLUT;
     std::unordered_map<std::string, Handle<Texture>, StringHash, std::equal_to<>> nameToTextureLUT;
     std::unordered_map<std::string, Handle<Material>, StringHash, std::equal_to<>> nameToMaterialLUT;
-
-    Pool<Buffer> bufferPool{10};
-    Pool<Mesh> meshPool{10};
-    Pool<Texture> texturePool{10};
-    Pool<Material> materialPool{10};
-    Pool<MaterialInstance> materialInstancePool{10};
 
     // this value needs to match the one in bindless.glsl!
     // todo: could pass this as a define to shader compilation I guess

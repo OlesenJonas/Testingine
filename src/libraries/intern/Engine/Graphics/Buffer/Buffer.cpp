@@ -5,7 +5,6 @@
 #include <VMA/VMA.hpp>
 #include <vulkan/vulkan_core.h>
 
-
 Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::string_view name)
 {
     Handle<Buffer> newBufferHandle = bufferPool.insert(Buffer{.info = crInfo.info});
@@ -114,7 +113,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
     return newBufferHandle;
 }
 
-void ResourceManager::deleteBuffer(Handle<Buffer> handle)
+void ResourceManager::free(Handle<Buffer> handle)
 {
     /*
         todo:

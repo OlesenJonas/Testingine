@@ -17,6 +17,7 @@ struct Texture
         VkFormat format;
         VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
         VkImageUsageFlags usage = 0;
+        VkImageCreateFlags flags = 0;
 
         VkImageType imageType = VK_IMAGE_TYPE_2D;
         uint32_t mipLevels = 1;

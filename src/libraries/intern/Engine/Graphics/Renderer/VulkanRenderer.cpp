@@ -89,9 +89,9 @@ void VulkanRenderer::initVulkan()
     device = deviceFinder.createLogicalDevice();
 
     queueFamilyIndices = deviceFinder.getQueueFamilyIndices();
-    graphicsQueueFamily = queueFamilyIndices.graphicsFamily.value();
+    graphicsAndComputeQueueFamily = queueFamilyIndices.graphicsAndComputeFamily.value();
 
-    vkGetDeviceQueue(device, graphicsQueueFamily, 0, &graphicsQueue);
+    vkGetDeviceQueue(device, graphicsAndComputeQueueFamily, 0, &graphicsAndComputeQueue);
     // vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 
     VmaAllocatorCreateInfo vmaAllocatorCrInfo{
@@ -138,7 +138,7 @@ void VulkanRenderer::initCommands()
         .pNext = nullptr,
 
         .flags = 0,
-        .queueFamilyIndex = graphicsQueueFamily,
+        .queueFamilyIndex = graphicsAndComputeQueueFamily,
     };
 
     for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
@@ -164,7 +164,7 @@ void VulkanRenderer::initCommands()
         .pNext = nullptr,
 
         .flags = 0,
-        .queueFamilyIndex = graphicsQueueFamily,
+        .queueFamilyIndex = graphicsAndComputeQueueFamily,
     };
     assertVkResult(vkCreateCommandPool(device, &uploadCommandPoolCrInfo, nullptr, &uploadContext.commandPool));
     deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, uploadContext.commandPool, nullptr); });
@@ -333,8 +333,8 @@ void VulkanRenderer::initImGui()
         .Instance = instance,
         .PhysicalDevice = physicalDevice,
         .Device = device,
-        .QueueFamily = graphicsQueueFamily,
-        .Queue = graphicsQueue,
+        .QueueFamily = graphicsAndComputeQueueFamily,
+        .Queue = graphicsAndComputeQueue,
         .PipelineCache = pipelineCache,
         .DescriptorPool = imguiPool,
         // todo: dont hardcode these, retrieve from swapchain creation
@@ -492,8 +492,8 @@ void VulkanRenderer::draw()
                 .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                 .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .srcQueueFamilyIndex = graphicsQueueFamily,
-                .dstQueueFamilyIndex = graphicsQueueFamily,
+                .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
+                .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
                 .image = swapchainImages[swapchainImageIndex],
                 .subresourceRange =
                     {
@@ -516,8 +516,8 @@ void VulkanRenderer::draw()
                     VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
                 .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                .srcQueueFamilyIndex = graphicsQueueFamily,
-                .dstQueueFamilyIndex = graphicsQueueFamily,
+                .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
+                .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
                 .image = depthTexture->image,
                 .subresourceRange =
                     {
@@ -672,7 +672,7 @@ void VulkanRenderer::draw()
         .pSignalSemaphores = &curFrameData.renderFinishedSemaphore,
     };
 
-    assertVkResult(vkQueueSubmit(graphicsQueue, 1, &submitInfo, curFrameData.renderFence));
+    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.renderFence));
 
     VkPresentInfoKHR presentInfo{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -687,7 +687,7 @@ void VulkanRenderer::draw()
         .pImageIndices = &swapchainImageIndex,
     };
 
-    assertVkResult(vkQueuePresentKHR(graphicsQueue, &presentInfo));
+    assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
 
     frameNumber++;
 }
@@ -825,7 +825,7 @@ void VulkanRenderer::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& 
         .pSignalSemaphores = nullptr,
     };
 
-    assertVkResult(vkQueueSubmit(graphicsQueue, 1, &submitInfo, uploadContext.uploadFence));
+    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, uploadContext.uploadFence));
 
     vkWaitForFences(device, 1, &uploadContext.uploadFence, VK_TRUE, 9999999999);
     vkResetFences(device, 1, &uploadContext.uploadFence);

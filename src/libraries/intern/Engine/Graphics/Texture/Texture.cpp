@@ -83,6 +83,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
     VkImageCreateInfo imageCrInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = nullptr,
+        .flags = info.flags,
 
         .imageType = info.imageType,
         .format = info.format,
@@ -220,11 +221,13 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
     nameToTextureLUT.insert({std::string{name}, newTextureHandle});
 
     // create an image view covering the whole image
+    VkImageViewType viewType =
+        info.flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
     VkImageViewCreateInfo imageViewCrInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
         .image = tex->image,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .viewType = viewType,
         .format = info.format,
         .components =
             VkComponentMapping{
@@ -264,12 +267,131 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
 }
 
 Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
-    int32_t width, int32_t height, Handle<Texture> equirectangularSource, std::string_view debugName)
+    uint32_t cubeResolution, Handle<Texture> equirectangularSource, std::string_view debugName)
 {
-    return {};
+    auto iterator = nameToMeshLUT.find(debugName);
+    assert(iterator == nameToMeshLUT.end());
+
+    Texture* sourceTex = get(equirectangularSource);
+
+    Handle<Texture> newTextureHandle = createTexture(Texture::Info{
+        // specifying non-default values only
+        .debugName = std::string{debugName},
+        .size = {.width = cubeResolution, .height = cubeResolution, .depth = 1},
+        .format = sourceTex->info.format,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+        .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .arrayLayers = 6,
+    });
+
+    // re-retrieve in case last creation resized storage
+    sourceTex = get(equirectangularSource);
+    Texture* cubeTex = get(newTextureHandle);
+
+    // TODO: !!!! DONT CREATE HERE !!! CREATE ON INIT() OF ENGINE AND JUST GET BY NAME OR SO HERE !
+    Handle<ComputeShader> conversionShaderHandle =
+        createComputeShader(SHADERS_PATH "/equiToCube.comp", "equiToCubeCompute");
+    ComputeShader* conversionShader = get(conversionShaderHandle);
+
+    VulkanRenderer* renderer = Engine::get()->getRenderer();
+    struct ConversionPushConstants
+    {
+        uint32_t sourceIndex;
+        uint32_t targetIndex;
+    };
+    ConversionPushConstants constants{
+        .sourceIndex = sourceTex->sampledResourceIndex,
+        .targetIndex = cubeTex->storageResourceIndex,
+    };
+    renderer->immediateSubmit(
+        [=](VkCommandBuffer cmd)
+        {
+            // TODO: THE CURRENT SYNCHRONIZATION IS BY NO MEANS OPTIMAL !
+            //       could at least switch to synch2
+
+            VkImageSubresourceRange range{
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 6,
+            };
+
+            VkImageMemoryBarrier imageBarrierToTransfer{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .image = cubeTex->image,
+                .subresourceRange = range,
+            };
+
+            vkCmdPipelineBarrier(
+                cmd,
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                0,
+                0,
+                nullptr,
+                0,
+                nullptr,
+                1,
+                &imageBarrierToTransfer);
+
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, conversionShader->pipeline);
+            // Bind the bindless descriptor sets once per cmdbuffer
+            vkCmdBindDescriptorSets(
+                cmd,
+                VK_PIPELINE_BIND_POINT_COMPUTE,
+                renderer->bindlessPipelineLayout,
+                0,
+                4,
+                renderer->bindlessManager.bindlessDescriptorSets.data(),
+                0,
+                nullptr);
+
+            // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
+            vkCmdPushConstants(
+                cmd,
+                renderer->bindlessPipelineLayout,
+                VK_SHADER_STAGE_ALL,
+                0,
+                sizeof(ConversionPushConstants),
+                &constants);
+
+            // TODO: dont hardcode sizes! retrieve programmatically
+            //       (workrgoup size form spirv, use UintDivAndCeil)
+            vkCmdDispatch(cmd, cubeResolution / 8, cubeResolution / 8, 6);
+
+            VkImageMemoryBarrier imageBarrierToReadable{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .image = cubeTex->image,
+                .subresourceRange = range,
+            };
+
+            vkCmdPipelineBarrier(
+                cmd,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                0,
+                0,
+                nullptr,
+                0,
+                nullptr,
+                1,
+                &imageBarrierToReadable);
+        });
+
+    return newTextureHandle;
 }
 
-void ResourceManager::deleteTexture(Handle<Texture> handle)
+void ResourceManager::free(Handle<Texture> handle)
 {
     /*
         todo:

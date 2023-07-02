@@ -17,48 +17,26 @@ void ResourceManager::init()
 
 void ResourceManager::cleanup()
 {
-    // I dont like this way of "clearing" the pools, but works for now...
-
     for(int i = 0; i < freeSamplerIndex; i++)
     {
         VulkanRenderer::get()->deleteQueue.pushBack(
             [=]() { vkDestroySampler(VulkanRenderer::get()->device, samplerArray[i].sampler, nullptr); });
     }
 
-    // todo: macro, lambda, or smth
-
-    Handle<MaterialInstance> materialInstanceHandle = materialInstancePool.getFirst();
-    while(materialInstanceHandle.isValid())
+    auto clearPool = [&](auto&& pool)
     {
-        free(materialInstanceHandle);
-        materialInstanceHandle = materialInstancePool.getFirst();
-    }
+        Handle handle = pool.getFirst();
+        while(handle.isValid())
+        {
+            free(handle);
+            handle = pool.getFirst();
+        }
+    };
 
-    Handle<Material> materialHandle = materialPool.getFirst();
-    while(materialHandle.isValid())
-    {
-        free(materialHandle);
-        materialHandle = materialPool.getFirst();
-    }
-
-    Handle<Texture> texHandle = texturePool.getFirst();
-    while(texHandle.isValid())
-    {
-        deleteTexture(texHandle);
-        texHandle = texturePool.getFirst();
-    }
-
-    Handle<Buffer> bufferHandle = bufferPool.getFirst();
-    while(bufferHandle.isValid())
-    {
-        deleteBuffer(bufferHandle);
-        bufferHandle = bufferPool.getFirst();
-    }
-
-    Handle<Mesh> meshHandle = meshPool.getFirst();
-    while(meshHandle.isValid())
-    {
-        deleteMesh(meshHandle);
-        meshHandle = meshPool.getFirst();
-    }
+    clearPool(computeShaderPool);
+    clearPool(materialInstancePool);
+    clearPool(materialPool);
+    clearPool(texturePool);
+    clearPool(bufferPool);
+    clearPool(meshPool);
 }

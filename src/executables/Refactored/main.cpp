@@ -147,6 +147,7 @@ int main()
 
     auto hdri = engine.getResourceManager()->createTexture(
         ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr", VK_IMAGE_USAGE_SAMPLED_BIT, true);
+    auto hdriCube = rm->createCubemapFromEquirectangular(512, hdri, "HdriCubemap");
 
     auto defaultCube = rm->getMesh("DefaultCube");
 

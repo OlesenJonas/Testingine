@@ -216,7 +216,7 @@ Handle<Mesh> ResourceManager::createMesh(
     return newMeshHandle;
 }
 
-void ResourceManager::deleteMesh(Handle<Mesh> handle)
+void ResourceManager::free(Handle<Mesh> handle)
 {
     /*
         todo:
@@ -224,8 +224,8 @@ void ResourceManager::deleteMesh(Handle<Mesh> handle)
         also need to ensure renderer deletes !all! objects from per frame queue during shutdown, ignoring the
             current frame!
     */
-    deleteBuffer(get(handle)->positionBuffer);
-    deleteBuffer(get(handle)->attributeBuffer);
+    free(get(handle)->positionBuffer);
+    free(get(handle)->attributeBuffer);
     meshPool.remove(handle);
 }
 

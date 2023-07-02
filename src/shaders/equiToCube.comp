@@ -1,0 +1,26 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "Bindless.glsl"
+
+layout (push_constant, std430) uniform constants
+{
+    uint sourceTex;
+    uint targetTex;
+};
+
+//not bothering to use the bindless defines since next thing to work on is switching to HLSL anyways
+layout (set = SAMPLED_IMG_SET, binding = GLOBAL_SAMPLER_COUNT) uniform texture2D global_texture2D[];
+layout (set = STORAGE_IMG_SET, binding = 0, rgba32f) uniform writeonly restrict imageCube global_rgba32f_imageCube[];
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+void main()
+{
+    ivec3 id = ivec3(gl_GlobalInvocationID);
+
+    ivec2 size = imageSize(global_rgba32f_imageCube[targetTex]);
+    vec2 uv = vec2(id.xy + 0.5)/size;
+
+    imageStore(global_rgba32f_imageCube[targetTex], id, vec4(uv, 0.0, 1.0));
+}

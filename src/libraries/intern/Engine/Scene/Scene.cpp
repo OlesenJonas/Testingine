@@ -357,7 +357,7 @@ void Scene::load(std::string path)
         }
     }
 
-    BREAKPOINT;
+    // BREAKPOINT;
 }
 
 void Scene::updateTransformHierarchy(ECS::Entity entity, glm::mat4 parentToWorld)

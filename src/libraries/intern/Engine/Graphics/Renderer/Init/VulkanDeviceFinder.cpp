@@ -57,7 +57,9 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
     queueFamilyIndices = findQueueFamilies(physicalDevice);
 
     std::set<uint32_t> uniqueQueueFamilies = {
-        queueFamilyIndices.graphicsFamily.value(), queueFamilyIndices.presentFamily.value()};
+        queueFamilyIndices.graphicsAndComputeFamily.value(), queueFamilyIndices.presentFamily.value()};
+    // TODO: handle present and graphics/compute queue not being part of the same family!
+    assert(uniqueQueueFamilies.size() == 1);
 
     float queuePriority = 1.0f;
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
@@ -129,9 +131,15 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
         .shaderDrawParameters = VK_TRUE,
     };
 
+    VkPhysicalDeviceMaintenance4Features maint4Features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES,
+        .pNext = &shaderDrawParamFeatures,
+        .maintenance4 = VK_TRUE,
+    };
+
     VkDeviceCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &shaderDrawParamFeatures,
+        .pNext = &maint4Features,
     };
     createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
@@ -295,6 +303,12 @@ QueueFamilyIndices VulkanDeviceFinder::findQueueFamilies(VkPhysicalDevice device
         if(queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
             indices.graphicsFamily = i;
+        }
+
+        if((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) &&
+           (queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT))
+        {
+            indices.graphicsAndComputeFamily = i;
         }
 
         VkBool32 presentSupport = false;
