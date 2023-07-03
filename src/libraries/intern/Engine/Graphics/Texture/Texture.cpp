@@ -285,6 +285,14 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
         .arrayLayers = 6,
     });
 
+    auto linearSampler = createSampler({
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    });
+
     // re-retrieve in case last creation resized storage
     sourceTex = get(equirectangularSource);
     Texture* cubeTex = get(newTextureHandle);
@@ -298,17 +306,19 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
     struct ConversionPushConstants
     {
         uint32_t sourceIndex;
+        uint32_t samplerIndex;
         uint32_t targetIndex;
     };
     ConversionPushConstants constants{
         .sourceIndex = sourceTex->sampledResourceIndex,
+        .samplerIndex = get(linearSampler)->resourceIndex,
         .targetIndex = cubeTex->storageResourceIndex,
     };
     renderer->immediateSubmit(
         [=](VkCommandBuffer cmd)
         {
             // TODO: THE CURRENT SYNCHRONIZATION IS BY NO MEANS OPTIMAL !
-            //       could at least switch to synch2
+            //       but could at least switch to synch2
 
             VkImageSubresourceRange range{
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,

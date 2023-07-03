@@ -155,16 +155,31 @@ int main()
         todo:
             load by default on engine init!
     */
-    auto skyboxMat = rm->createMaterial(
+    auto equiSkyboxMat = rm->createMaterial(
         {
             .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
             .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
         },
-        "skyboxMat");
-    auto skyboxMatInst = rm->createMaterialInstance(skyboxMat);
+        "equiSkyboxMat");
+    auto equiSkyboxMatInst = rm->createMaterialInstance(equiSkyboxMat);
     {
-        auto inst = rm->get(skyboxMatInst);
+        auto* inst = rm->get(equiSkyboxMatInst);
         inst->parameters.setResource("equirectangularMap", rm->get(hdri)->sampledResourceIndex);
+        inst->parameters.setResource("defaultSampler", rm->get(linearSampler)->resourceIndex);
+        inst->parameters.pushChanges();
+    }
+
+    auto cubeSkyboxMat = rm->createMaterial(
+        {
+            .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
+        },
+        "cubeSkyboxMat");
+
+    auto cubeSkyboxMatInst = rm->createMaterialInstance(cubeSkyboxMat);
+    {
+        auto* inst = rm->get(cubeSkyboxMatInst);
+        inst->parameters.setResource("cubeMap", rm->get(hdriCube)->sampledResourceIndex);
         inst->parameters.setResource("defaultSampler", rm->get(linearSampler)->resourceIndex);
         inst->parameters.pushChanges();
     }
@@ -175,7 +190,8 @@ int main()
         auto* transform = skybox.addComponent<Transform>();
         auto* renderInfo = skybox.addComponent<RenderInfo>();
         renderInfo->mesh = defaultCube;
-        renderInfo->materialInstance = skyboxMatInst;
+        // renderInfo->materialInstance = equiSkyboxMatInst;
+        renderInfo->materialInstance = cubeSkyboxMatInst;
     }
 
     while(engine.isRunning())
