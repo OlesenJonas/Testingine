@@ -1,5 +1,9 @@
 #include "ComputeShader.hpp"
 
+#include <windows.h>
+
+#include <dxcapi.h>
+
 #include <Datastructures/Pool.hpp>
 #include <Graphics/Renderer/VulkanDebug.hpp>
 #include <Graphics/Shaders/Shaders.hpp>

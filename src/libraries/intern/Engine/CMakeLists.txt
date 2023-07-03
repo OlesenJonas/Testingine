@@ -6,6 +6,7 @@ include(DefaultLibrary)
 # for selecting buffer/image usage/formats etc...
 target_link_libraries(Engine PUBLIC Vulkan::Vulkan)
 target_link_libraries(Engine PRIVATE Vulkan::shaderc_combined)
+target_link_libraries(Engine PRIVATE Vulkan::dxc_lib)
 target_link_options(Engine INTERFACE "LINKER:/ignore:4099")
 # if the above link option causes problems, just comment out the line if fixing it isnt trivial
 # it just there because shaderc produces a ton of errors because glslang pdbs werent found
