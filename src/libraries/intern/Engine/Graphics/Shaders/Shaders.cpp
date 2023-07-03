@@ -112,7 +112,8 @@ std::vector<uint32_t> compileGLSL(std::string_view path, shaderc_shader_kind sha
     //         std::cout << compilationResult.GetErrorMessage() << std::endl;
     //         assert(false);
     //     }
-    //     std::cout << std::string{compilationResult.cbegin(), compilationResult.cend()} << std::endl;
+    //     std::cout << "========= SPIRV OF SHADER: " << path << " ====================\n"
+    //               << std::string{compilationResult.cbegin(), compilationResult.cend()} << std::endl;
     // }
     //------------------
 
