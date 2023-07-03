@@ -1,4 +1,5 @@
 #pragma once
+
 #include <array>
 #include <cassert>
 #include <cstdint>
@@ -11,7 +12,7 @@ template <typename T>
 class Span
 {
   public:
-    using size_t = std::size_t;
+    using size_type = std::size_t;
     using value_type = std::remove_const_t<T>;
 
     // Constructors ----------------------------
@@ -22,10 +23,13 @@ class Span
 
     Span(T* first, T* last) : _data(first), _length(last - first + 1){};
 
-    friend Span<const T>;
-    Span(Span<value_type> span)
+    Span(Span<T>& span) = default;
+    Span(const Span<T>& span) = default;
+
+    // for converting from Span<T> to Span<const T>
+    Span(Span<value_type>& span)
         requires std::is_const_v<T>
-        : _data(span._data), _length(span._length){};
+        : _data(span.data()), _length(span.size()){};
 
     Span(std::initializer_list<value_type> list)
         requires std::is_const_v<T>
@@ -36,6 +40,11 @@ class Span
         : _data(vec.data()), _length(vec.size()){};
 
     Span(std::vector<T>& vec) : _data(vec.data()), _length(vec.size()){};
+
+    template <std::size_t N>
+    Span(std::array<value_type, N>& vec)
+        requires std::is_const_v<T>
+        : _data(vec.data()), _length(vec.size()){};
 
     template <std::size_t N>
     Span(std::array<T, N>& vec) : _data(vec.data()), _length(vec.size()){};
