@@ -73,8 +73,7 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
     // Configure the compiler arguments for compiling the HLSL shader to SPIR-V
     std::vector<LPCWSTR> arguments = {
         // (Optional) name of the shader file to be displayed e.g. in an error message
-        // TODO: UN-COMMENT
-        // filename.c_str(),
+        filename.c_str(),
         // Shader main entry point
         L"-E",
         L"main",
@@ -119,27 +118,20 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
             Note:
                 If this fails because "DXC hasnt been compiled with spirv codegen"
                 then an outdated version (windows sdk?) of DXC is used instead of the vulkan sdk.
-                This can happen if the vulkan sdk has been installed without debug libraries
+                In my case that happended because the Vulkan SDK didnt include debug versions of DXC (?)
+                and couldnt be linked against. Switching to vcpkgs's dxc fixed that
         */
         wprintf(L"Warnings and Errors:\n%S\n", pErrors->GetStringPointer());
         std::cout << std::endl;
     }
 
-    if(SUCCEEDED(hres))
+    // Quit if the compilation failed.
+    HRESULT hrStatus;
+    pResults->GetStatus(&hrStatus);
+    if(FAILED(hrStatus))
     {
-        pResults->GetStatus(&hres);
-    }
-
-    // Output error if compilation failed
-    if(FAILED(hres) && (pResults))
-    {
-        CComPtr<IDxcBlobEncoding> errorBlob;
-        hres = pResults->GetErrorBuffer(&errorBlob);
-        if(SUCCEEDED(hres) && errorBlob)
-        {
-            std::cerr << "Shader compilation failed :\n\n" << (const char*)errorBlob->GetBufferPointer();
-            throw std::runtime_error("Compilation failed");
-        }
+        wprintf(L"Compilation Failed\n");
+        return {};
     }
 
     // Get compilation result

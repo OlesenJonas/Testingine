@@ -7,17 +7,6 @@ struct PushConstants
 [[vk::push_constant]]
 PushConstants constants;
 
-//todo: can I do this:?
-/*
-[[vk::push_constant]]
-struct PushConstants
-{
-    uint sourceTex;
-    uint samplerIndex;
-    uint targetTex;  
-} constants;
-*/
-
 static const float2 invAtan = float2(0.1591, 0.3183);
 float2 sampleSphericalMap(float3 v)
 {
