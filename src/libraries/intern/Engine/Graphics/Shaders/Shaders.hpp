@@ -5,6 +5,16 @@
 #include <string_view>
 #include <vulkan/vulkan_core.h>
 
+namespace Shaders
+{
+    enum class Stage
+    {
+        Vertex,
+        Fragment,
+        Compute
+    };
+}
+
 struct ShaderIncludeHandler : public shaderc::CompileOptions::IncluderInterface
 {
     shaderc_include_result* GetInclude(

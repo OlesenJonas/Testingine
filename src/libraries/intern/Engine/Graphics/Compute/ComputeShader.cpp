@@ -1,11 +1,8 @@
 #include "ComputeShader.hpp"
 
-#include <windows.h>
-
-#include <dxcapi.h>
-
 #include <Datastructures/Pool.hpp>
 #include <Graphics/Renderer/VulkanDebug.hpp>
+#include <Graphics/Shaders/HLSL.hpp>
 #include <Graphics/Shaders/Shaders.hpp>
 #include <ResourceManager/ResourceManager.hpp>
 #include <SPIRV-Reflect/spirv_reflect.h>
@@ -31,7 +28,17 @@ Handle<ComputeShader> ResourceManager::createComputeShader(std::string_view path
 
     VulkanRenderer& renderer = *VulkanRenderer::get();
 
-    std::vector<uint32_t> shaderBinary = compileGLSL(path, shaderc_compute_shader);
+    std::vector<uint32_t> shaderBinary;
+
+    std::string_view extension = fileView.substr(extensionStart);
+    if(extension == ".hlsl")
+    {
+        shaderBinary = compileHLSL(path, Shaders::Stage::Compute);
+    }
+    else
+    {
+        shaderBinary = compileGLSL(path, shaderc_compute_shader);
+    }
 
     // Shader Modules ----------------
     VkShaderModuleCreateInfo vertSMcrInfo{
