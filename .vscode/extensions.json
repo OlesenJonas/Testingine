@@ -7,7 +7,7 @@
 		"ms-vscode.cpptools",
 		"llvm-vs-code-extensions.vscode-clangd",
 		// "dtoplak.vscode-glsllint", //used for glsl
-		"timgjones.hlsltools"
+		"a2k.hlsl-linter"
 	],
 	// List of extensions recommended by VS Code that should not be recommended for users of this workspace.
 	"unwantedRecommendations": []

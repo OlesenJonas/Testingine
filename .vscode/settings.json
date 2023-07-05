@@ -9,6 +9,15 @@
     "[cpp]": {
         "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
     },
+    "hlsl.linter.defaultArgs": [
+        "-HV 2021",
+        "-T",
+        "lib_6_4",
+        "-Od",
+        "-Ges",
+        "-spirv",
+        "-fspv-target-env=vulkan1.3"
+    ],
     // "cmake.configureSettings": {
     //     "CMAKE_TOOLCHAIN_FILE": "${env:VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
     // }
