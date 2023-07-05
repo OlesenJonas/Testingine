@@ -7,44 +7,6 @@
 #define UBO_SET 2
 #define SSBO_SET 3
 
-/*
-[[vk::binding(0, 0)]]
-ByteAddressBuffer g_byteAddressBuffer[];
-[[vk::binding(0, 0)]]
-RWByteAddressBuffer g_rwByteAddressBuffer[];
-*/
-
-/*
-
-// One veryyyy long but, when done correctly, probably fancy way of doing bindless
-// Could be identical to standard HLSL syntax but with minor name changes
-// Haven't investigated what the code-gen is like though
-
-template <typename T>
-struct RWTex2DArray;
-
-template <>
-struct RWTex2DArray<float4>
-{
-    uint resourceHandle;
-
-    void GetDimensions(out uint Width, out uint Height, out uint Elements)
-    {
-    }
-};
-
-template <typename T>
-struct Tex2D;
-
-template<>
-struct Tex2D<float4>
-{
-    uint resourceHandle;
-
-    void foo();
-};
-*/
-
 template<typename T>
 struct Handle
 {
@@ -85,6 +47,13 @@ DECLARE_TEMPLATED_TYPE(RWTexture2DArray, float4, STORAGE_IMG_SET, 0)
 // ------------- Buffers
 
 // TODO:
+/*
+
+[[vk::binding(0, 0)]]
+ByteAddressBuffer g_byteAddressBuffer[];
+[[vk::binding(0, 0)]]
+RWByteAddressBuffer g_rwByteAddressBuffer[];
+*/
 
 /*
 
@@ -97,6 +66,8 @@ struct Foo
 };
 
 */
+
+// ------------- Input Bindings
 
 // Not quite satisfied with this yet, prefer the one as shown by traverse:
 //   have just this struct and then Load<T> from a byte address buffer
