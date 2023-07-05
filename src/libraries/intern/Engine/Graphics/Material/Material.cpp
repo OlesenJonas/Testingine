@@ -2,8 +2,10 @@
 #include <Datastructures/ArrayHelpers.hpp>
 #include <Engine/Graphics/Renderer/VulkanDebug.hpp>
 #include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
-#include <Engine/Graphics/Shaders/Shaders.hpp>
+#include <Engine/Graphics/Shaders/GLSL.hpp>
+#include <Engine/Graphics/Shaders/HLSL.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
+#include <Graphics/Shaders/Shaders.hpp>
 #include <SPIRV-Reflect/spirv_reflect.h>
 #include <iostream>
 #include <shaderc/shaderc.h>
@@ -28,8 +30,17 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
 
     VulkanRenderer& renderer = *VulkanRenderer::get();
 
-    std::vector<uint32_t> vertexBinary = compileGLSL(crInfo.vertexShader.sourcePath, shaderc_vertex_shader);
-    std::vector<uint32_t> fragmentBinary = compileGLSL(crInfo.fragmentShader.sourcePath, shaderc_fragment_shader);
+    std::vector<uint32_t> vertexBinary;
+    std::vector<uint32_t> fragmentBinary;
+    if(crInfo.vertexShader.sourceLanguage == Shaders::Language::HLSL)
+        vertexBinary = compileHLSL(crInfo.vertexShader.sourcePath, Shaders::Stage::Vertex);
+    else
+        vertexBinary = compileGLSL(crInfo.vertexShader.sourcePath, Shaders::Stage::Vertex);
+
+    if(crInfo.fragmentShader.sourceLanguage == Shaders::Language::HLSL)
+        fragmentBinary = compileHLSL(crInfo.fragmentShader.sourcePath, Shaders::Stage::Fragment);
+    else
+        fragmentBinary = compileGLSL(crInfo.fragmentShader.sourcePath, Shaders::Stage::Fragment);
 
     // Shader Modules ----------------
     VkShaderModuleCreateInfo vertSMcrInfo{

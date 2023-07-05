@@ -2,8 +2,8 @@
 
 #include <Datastructures/Pool.hpp>
 #include <Graphics/Renderer/VulkanDebug.hpp>
+#include <Graphics/Shaders/GLSL.hpp>
 #include <Graphics/Shaders/HLSL.hpp>
-#include <Graphics/Shaders/Shaders.hpp>
 #include <ResourceManager/ResourceManager.hpp>
 #include <SPIRV-Reflect/spirv_reflect.h>
 #include <iostream>
@@ -11,9 +11,10 @@
 #include <span>
 #include <string_view>
 
-Handle<ComputeShader> ResourceManager::createComputeShader(std::string_view path, std::string_view debugName)
+Handle<ComputeShader>
+ResourceManager::createComputeShader(Shaders::StageCreateInfo&& createInfo, std::string_view debugName)
 {
-    std::string_view fileView{path};
+    std::string_view fileView{createInfo.sourcePath};
     auto lastDirSep = fileView.find_last_of("/\\");
     auto extensionStart = fileView.find_last_of('.');
     std::string_view shaderName =
@@ -30,14 +31,13 @@ Handle<ComputeShader> ResourceManager::createComputeShader(std::string_view path
 
     std::vector<uint32_t> shaderBinary;
 
-    std::string_view extension = fileView.substr(extensionStart);
-    if(extension == ".hlsl")
+    if(createInfo.sourceLanguage == Shaders::Language::HLSL)
     {
-        shaderBinary = compileHLSL(path, Shaders::Stage::Compute);
+        shaderBinary = compileHLSL(createInfo.sourcePath, Shaders::Stage::Compute);
     }
     else
     {
-        shaderBinary = compileGLSL(path, shaderc_compute_shader);
+        shaderBinary = compileGLSL(createInfo.sourcePath, Shaders::Stage::Compute);
     }
 
     // Shader Modules ----------------

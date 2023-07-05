@@ -157,8 +157,10 @@ int main()
     */
     auto equiSkyboxMat = rm->createMaterial(
         {
-            .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
+            .vertexShader =
+                {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert", .sourceLanguage = Shaders::Language::GLSL},
+            .fragmentShader =
+                {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag", .sourceLanguage = Shaders::Language::GLSL},
         },
         "equiSkyboxMat");
     auto equiSkyboxMatInst = rm->createMaterialInstance(equiSkyboxMat);
@@ -171,8 +173,10 @@ int main()
 
     auto cubeSkyboxMat = rm->createMaterial(
         {
-            .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
+            .vertexShader =
+                {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert", .sourceLanguage = Shaders::Language::GLSL},
+            .fragmentShader =
+                {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag", .sourceLanguage = Shaders::Language::GLSL},
         },
         "cubeSkyboxMat");
 

@@ -1,4 +1,4 @@
-#include "Shaders.hpp"
+#include "GLSL.hpp"
 
 #include <Engine/Engine.hpp>
 #include <cassert>
@@ -57,7 +57,7 @@ void ShaderIncludeHandler::ReleaseInclude(shaderc_include_result* data)
     delete[] data->source_name;
 };
 
-std::vector<uint32_t> compileGLSL(std::string_view path, shaderc_shader_kind shaderType)
+std::vector<uint32_t> compileGLSL(std::string_view path, Shaders::Stage stage)
 {
     std::string initialPath{path};
 
@@ -88,8 +88,21 @@ std::vector<uint32_t> compileGLSL(std::string_view path, shaderc_shader_kind sha
     options.SetIncluder(std::make_unique<ShaderIncludeHandler>());
     // options.SetWarningsAsErrors();
 
+    shaderc_shader_kind shaderKind;
+    switch(stage)
+    {
+    case Shaders::Stage::Vertex:
+        shaderKind = shaderc_vertex_shader;
+        break;
+    case Shaders::Stage::Fragment:
+        shaderKind = shaderc_fragment_shader;
+        break;
+    default:
+        assert(false);
+    }
+
     auto preprocessedResult =
-        compiler.PreprocessGlsl(buffer.data(), buffer.size(), shaderType, initialPath.c_str(), options);
+        compiler.PreprocessGlsl(buffer.data(), buffer.size(), shaderKind, initialPath.c_str(), options);
     if(preprocessedResult.GetCompilationStatus() != shaderc_compilation_status_success)
     {
         std::cout << preprocessedResult.GetErrorMessage() << std::endl;
@@ -121,7 +134,7 @@ std::vector<uint32_t> compileGLSL(std::string_view path, shaderc_shader_kind sha
     //       read docs if thats specified to work
     std::string preprocessedString{preprocessedResult.cbegin(), preprocessedResult.cend()};
     auto compilationResult = compiler.CompileGlslToSpv(
-        preprocessedString.c_str(), preprocessedString.size(), shaderType, initialPath.c_str(), "main", options);
+        preprocessedString.c_str(), preprocessedString.size(), shaderKind, initialPath.c_str(), "main", options);
     if(compilationResult.GetCompilationStatus() != shaderc_compilation_status_success)
     {
         std::cout << compilationResult.GetErrorMessage() << std::endl;

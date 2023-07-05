@@ -27,8 +27,10 @@ Engine::Engine()
     // default resources
     resourceManager.createMaterial(
         {
-            .vertexShader = {.sourcePath = SHADERS_PATH "/PBRBasic.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/PBRBasic.frag"},
+            .vertexShader =
+                {.sourcePath = SHADERS_PATH "/PBRBasic.vert", .sourceLanguage = Shaders::Language::GLSL},
+            .fragmentShader =
+                {.sourcePath = SHADERS_PATH "/PBRBasic.frag", .sourceLanguage = Shaders::Language::GLSL},
         },
         "PBRBasic");
     assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);

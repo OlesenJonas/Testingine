@@ -49,7 +49,7 @@ class ResourceManager
     Handle<Material> createMaterial(Material::CreateInfo crInfo, std::string_view name = "");
     Handle<MaterialInstance> createMaterialInstance(Handle<Material> material);
 
-    Handle<ComputeShader> createComputeShader(std::string_view path, std::string_view debugName);
+    Handle<ComputeShader> createComputeShader(Shaders::StageCreateInfo&& createInfo, std::string_view debugName);
 
     Handle<Sampler> createSampler(Sampler::Info&& info);
 
