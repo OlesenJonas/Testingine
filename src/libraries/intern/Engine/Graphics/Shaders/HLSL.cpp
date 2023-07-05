@@ -77,6 +77,7 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
         // Shader main entry point
         L"-E",
         L"main",
+        L"-HV 2021", // for templates etc
         // Shader target profile
         L"-T",
         targetProfile,
