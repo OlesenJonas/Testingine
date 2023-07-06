@@ -183,6 +183,7 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
     }
 
     nameToMaterialLUT.insert({std::string{matName}, newMaterialHandle});
+    // BREAKPOINT;
 
     material->createPipeline();
 

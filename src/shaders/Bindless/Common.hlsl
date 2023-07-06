@@ -5,8 +5,8 @@
 
 #define SAMPLED_IMG_SET 0
 #define STORAGE_IMG_SET 1
-#define UBO_SET 2
-#define SSBO_SET 3
+#define UNIFORM_BUFFER_SET 2
+#define STORAGE_BUFFER_SET 3
 
 template<typename T>
 struct Handle
