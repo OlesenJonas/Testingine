@@ -16,4 +16,13 @@ struct Handle
     T get();
 };
 
+#define DECLARE_TEMPLATED_TYPE(TYPE, TEMPLATE, DESCR, BINDING)  \
+[[vk::binding(BINDING, DESCR)]]                                 \
+TYPE<TEMPLATE> g_##TYPE##_##TEMPLATE[];                         \
+template <>                                                     \
+TYPE<TEMPLATE> Handle< TYPE<TEMPLATE> >::get()                  \
+{                                                               \
+    return g_##TYPE##_##TEMPLATE[resourceHandle];               \
+}  
+
 #endif 

@@ -1,13 +1,9 @@
-/*
-    WIP !
-*/
-
 #include "../Bindless/Setup.hlsl"
 #include "../VertexAttributes.hlsl"
 #include "../CommonTypes.hlsl"
 
 /*
-    Not sure if semantic names are needed when only compiling to spirv
+    Not sure if semantic names are needed when compiling only to spirv
 */
 struct VSOutput
 {
@@ -19,44 +15,18 @@ struct VSOutput
     [[vk::location(4)]] float2 vTexCoord : TEXCOORD0;
 };
 
-//--------------------
-
-// struct ArrayBuffer
-// {
-    // RWByteAddressBuffer buffer;
-    //alternatively als just store the index here
-    // uint resourceIndex;
-    // // But if the first one works use that, not sure about codegen /
-    // optimizations when copying the index on .get()
-// };
-//
-
-#define DECLARE_TEMPLATED_TYPE(TYPE, TEMPLATE, DESCR, BINDING)  \
-[[vk::binding(BINDING, DESCR)]]                                 \
-TYPE<TEMPLATE> g_##TYPE##_##TEMPLATE[];                         \
-template <>                                                     \
-TYPE<TEMPLATE> Handle< TYPE<TEMPLATE> >::get()                  \
-{                                                               \
-    return g_##TYPE##_##TEMPLATE[resourceHandle];               \
-}                                                               \
-
-DECLARE_TEMPLATED_TYPE(StructuredBuffer, float4x4, STORAGE_BUFFER_SET, 0)
-DECLARE_TEMPLATED_TYPE(StructuredBuffer, RenderPassData, STORAGE_BUFFER_SET, 0) 
-
- 
-//--------------------
-
 DefineShaderInputs(
     // Frame globals
-    uint frameDataBuffer;
+    Handle< Placeholder > frameDataBuffer;
     // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< StructuredBuffer<RenderPassData> > renderPassDataBuffer;
+    Handle< ConstantBuffer<RenderPassData> > renderPassData;
     // Buffer with object transforms and index into that buffer
     Handle< StructuredBuffer<float4x4> > transformBuffer;
     uint transformIndex;
     // Buffer with material/-instance parameters
-    uint materialParamsBuffer;
-    uint materialInstanceParamsBuffer;
+    // using placeholder, since parameter types arent defined here
+    Handle< Placeholder > materialParamsBuffer;
+    Handle< Placeholder > materialInstanceParams;
 );
 
 VSOutput main(VSInput input)
@@ -64,7 +34,7 @@ VSOutput main(VSInput input)
     VSOutput vsOut = (VSOutput)0;
 
     const float4x4 modelMatrix = shaderInputs.transformBuffer.get()[shaderInputs.transformIndex];
-    const float4x4 projViewMatrix = shaderInputs.renderPassDataBuffer.get()[0].projView;
+    const float4x4 projViewMatrix = shaderInputs.renderPassData.get().projView;
     //todo: test mul-ing here already, like in GLSL version
     // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
     
