@@ -27,14 +27,13 @@ DefineShaderInputs(
     // Frame globals
     Handle< Placeholder > frameDataBuffer;
     // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
+    Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
     // Buffer with object transforms and index into that buffer
     Handle< StructuredBuffer<float4x4> > transformBuffer;
     uint transformIndex;
     // Buffer with material/-instance parameters
-    // using placeholder, since parameter types arent defined here
     Handle< Placeholder > materialParamsBuffer;
-    Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
+    Handle< ConstantBuffer_fix<MaterialInstanceParameters> > materialInstanceParams;
 );
 
 struct VSOutput
@@ -48,7 +47,7 @@ struct VSOutput
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    const MaterialInstanceParameters params = shaderInputs.materialInstanceParams.get();
+    const MaterialInstanceParameters params = shaderInputs.materialInstanceParams.get().Load();
     Texture2D normalTexture =  params.normalTexture.get();
     SamplerState normalSampler = params.normalSampler.get();
 
@@ -67,7 +66,7 @@ float4 main(VSOutput input) : SV_TARGET
         nrmSampleTS.z * input.vNormalWS
     );
 
-    const float3 cameraPositionWS = shaderInputs.renderPassData.get().cameraPositionWS;
+    const float3 cameraPositionWS = shaderInputs.renderPassData.get().Load().cameraPositionWS;
 
     Texture2D colorTexture = params.baseColorTexture.get();
     SamplerState colorSampler = params.baseColorSampler.get();
@@ -130,6 +129,6 @@ float4 main(VSOutput input) : SV_TARGET
     Lout += ambient;
 
     float3 color = Lout;
-    
+
     return float4(color, 1.0);
 }

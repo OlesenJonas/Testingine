@@ -19,7 +19,7 @@ DefineShaderInputs(
     // Frame globals
     Handle< Placeholder > frameDataBuffer;
     // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
+    Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
     // Buffer with object transforms and index into that buffer
     Handle< StructuredBuffer<float4x4> > transformBuffer;
     uint transformIndex;
@@ -34,11 +34,20 @@ VSOutput main(VSInput input)
     VSOutput vsOut = (VSOutput)0;
 
     const float4x4 modelMatrix = shaderInputs.transformBuffer.get()[shaderInputs.transformIndex];
-    const float4x4 projViewMatrix = shaderInputs.renderPassData.get().projView;
+    ConstantBuffer_fix<RenderPassData> renderPassDataHandle = shaderInputs.renderPassData.get();
+    const RenderPassData renderPassData = renderPassDataHandle.Load();
+    const float4x4 projViewMatrix = renderPassData.projView;
     //todo: test mul-ing here already, like in GLSL version
     // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
     
-    const float4 worldPos = mul(modelMatrix, float4(input.vPosition,1.0));
+    float4 worldPos = mul(modelMatrix, float4(input.vPosition,1.0));
+    /*
+    */
+    Handle< Texture2D<float4> > texHandle = (Handle< Texture2D<float4> >)0;
+    Texture2D<float4> tex = texHandle.get();
+    worldPos.x += tex.SampleLevel(g_samplerState[0], float2(0,0), 0).x;
+    /*
+    */
     vsOut.vPositionWS = worldPos.xyz;
     vsOut.posOut = mul(projViewMatrix, worldPos);
 

@@ -13,16 +13,31 @@ struct Handle
 {
     uint resourceHandle;
 
-    T get();
+    T get()
+    {
+        return (T)0;
+    }
 };
 
-#define DECLARE_TEMPLATED_TYPE(TYPE, TEMPLATE, DESCR, BINDING)  \
-[[vk::binding(BINDING, DESCR)]]                                 \
+/*
+    Since im using strongly types buffers, and not all structs may be defined
+    in all shader stage files, this Placeholder is defined, enabling a neat way
+    of just writing Handle<Placeholder> ...
+*/
+struct Placeholder{};
+template<>
+struct Handle<Placeholder>
+{
+    uint resourceHandle;
+
+    Placeholder get()
+    {
+        return (Placeholder)0;
+    }
+};
+
+#define DECLARE_TEMPLATED_ARRAY(TYPE, TEMPLATE, SET, BINDING)   \
+[[vk::binding(BINDING, SET)]]                                   \
 TYPE<TEMPLATE> g_##TYPE##_##TEMPLATE[];                         \
-template <>                                                     \
-TYPE<TEMPLATE> Handle< TYPE<TEMPLATE> >::get()                  \
-{                                                               \
-    return g_##TYPE##_##TEMPLATE[resourceHandle];               \
-}  
 
 #endif 

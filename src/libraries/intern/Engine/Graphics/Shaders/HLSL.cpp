@@ -60,10 +60,10 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
     switch(stage)
     {
     case Shaders::Stage::Vertex:
-        targetProfile = L"vs_6_1";
+        targetProfile = L"vs_6_6";
         break;
     case Shaders::Stage::Fragment:
-        targetProfile = L"ps_6_1";
+        targetProfile = L"ps_6_6";
         break;
     case Shaders::Stage::Compute:
         targetProfile = L"cs_6_6";
