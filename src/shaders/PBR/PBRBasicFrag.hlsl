@@ -48,7 +48,7 @@ struct VSOutput
 float4 main(VSOutput input) : SV_TARGET
 {
     //Have to retrieve the buffer in its own line, otherwise dxc crashes :/
-    ConstantBuffer<MaterialInstanceParameters> params = shaderInputs.materialInstanceParams.get();
+    MaterialInstanceParameters params = shaderInputs.materialInstanceParams.Load();
     Texture2D normalTexture =  params.normalTexture.get();
     SamplerState normalSampler = params.normalSampler.get();
 
@@ -67,7 +67,7 @@ float4 main(VSOutput input) : SV_TARGET
         nrmSampleTS.z * input.vNormalWS
     );
 
-    ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
+    RenderPassData renderPassData = shaderInputs.renderPassData.Load();
     const float3 cameraPositionWS = renderPassData.cameraPositionWS;
 
     Texture2D colorTexture = params.baseColorTexture.get();

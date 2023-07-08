@@ -5,6 +5,20 @@
 
 // ---------------------
 
+// ConstantBuffers cant correctly be stored inside variables
+// (https://github.com/microsoft/DirectXShaderCompiler/issues/5401)
+// So Handle< ConstantBuffer<> > only offers a method to load the
+// contained data directly from the bindless array
+template<typename X>
+struct Handle< ConstantBuffer<X> >
+{
+    uint resourceHandle;
+
+    X Load();
+};
+
+// ---------------------
+
 #define ENABLE_STRUCTURED_ACCESS(TYPE)                                      \
 DECLARE_TEMPLATED_ARRAY(StructuredBuffer, TYPE, STORAGE_BUFFER_SET, 0)      \
 template <>                                                                 \
@@ -16,10 +30,15 @@ StructuredBuffer<TYPE> Handle< StructuredBuffer<TYPE> >::get()              \
 #define ENABLE_CONSTANT_ACCESS(TYPE)                                        \
 DECLARE_TEMPLATED_ARRAY(ConstantBuffer, TYPE, UNIFORM_BUFFER_SET, 0)        \
 template <>                                                                 \
-ConstantBuffer<TYPE> Handle< ConstantBuffer<TYPE> >::get()                  \
+TYPE Handle< ConstantBuffer<TYPE> >::Load()                                 \
 {                                                                           \
     return g_ConstantBuffer_##TYPE[resourceHandle];                         \
-}                                                                           
+}          
+// template <>                                                                 \
+// ConstantBuffer<TYPE> Handle< ConstantBuffer<TYPE> >::get()                  \
+// {                                                                           \
+//     return g_ConstantBuffer_##TYPE[resourceHandle];                         \
+// }                                                                           
 
 // ---------------------
 

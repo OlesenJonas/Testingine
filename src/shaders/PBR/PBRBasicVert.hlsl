@@ -30,19 +30,20 @@ DefineShaderInputs(
     Handle< Placeholder > materialInstanceParams;
 );
 
-ConstantBuffer<RenderPassData> getBuf(uint indx)
-{
-    return g_ConstantBuffer_RenderPassData[indx];
-}
+typedef ConstantBuffer<RenderPassData> cbufferRPD;
 
 VSOutput main(VSInput input)
 {
     VSOutput vsOut = (VSOutput)0;
 
-    const float4x4 modelMatrix = shaderInputs.transformBuffer.get()[shaderInputs.transformIndex];
+    const StructuredBuffer<float4x4> transformBuffer = shaderInputs.transformBuffer.get();
+    const float4x4 modelMatrix = transformBuffer[shaderInputs.transformIndex];
 
-    ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
+    // ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
+    // ConstantBuffer<RenderPassData> renderPassData = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle];
+    RenderPassData renderPassData = shaderInputs.renderPassData.Load();
     const float4x4 projViewMatrix = renderPassData.projView;
+    // const float4x4 projViewMatrix = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle].projView;
     //todo: test mul-ing here already, like in GLSL version
     // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
     
