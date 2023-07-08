@@ -5,25 +5,6 @@
 
 // ---------------------
 
-/*
-    Returning a constant buffer from a function is currently bugged
-    (https://github.com/microsoft/DirectXShaderCompiler/issues/5401),
-    so we need to return another type. This has a good amount of downsides
-    (like not being able to access individual members)
-    but the alternative is not having constant buffers at all :shrug:
-    Maybe I'll come up with a better solution thats not too far away from the original
-    ConstantBuffer syntax, but the current solution is ok for now
-*/
-template <typename T>
-struct ConstantBuffer_fix
-{
-    uint resourceHandle;
-
-    T Load();
-};
-
-// ---------------------
-
 #define ENABLE_STRUCTURED_ACCESS(TYPE)                                      \
 DECLARE_TEMPLATED_ARRAY(StructuredBuffer, TYPE, STORAGE_BUFFER_SET, 0)      \
 template <>                                                                 \
@@ -32,19 +13,13 @@ StructuredBuffer<TYPE> Handle< StructuredBuffer<TYPE> >::get()              \
     return g_StructuredBuffer_##TYPE[resourceHandle];                       \
 }
 
-//this needs some special care because of the wrapper type
 #define ENABLE_CONSTANT_ACCESS(TYPE)                                        \
 DECLARE_TEMPLATED_ARRAY(ConstantBuffer, TYPE, UNIFORM_BUFFER_SET, 0)        \
 template <>                                                                 \
-ConstantBuffer_fix<TYPE> Handle< ConstantBuffer_fix<TYPE> >::get()          \
-{                                                                           \
-    return (ConstantBuffer_fix<TYPE>)(resourceHandle);                      \
-}                                                                           \
-template <>                                                                 \
-TYPE ConstantBuffer_fix<TYPE>::Load()                                       \
+ConstantBuffer<TYPE> Handle< ConstantBuffer<TYPE> >::get()                  \
 {                                                                           \
     return g_ConstantBuffer_##TYPE[resourceHandle];                         \
-};                                                                          \
+}                                                                           
 
 // ---------------------
 

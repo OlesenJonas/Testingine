@@ -27,13 +27,13 @@ DefineShaderInputs(
     // Frame globals
     Handle< Placeholder > frameDataBuffer;
     // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
+    Handle< ConstantBuffer<RenderPassData> > renderPassData;
     // Buffer with object transforms and index into that buffer
     Handle< StructuredBuffer<float4x4> > transformBuffer;
     uint transformIndex;
     // Buffer with material/-instance parameters
     Handle< Placeholder > materialParamsBuffer;
-    Handle< ConstantBuffer_fix<MaterialInstanceParameters> > materialInstanceParams;
+    Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
 );
 
 struct VSOutput
@@ -47,7 +47,8 @@ struct VSOutput
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    const MaterialInstanceParameters params = shaderInputs.materialInstanceParams.get().Load();
+    //Have to retrieve the buffer in its own line, otherwise dxc crashes :/
+    ConstantBuffer<MaterialInstanceParameters> params = shaderInputs.materialInstanceParams.get();
     Texture2D normalTexture =  params.normalTexture.get();
     SamplerState normalSampler = params.normalSampler.get();
 
@@ -66,7 +67,8 @@ float4 main(VSOutput input) : SV_TARGET
         nrmSampleTS.z * input.vNormalWS
     );
 
-    const float3 cameraPositionWS = shaderInputs.renderPassData.get().Load().cameraPositionWS;
+    ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
+    const float3 cameraPositionWS = renderPassData.cameraPositionWS;
 
     Texture2D colorTexture = params.baseColorTexture.get();
     SamplerState colorSampler = params.baseColorSampler.get();
