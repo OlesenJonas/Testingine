@@ -45,15 +45,15 @@ layout(std430, set=UBO_SET, binding = 0) uniform name ## Buffer { contents } glo
 
 //---- Material Parameters (special case of UBO)
 #define MaterialParameters(content) \
-layout(std430, set=UBO_SET, binding = 0) uniform MaterialParametersBuffer {content} globalMaterialParametersBuffers[]
+layout(std430, set=UBO_SET, binding = 0) uniform MaterialParametersBuffer {content} g_ConstantBuffer_MaterialParameters[]
 
-#define getMaterialParams(BufferHandle) globalMaterialParametersBuffers[BufferHandle.index]
+#define getMaterialParams(BufferHandle) g_ConstantBuffer_MaterialParameters[BufferHandle.index]
 
 //---- Material Instance Parameters (special case of UBO)
 #define MaterialInstanceParameters(content) \
-layout(std430, set=UBO_SET, binding = 0) uniform MaterialInstanceParametersBuffer {content} globalMaterialInstanceParametersBuffers[]
+layout(std430, set=UBO_SET, binding = 0) uniform MaterialInstanceParametersBuffer {content} g_ConstantBuffer_MaterialInstanceParameters[]
 
-#define getMaterialInstanceParams(BufferHandle) globalMaterialInstanceParametersBuffers[BufferHandle.index]
+#define getMaterialInstanceParams(BufferHandle) g_ConstantBuffer_MaterialInstanceParameters[BufferHandle.index]
 
 //---------------- Textures
 layout (set = SAMPLED_IMG_SET, binding = 0) uniform sampler Samplers[GLOBAL_SAMPLER_COUNT];

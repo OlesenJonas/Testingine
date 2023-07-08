@@ -90,16 +90,16 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
     // Find (if it exists) the material(-instance) parameter binding
     for(auto& binding : vertDescriptorBindings)
     {
-        if(strcmp(binding.name, "globalMaterialParametersBuffers") == 0)
+        if(strcmp(binding.name, "g_ConstantBuffer_MaterialParameters") == 0)
             materialParametersBinding = &binding;
-        if(strcmp(binding.name, "globalMaterialInstanceParametersBuffers") == 0)
+        if(strcmp(binding.name, "g_ConstantBuffer_MaterialInstanceParameters") == 0)
             materialInstanceParametersBinding = &binding;
     }
     for(auto& binding : fragDescriptorBindings)
     {
-        if(strcmp(binding.name, "globalMaterialParametersBuffers") == 0)
+        if(strcmp(binding.name, "g_ConstantBuffer_MaterialParameters") == 0)
             materialParametersBinding = &binding;
-        if(strcmp(binding.name, "globalMaterialInstanceParametersBuffers") == 0)
+        if(strcmp(binding.name, "g_ConstantBuffer_MaterialInstanceParameters") == 0)
             materialInstanceParametersBinding = &binding;
     }
 

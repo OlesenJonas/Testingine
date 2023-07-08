@@ -24,25 +24,25 @@ Engine::Engine()
     sceneRoot.addComponent<Transform>();
     sceneRoot.addComponent<Hierarchy>();
 
+    // TODO: remove completly once everything works
     // default resources
-    resourceManager.createMaterial(
-        {
-            .vertexShader =
-                {.sourcePath = SHADERS_PATH "/PBRBasic.vert", .sourceLanguage = Shaders::Language::GLSL},
-            .fragmentShader =
-                {.sourcePath = SHADERS_PATH "/PBRBasic.frag", .sourceLanguage = Shaders::Language::GLSL},
-        },
-        "PBRBasic");
-    assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);
+    // resourceManager.createMaterial(
+    //     {
+    //         .vertexShader =
+    //             {.sourcePath = SHADERS_PATH "/PBRBasic.vert", .sourceLanguage = Shaders::Language::GLSL},
+    //         .fragmentShader =
+    //             {.sourcePath = SHADERS_PATH "/PBRBasic.frag", .sourceLanguage = Shaders::Language::GLSL},
+    //     },
+    //     "PBRBasic");
+    // assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);
 
-    // TODO: change name to just PBRBasic and remove glsl version once it fully works
     resourceManager.createMaterial(
         {
             .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasicVert.hlsl"},
             .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasicFrag.hlsl"},
         },
-        "PBRBasicHLSL");
-    assert(resourceManager.get(resourceManager.getMaterial("PBRBasicHLSL")) != nullptr);
+        "PBRBasic");
+    assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);
 
     resourceManager.createMesh(Cube::positions, Cube::attributes, Cube::indices, "DefaultCube");
     assert(resourceManager.get(resourceManager.getMesh("DefaultCube")) != nullptr);
