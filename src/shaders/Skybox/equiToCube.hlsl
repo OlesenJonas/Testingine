@@ -1,4 +1,4 @@
-#include "Bindless/Setup.hlsl"
+#include "../Bindless/Setup.hlsl"
 
 DefineShaderInputs(
     Handle< Texture2D<float4> > sourceTex;

@@ -302,7 +302,7 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
     //     createComputeShader(SHADERS_PATH "/equiToCube.comp", "equiToCubeCompute");
     Handle<ComputeShader> conversionShaderHandle = createComputeShader(
         {
-            .sourcePath = SHADERS_PATH "/equiToCube.hlsl",
+            .sourcePath = SHADERS_PATH "/Skybox/equiToCube.hlsl",
             .sourceLanguage = Shaders::Language::HLSL,
         },
         "equiToCubeCompute");

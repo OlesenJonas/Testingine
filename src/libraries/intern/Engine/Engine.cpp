@@ -38,8 +38,8 @@ Engine::Engine()
 
     resourceManager.createMaterial(
         {
-            .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasicVert.hlsl"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasicFrag.hlsl"},
+            .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
         },
         "PBRBasic");
     assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);

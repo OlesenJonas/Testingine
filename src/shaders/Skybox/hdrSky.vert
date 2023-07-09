@@ -1,28 +1,52 @@
-#version 460
+#include "../Bindless/Setup.hlsl"
+#include "../VertexAttributes.hlsl"
+#include "../CommonTypes.hlsl"
 
-#extension GL_GOOGLE_include_directive : require
-
-#include "../Bindless.glsl"
-#include "../VertexAttributes.glsl"
-
-layout (location = 0) out vec3 localPos;
-
-ReadStorageBuffer(Transform,
-    mat4 modelMatrices[];
-);
-
-layout (push_constant, std430) uniform constants
+struct VSOutput
 {
-    BindlessIndices bindlessIndices;
+    float4 posOut : SV_POSITION;
+    [[vk::location(0)]]	float3 localPos : POSITIONT;
 };
 
-void main()
+DefineShaderInputs(
+    // Frame globals
+    Handle< Placeholder > frameDataBuffer;
+    // Resolution, matrices (differs in eg. shadow and default pass)
+    // Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
+    Handle< ConstantBuffer<RenderPassData> > renderPassData;
+    // Buffer with object transforms and index into that buffer
+    Handle< StructuredBuffer<float4x4> > transformBuffer;
+    uint transformIndex;
+    // Buffer with material/-instance parameters
+    // using placeholder, since parameter types arent defined here
+    Handle< Placeholder > materialParamsBuffer;
+    Handle< Placeholder > materialInstanceParams;
+);
+
+VSOutput main(VSInput input)
 {
-    const mat4 modelMatrix = getBuffer(Transform, bindlessIndices.transformBuffer).modelMatrices[bindlessIndices.transformIndex];
+    VSOutput vsOut = (VSOutput)0;
+
+    vsOut.localPos = input.vPosition;
+
+    const StructuredBuffer<float4x4> transformBuffer = shaderInputs.transformBuffer.get();
+    const float4x4 modelMatrix = transformBuffer[shaderInputs.transformIndex];
+
+    const RenderPassData renderPassData = shaderInputs.renderPassData.Load();
+    const float4x4 projMatrix = renderPassData.proj;
+    const float4x4 viewMatrix = renderPassData.view;
+    //remove translation component from view matrix
+    const float4x4 viewMatrixNoTranslate = float4x4(
+        viewMatrix[0].xyz,0.0,
+        viewMatrix[1].xyz,0.0,
+        viewMatrix[2].xyz,0.0,
+        viewMatrix[3].xyz,1.0
+    );
     
-    //mat4(mat3()) cast to remove camera translation!
-    const mat4 transformMatrix = CurrentRenderPassData.proj * mat4(mat3(CurrentRenderPassData.view)) * modelMatrix;
-    localPos = vPosition;
     //todo: dont just scale up by some large number, just make forcing depth to 1.0 work!
-    gl_Position = transformMatrix * vec4(500*vPosition, 1.0);
+    float4 worldPos = mul(modelMatrix, float4(500*input.vPosition,1.0));
+
+    vsOut.posOut = mul(projMatrix, mul(viewMatrixNoTranslate, worldPos));
+
+    return vsOut;
 }

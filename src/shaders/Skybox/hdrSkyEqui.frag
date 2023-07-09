@@ -1,40 +1,43 @@
-#version 450
+#include "../Bindless/Setup.hlsl"
 
-#extension GL_GOOGLE_include_directive : require
-
-#include "../Bindless.glsl"
-
-layout (location = 0) in vec3 localPos;
-
-layout(location = 0) out vec4 fragColor;
-
-MaterialInstanceParameters(
-    TextureHandle equirectangularMap;
-    SamplerHandle defaultSampler;
+StructForBindless(MaterialInstanceParameters,
+    Handle< Texture2D<float4> > equirectangularMap;
+    Handle< SamplerState > defaultSampler;
 );
 
-layout (push_constant, std430) uniform constants
-{
-    BindlessIndices bindlessIndices;
-};
+DefineShaderInputs(
+    // Frame globals
+    Handle< Placeholder > frameDataBuffer;
+    // Resolution, matrices (differs in eg. shadow and default pass)
+    Handle< ConstantBuffer<RenderPassData> > renderPassData;
+    // Buffer with object transforms and index into that buffer
+    Handle< StructuredBuffer<float4x4> > transformBuffer;
+    uint transformIndex;
+    // Buffer with material/-instance parameters
+    Handle< Placeholder > materialParamsBuffer;
+    Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
+);
 
-const vec2 invAtan = vec2(0.1591, 0.3183);
-vec2 sampleSphericalMap(vec3 v)
+static const float2 invAtan = float2(0.1591, 0.3183);
+float2 sampleSphericalMap(float3 v)
 {
-    vec2 uv = vec2(atan(v.z, v.x), -asin(v.y));
+    float2 uv = float2(atan2(v.z, v.x), -asin(v.y));
     uv *= invAtan;
     uv += 0.5;
     return uv;
 }
 
-void main()
+struct VSOutput
 {
-    const TextureHandle equirectangularMap = getMaterialInstanceParams(bindlessIndices.materialInstanceParamsBuffer).equirectangularMap;
-    const SamplerHandle defaultSampler = getMaterialInstanceParams(bindlessIndices.materialInstanceParamsBuffer).defaultSampler;
+    [[vk::location(0)]]	float3 localPos : POSITIONT;
+};
 
-    vec3 color = texture(sampler2D(Texture2D(equirectangularMap),Samplers[defaultSampler.index]), 
-        sampleSphericalMap(normalize(localPos))
-    ).xyz;
+float4 main(VSOutput input) : SV_TARGET
+{
+    const MaterialInstanceParameters params = shaderInputs.materialInstanceParams.Load();
+    const Texture2D<float4> equirectangularMap = params.equirectangularMap.get();
+    const SamplerState defaultSampler = params.defaultSampler.get();
 
-    fragColor = vec4(color, 1.0);
+    float4 color = equirectangularMap.Sample(defaultSampler, sampleSphericalMap(normalize(input.localPos)));
+    return color;
 }

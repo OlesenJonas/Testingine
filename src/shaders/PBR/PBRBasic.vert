@@ -30,8 +30,6 @@ DefineShaderInputs(
     Handle< Placeholder > materialInstanceParams;
 );
 
-typedef ConstantBuffer<RenderPassData> cbufferRPD;
-
 VSOutput main(VSInput input)
 {
     VSOutput vsOut = (VSOutput)0;

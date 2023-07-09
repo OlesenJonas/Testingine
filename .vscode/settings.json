@@ -18,6 +18,11 @@
         "-spirv",
         "-fspv-target-env=vulkan1.3"
     ],
+    "files.associations": {
+        "*.frag": "hlsl",
+        "*.vert": "hlsl",
+        "*.comp": "glsl"
+    },
     // "cmake.configureSettings": {
     //     "CMAKE_TOOLCHAIN_FILE": "${env:VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
     // }
