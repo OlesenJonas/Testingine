@@ -80,8 +80,6 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
     //   https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkPhysicalDeviceVulkan13Features.html
     //   and similar Vulkan11-/Vulkan12Features instead of using all these individual structs
 
-    // Id prefer to just use uniformBufferStandardLayout, but there seems to be no way of enabling that
-    // on the glsl side. So for shaders GL_EXT_scalar_block_layout is needed anyways
     VkPhysicalDeviceScalarBlockLayoutFeatures scalarBlockLayoutFeatures{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
         .pNext = nullptr,

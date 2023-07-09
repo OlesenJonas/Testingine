@@ -84,6 +84,7 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
         // Compile to SPIRV
         L"-spirv",
         L"-fspv-target-env=vulkan1.3",
+        L"-fvk-use-scalar-layout",
         // L"-fspv-reflect",
     };
 
