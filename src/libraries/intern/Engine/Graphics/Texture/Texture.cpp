@@ -76,6 +76,11 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
     auto iterator = nameToMeshLUT.find(name);
     assert(iterator == nameToMeshLUT.end());
 
+    const uint32_t maxDimension = std::max({info.size.width, info.size.height, info.size.depth});
+    uint32_t actualMipLevels =
+        info.mipLevels == Texture::MipLevels::All ? uint32_t(floor(log2(maxDimension))) + 1 : info.mipLevels;
+    info.mipLevels = actualMipLevels;
+
     Handle<Texture> newTextureHandle = texturePool.insert(Texture{.info = info});
     Texture* tex = texturePool.get(newTextureHandle);
     assert(tex);
@@ -89,7 +94,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
         .format = info.format,
         .extent = info.size,
 
-        .mipLevels = info.mipLevels,
+        .mipLevels = actualMipLevels,
         .arrayLayers = info.arrayLayers,
         .samples = info.samples,
         .tiling = info.tiling,
@@ -198,7 +203,14 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
                     .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                     .image = tex->image,
-                    .subresourceRange = range,
+                    .subresourceRange =
+                        {
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = imageCrInfo.mipLevels,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                        },
                 };
 
                 vkCmdPipelineBarrier(
@@ -240,7 +252,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
             {
                 .aspectMask = info.viewAspect,
                 .baseMipLevel = 0,
-                .levelCount = info.mipLevels,
+                .levelCount = imageCrInfo.mipLevels,
                 .baseArrayLayer = 0,
                 .layerCount = info.arrayLayers,
             },
@@ -274,14 +286,17 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
 
     Texture* sourceTex = get(equirectangularSource);
 
-    Handle<Texture> newTextureHandle = createTexture(Texture::Info{
+    Handle<Texture> cubeTextureHandle = createTexture(Texture::Info{
         // specifying non-default values only
         .debugName = std::string{debugName},
         .size = {.width = cubeResolution, .height = cubeResolution, .depth = 1},
         .format = sourceTex->info.format,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+        // TRANSFER_XXX_BITs are needed for blitting to downscale :/
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
         .imageType = VK_IMAGE_TYPE_2D,
+        .mipLevels = Texture::MipLevels::All,
         .arrayLayers = 6,
     });
 
@@ -295,7 +310,7 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
 
     // re-retrieve in case last creation resized storage
     sourceTex = get(equirectangularSource);
-    Texture* cubeTex = get(newTextureHandle);
+    Texture* cubeTex = get(cubeTextureHandle);
 
     // TODO: !!!! DONT CREATE HERE !!! CREATE ON INIT() OF ENGINE AND JUST GET BY NAME OR SO HERE !
     // Handle<ComputeShader> conversionShaderHandle =
@@ -404,7 +419,9 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
                 &imageBarrierToReadable);
         });
 
-    return newTextureHandle;
+    Texture::fillMipLevels(cubeTextureHandle);
+
+    return cubeTextureHandle;
 }
 
 void ResourceManager::free(Handle<Texture> handle)
@@ -508,4 +525,239 @@ bool operator==(const Sampler::Info& lhs, const Sampler::Info& rhs)
            EQUAL_MEMBER(borderColor) &&      //
            EQUAL_MEMBER(unnormalizedCoordinates);
 #undef EQUAL_MEMBER
+}
+
+void Texture::fillMipLevels(Handle<Texture> texture)
+{
+    /*
+        TODO: check that image was created with usage_transfer_src_bit !
+              Switch to compute shader based solution? Could get rid of needing to mark
+              *all* textures as transfer_src/dst, just because mips are needed.
+              But requires a lot more work to handle different texture types (3d, cube, array)
+    */
+
+    auto* rm = Engine::get()->getResourceManager();
+    auto* renderer = Engine::get()->getRenderer();
+
+    Texture* tex = rm->get(texture);
+
+    if(tex->info.mipLevels == 1)
+        return;
+
+    uint32_t startWidth = tex->info.size.width;
+    uint32_t startHeight = tex->info.size.height;
+    uint32_t startDepth = tex->info.size.depth;
+
+    renderer->immediateSubmit(
+        [=](VkCommandBuffer cmd)
+        {
+            // Transfer 1st mip to transfer source
+            VkImageMemoryBarrier2 imgMemoryBarrier{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+
+                .srcStageMask =
+                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, // TODO: dont, but im not sure whats better here
+                .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+
+                .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+
+                .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+
+                .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+                .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+
+                .image = tex->image,
+                .subresourceRange =
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = tex->info.arrayLayers,
+                    },
+            };
+
+            VkDependencyInfo dependInfo{
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .dependencyFlags = 0,
+                .memoryBarrierCount = 0,
+                .bufferMemoryBarrierCount = 0,
+                .imageMemoryBarrierCount = 1,
+                .pImageMemoryBarriers = &imgMemoryBarrier,
+            };
+
+            vkCmdPipelineBarrier2(cmd, &dependInfo);
+
+            // Generate mip chain
+            // Downscaling from each level successively, but could also downscale mip 0 -> mip N each time
+
+            for(int i = 1; i < tex->info.mipLevels; i++)
+            {
+                uint32_t lastWidth = std::max(startWidth >> (i - 1), 1u);
+                uint32_t lastHeight = std::max(startHeight >> (i - 1), 1u);
+                uint32_t lastDepth = std::max(startDepth >> (i - 1), 1u);
+
+                uint32_t curWidth = std::max(startWidth >> i, 1u);
+                uint32_t curHeight = std::max(startHeight >> i, 1u);
+                uint32_t curDepth = std::max(startDepth >> i, 1u);
+
+                VkImageBlit blit{
+                    .srcSubresource =
+                        {
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .mipLevel = uint32_t(i - 1),
+                            .baseArrayLayer = 0,
+                            .layerCount = tex->info.arrayLayers,
+                        },
+                    .srcOffsets =
+                        {{.x = 0, .y = 0, .z = 0}, {int32_t(lastWidth), int32_t(lastHeight), int32_t(lastDepth)}},
+                    .dstSubresource =
+                        {
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .mipLevel = uint32_t(i),
+                            .baseArrayLayer = 0,
+                            .layerCount = tex->info.arrayLayers,
+                        },
+                    .dstOffsets =
+                        {{.x = 0, .y = 0, .z = 0}, {int32_t(curWidth), int32_t(curHeight), int32_t(curDepth)}},
+                };
+
+                VkImageSubresourceRange mipSubRsrcRange{
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = uint32_t(i),
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = tex->info.arrayLayers,
+                };
+
+                // prepare current level to be transfer dst
+                {
+                    VkImageMemoryBarrier2 mipImgMemoryBarrier{
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                        .pNext = nullptr,
+
+                        .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                        .srcAccessMask = 0,
+
+                        .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+
+                        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+
+                        .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+                        .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+
+                        .image = tex->image,
+                        .subresourceRange = mipSubRsrcRange,
+                    };
+
+                    VkDependencyInfo mipDependInfo{
+                        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                        .pNext = nullptr,
+                        .dependencyFlags = 0,
+                        .memoryBarrierCount = 0,
+                        .bufferMemoryBarrierCount = 0,
+                        .imageMemoryBarrierCount = 1,
+                        .pImageMemoryBarriers = &mipImgMemoryBarrier,
+                    };
+
+                    vkCmdPipelineBarrier2(cmd, &mipDependInfo);
+                }
+
+                // do the blit
+                vkCmdBlitImage(
+                    cmd,
+                    tex->image,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    tex->image,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1,
+                    &blit,
+                    VK_FILTER_LINEAR);
+
+                // prepare current level to be transfer src for next mip
+                {
+                    VkImageMemoryBarrier2 mipImgMemoryBarrier{
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                        .pNext = nullptr,
+
+                        .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+
+                        .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                        .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+
+                        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+
+                        .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+                        .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+
+                        .image = tex->image,
+                        .subresourceRange = mipSubRsrcRange,
+                    };
+
+                    VkDependencyInfo mipDependInfo{
+                        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                        .pNext = nullptr,
+                        .dependencyFlags = 0,
+                        .memoryBarrierCount = 0,
+                        .bufferMemoryBarrierCount = 0,
+                        .imageMemoryBarrierCount = 1,
+                        .pImageMemoryBarriers = &mipImgMemoryBarrier,
+                    };
+
+                    vkCmdPipelineBarrier2(cmd, &mipDependInfo);
+                }
+            }
+
+            // after the loop, transfer all mips to SHADER_READ_OPTIMAL
+            {
+
+                VkImageSubresourceRange fullSubRsrcRange{
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = uint32_t(tex->info.mipLevels),
+                    .baseArrayLayer = 0,
+                    .layerCount = tex->info.arrayLayers,
+                };
+
+                VkImageMemoryBarrier2 fullImgMemoryBarrier{
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+
+                    .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    .srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+
+                    .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+
+                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+
+                    .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+                    .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+
+                    .image = tex->image,
+                    .subresourceRange = fullSubRsrcRange,
+                };
+
+                VkDependencyInfo fullDependInfo{
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .memoryBarrierCount = 0,
+                    .bufferMemoryBarrierCount = 0,
+                    .imageMemoryBarrierCount = 1,
+                    .pImageMemoryBarriers = &fullImgMemoryBarrier,
+                };
+
+                vkCmdPipelineBarrier2(cmd, &fullDependInfo);
+            }
+        });
 }

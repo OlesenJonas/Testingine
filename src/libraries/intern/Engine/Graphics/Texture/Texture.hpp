@@ -6,8 +6,16 @@
 #include <Datastructures/Span.hpp>
 #include <string>
 
+template <typename T>
+struct Handle;
+
 struct Texture
 {
+    enum MipLevels : int32_t
+    {
+        All = -1,
+    };
+
     struct Info
     {
         // todo: have a global string buffer and store only view into that here!
@@ -20,7 +28,7 @@ struct Texture
         VkImageCreateFlags flags = 0;
 
         VkImageType imageType = VK_IMAGE_TYPE_2D;
-        uint32_t mipLevels = 1;
+        int32_t mipLevels = 1;
         uint32_t arrayLayers = 1;
 
         VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -43,6 +51,8 @@ struct Texture
     uint32_t storageResourceIndex = 0xFFFFFFFF;
     VmaAllocation allocation = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
+
+    static void fillMipLevels(Handle<Texture> texture);
 };
 
 struct Sampler
