@@ -2,6 +2,7 @@
 
 #include <Datastructures/Pool.hpp>
 #include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
+#include <Engine/Graphics/Shaders/Shaders.hpp>
 #include <Engine/Misc/Concepts.hpp>
 #include <Engine/Misc/StringHash.hpp>
 #include <string_view>
@@ -24,12 +25,8 @@ struct Material
 {
     struct CreateInfo
     {
-        struct ShaderStage
-        {
-            std::string_view sourcePath;
-        };
-        ShaderStage vertexShader;
-        ShaderStage fragmentShader;
+        Shaders::StageCreateInfo vertexShader;
+        Shaders::StageCreateInfo fragmentShader;
     };
 
     VkShaderModule vertexShader = VK_NULL_HANDLE;

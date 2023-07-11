@@ -1,11 +1,11 @@
-#ifndef PBR_GLSL
-#define PBR_GLSL
+#ifndef PBR_HLSL
+#define PBR_HLSL
 
 #ifndef PI
     #define PI 3.141592653589793238462643383279502884197169399375105820974944
 #endif 
 
-float NDFTrowbridgeReitzGGX(vec3 N, vec3 H, float roughness)
+float NDFTrowbridgeReitzGGX(float3 N, float3 H, float roughness)
 {
     const float a = roughness * roughness; 
     const float a2 = a*a;
@@ -30,7 +30,7 @@ float GeometrySchlickGGX(float NdotV, float roughness)
     return num/denom;
 }
 
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+float GeometrySmith(float3 N, float3 V, float3 L, float roughness)
 {
     const float NdotV = max(dot(N,V),0.0);
     const float NdotL = max(dot(N,L),0.0);
@@ -40,11 +40,9 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
     return ggx1 * ggx2;
 }
 
-vec3 fresnelSchlick(float cosTheta, vec3 F0)
+float3 fresnelSchlick(float cosTheta, float3 F0)
 {
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
-
-
 
 #endif

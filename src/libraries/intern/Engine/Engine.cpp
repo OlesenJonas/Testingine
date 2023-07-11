@@ -24,11 +24,22 @@ Engine::Engine()
     sceneRoot.addComponent<Transform>();
     sceneRoot.addComponent<Hierarchy>();
 
+    // TODO: remove completly once everything works
     // default resources
+    // resourceManager.createMaterial(
+    //     {
+    //         .vertexShader =
+    //             {.sourcePath = SHADERS_PATH "/PBRBasic.vert", .sourceLanguage = Shaders::Language::GLSL},
+    //         .fragmentShader =
+    //             {.sourcePath = SHADERS_PATH "/PBRBasic.frag", .sourceLanguage = Shaders::Language::GLSL},
+    //     },
+    //     "PBRBasic");
+    // assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);
+
     resourceManager.createMaterial(
         {
-            .vertexShader = {.sourcePath = SHADERS_PATH "/PBRBasic.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/PBRBasic.frag"},
+            .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
         },
         "PBRBasic");
     assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);

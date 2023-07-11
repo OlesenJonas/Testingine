@@ -1,19 +1,25 @@
 #pragma once
 
-#include <shaderc/shaderc.h>
-#include <shaderc/shaderc.hpp>
 #include <string_view>
-#include <vulkan/vulkan_core.h>
 
-struct ShaderIncludeHandler : public shaderc::CompileOptions::IncluderInterface
+namespace Shaders
 {
-    shaderc_include_result* GetInclude(
-        const char* requested_source,
-        shaderc_include_type type,
-        const char* requesting_source,
-        size_t include_depth) override;
+    enum class Stage
+    {
+        Vertex,
+        Fragment,
+        Compute,
+    };
 
-    void ReleaseInclude(shaderc_include_result* data) override;
-};
+    enum class Language
+    {
+        HLSL,
+        GLSL,
+    };
 
-std::vector<uint32_t> compileGLSL(std::string_view path, shaderc_shader_kind shaderType);
+    struct StageCreateInfo
+    {
+        std::string_view sourcePath;
+        Language sourceLanguage = Language::HLSL;
+    };
+} // namespace Shaders

@@ -190,8 +190,8 @@ int main()
         auto* transform = skybox.addComponent<Transform>();
         auto* renderInfo = skybox.addComponent<RenderInfo>();
         renderInfo->mesh = defaultCube;
-        // renderInfo->materialInstance = equiSkyboxMatInst;
-        renderInfo->materialInstance = cubeSkyboxMatInst;
+        renderInfo->materialInstance = equiSkyboxMatInst;
+        // renderInfo->materialInstance = cubeSkyboxMatInst;
     }
 
     while(engine.isRunning())

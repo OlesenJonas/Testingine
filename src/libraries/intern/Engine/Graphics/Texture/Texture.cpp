@@ -298,8 +298,14 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
     Texture* cubeTex = get(newTextureHandle);
 
     // TODO: !!!! DONT CREATE HERE !!! CREATE ON INIT() OF ENGINE AND JUST GET BY NAME OR SO HERE !
-    Handle<ComputeShader> conversionShaderHandle =
-        createComputeShader(SHADERS_PATH "/equiToCube.comp", "equiToCubeCompute");
+    // Handle<ComputeShader> conversionShaderHandle =
+    //     createComputeShader(SHADERS_PATH "/equiToCube.comp", "equiToCubeCompute");
+    Handle<ComputeShader> conversionShaderHandle = createComputeShader(
+        {
+            .sourcePath = SHADERS_PATH "/Skybox/equiToCube.hlsl",
+            .sourceLanguage = Shaders::Language::HLSL,
+        },
+        "equiToCubeCompute");
     ComputeShader* conversionShader = get(conversionShaderHandle);
 
     VulkanRenderer* renderer = Engine::get()->getRenderer();

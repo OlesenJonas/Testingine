@@ -2,12 +2,26 @@
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
     //disable cpp tools functionality because it seems slower and less accurate than clangd, may undo in future when changed
-    "C_Cpp.intelliSenseEngine": "Disabled",
-    "C_Cpp.autocomplete": "Disabled",
-    "C_Cpp.errorSquiggles": "Disabled",
-    "C_Cpp.formatting": "Disabled",
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "C_Cpp.autocomplete": "disabled",
+    "C_Cpp.errorSquiggles": "disabled",
+    "C_Cpp.formatting": "disabled",
     "[cpp]": {
         "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+    },
+    "hlsl.linter.defaultArgs": [
+        "-HV 2021",
+        "-T",
+        "lib_6_4",
+        "-Od",
+        "-Ges",
+        "-spirv",
+        "-fspv-target-env=vulkan1.3"
+    ],
+    "files.associations": {
+        "*.frag": "hlsl",
+        "*.vert": "hlsl",
+        "*.comp": "glsl"
     },
     // "cmake.configureSettings": {
     //     "CMAKE_TOOLCHAIN_FILE": "${env:VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",

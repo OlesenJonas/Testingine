@@ -1,34 +1,35 @@
-#version 450
+#include "../Bindless/Setup.hlsl"
 
-#extension GL_GOOGLE_include_directive : require
-
-#include "../Bindless.glsl"
-
-layout (location = 0) in vec3 localPos;
-
-layout(location = 0) out vec4 fragColor;
-
-MaterialInstanceParameters(
-    TextureHandle cubeMap;
-    SamplerHandle defaultSampler;
+StructForBindless(MaterialInstanceParameters,
+    Handle< TextureCube<float4> > cubeMap;
+    Handle< SamplerState > defaultSampler;
 );
 
-layout (push_constant, std430) uniform constants
+DefineShaderInputs(
+    // Frame globals
+    Handle< Placeholder > frameDataBuffer;
+    // Resolution, matrices (differs in eg. shadow and default pass)
+    Handle< ConstantBuffer<RenderPassData> > renderPassData;
+    // Buffer with object transforms and index into that buffer
+    Handle< StructuredBuffer<float4x4> > transformBuffer;
+    uint transformIndex;
+    // Buffer with material/-instance parameters
+    Handle< Placeholder > materialParamsBuffer;
+    Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
+);
+
+struct VSOutput
 {
-    BindlessIndices bindlessIndices;
+    [[vk::location(0)]]	float3 localPos : POSITIONT;
 };
 
-layout (set = SAMPLED_IMG_SET, binding = GLOBAL_SAMPLER_COUNT) uniform textureCube global_textureCube[];
-
-void main()
+float4 main(VSOutput input) : SV_TARGET
 {
-    const TextureHandle cubeMap = getMaterialInstanceParams(bindlessIndices.materialInstanceParamsBuffer).cubeMap;
-    const SamplerHandle defaultSampler = getMaterialInstanceParams(bindlessIndices.materialInstanceParamsBuffer).defaultSampler;
+    const MaterialInstanceParameters params = shaderInputs.materialInstanceParams.Load();
+    const TextureCube<float4> cubeMap = params.cubeMap.get();
+    const SamplerState defaultSampler = params.defaultSampler.get();
 
-    vec3 color = texture(
-        samplerCube(global_textureCube[cubeMap.index],Samplers[defaultSampler.index]), 
-        normalize(localPos)
-    ).xyz;
+    float4 color = cubeMap.Sample(defaultSampler, normalize(input.localPos));
 
-    fragColor = vec4(color, 1.0);
+    return color;
 }
