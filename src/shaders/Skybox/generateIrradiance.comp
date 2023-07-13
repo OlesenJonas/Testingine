@@ -6,46 +6,9 @@ DefineShaderInputs(
     Handle< RWTexture2DArray<float4> > irradianceTex;
 );
 
-static const float PI = 3.141592653589793238462643383279502884197169399375105820974944;
-
-float3 ImportanceSampleGGX(float2 Xi, float3 N, float roughness)
-{
-	float a = roughness * roughness;
-
-	float phi = 2.0 * PI * Xi.x;
-	float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a * a - 1.0) * Xi.y));
-	float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
-
-	// from spherical coordinates to cartesian coordinates
-	float3 H;
-	H.x = cos(phi) * sinTheta;
-	H.y = sin(phi) * sinTheta;
-	H.z = cosTheta;
-
-	// from tangent-space vector to world-space sample vector
-	float3 up = abs(N.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
-	float3 tangent = normalize(cross(up, N));
-	float3 bitangent = cross(N, tangent);
-
-	float3 sampleVec = tangent * H.x + bitangent * H.y + N * H.z;
-	return normalize(sampleVec);
-}
-
-float RadicalInverse_VdC(uint bits)
-{
-	bits = (bits << 16u) | (bits >> 16u);
-	bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
-	bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
-	bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
-	bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
-
-	return float(bits) * 2.3283064365386963e-10; // / 0x100000000
-}
-
-float2 Hammersley(uint i, uint N)
-{
-	return float2(float(i) / float(N), RadicalInverse_VdC(i));
-}
+#define PI 3.141592653589793238462643383279502884197169399375105820974944
+#define TWO_PI 6.2831853071795864769252867665590
+#define HALF_PI 1.5707963267948966192313216916398
 
 [numthreads(8, 8, 1)]
 void main(
@@ -85,40 +48,29 @@ void main(
 
     float3 N = normalize(localPos);
 
-	float3 R = N;
-	float3 V = R;
+    float3 up = abs(N.z) < 0.999 ? float3(0,0,1) : float3(1,0,0);
+    const float3 right = normalize(cross(up, N));
+    up = cross(N, right); 
 
-	float3 up = float3(0.0, 1.0, 0.0);
-	float3 right = cross(up, N);
-	up = cross(N, right);
+    float3 color = 0.0;
+    uint sampleCount = 0u;
+    float deltaPhi = TWO_PI / 1000.0;
+    float deltaTheta = HALF_PI / 500.0;
+    for (float phi = 0.0; phi < TWO_PI; phi += deltaPhi)
+    {
+        for (float theta = 0.0; theta < HALF_PI; theta += deltaTheta)
+        {
+            // Spherical to World Space in two steps...
+            float3 tempVec = cos(phi) * right + sin(phi) * up;
+            float3 sampleVector = cos(theta) * N + sin(theta) * tempVec;
+            // color += textureCubeLod(s_source, sampleVector, 0).rgb * cos(theta) * sin(theta);
+            color += sourceTex.SampleLevel(sourceSampler, sampleVector, 0).rgb * cos(theta) * sin(theta);
+            sampleCount++;
+        }
+    }
 
-	float3 irradiance = 0.0;
-	const uint SAMPLE_COUNT = 16384u;
-	const float roughness = 1.0;
-	float totalWeight = 0.0;
-
-	for (uint i = 0u; i < SAMPLE_COUNT; ++i)
-	{
-		float2 Xi = Hammersley(i, SAMPLE_COUNT);
-		float3 H = ImportanceSampleGGX(Xi, N, 1.0);
-
-		float NdotH = max(dot(N, H), 0.0);
-		float D = 1.0 / PI;
-		float pdf = (D * NdotH / (4.0)) + 0.0001;
-
-		float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
-        int resolution = inputResolution.x;
-		float saTexel = 4.0 * PI / (6.0 * resolution * resolution);
-
-		float mipLevel = 0.5 * log2(saSample / saTexel);
-
-		// irradiance += textureLod(environmentMap, H, mipLevel).rgb * NdotH;
-        irradiance += sourceTex.SampleLevel(sourceSampler, H, mipLevel).rgb * NdotH;
-		totalWeight += NdotH;
-	}
-
-	irradiance = PI * irradiance / totalWeight;
+    color = PI*color/float(sampleCount);
 
     // targetTex[id] = irradiance;
-    targetTex[id] = float4(irradiance, 1.0);
+    targetTex[id] = float4(color, 1.0);
 }

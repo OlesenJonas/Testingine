@@ -153,8 +153,6 @@ int main()
         {.sourcePath = SHADERS_PATH "/Skybox/generateIrradiance.comp"}, "generateIrradiance");
     ComputeShader* calcIrradianceShader = rm->get(calcIrradianceComp);
 
-    // TODO:
-    //  SWITCH TO R16,G16,B16 F
     uint32_t irradianceRes = 32;
     auto irradianceTexHandle = rm->createTexture({
         .debugName = "hdriIrradiance",
