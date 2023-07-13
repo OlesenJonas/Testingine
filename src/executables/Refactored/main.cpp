@@ -149,6 +149,161 @@ int main()
         ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr", VK_IMAGE_USAGE_SAMPLED_BIT, true);
     auto hdriCube = rm->createCubemapFromEquirectangular(512, hdri, "HdriCubemap");
 
+    Handle<ComputeShader> calcIrradianceComp = rm->createComputeShader(
+        {.sourcePath = SHADERS_PATH "/Skybox/generateIrradiance.comp"}, "generateIrradiance");
+    ComputeShader* calcIrradianceShader = rm->get(calcIrradianceComp);
+
+    // TODO:
+    //  SWITCH TO R16,G16,B16 F
+    uint32_t irradianceRes = 32;
+    auto irradianceTexHandle = rm->createTexture({
+        .debugName = "hdriIrradiance",
+        .size = {irradianceRes, irradianceRes, 1},
+        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+        .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+        .arrayLayers = 6,
+    });
+    {
+        Texture* irradianceTex = rm->get(irradianceTexHandle);
+
+        // generate the irradiance
+        //   TODO: factor out stuff from here, shouldnt be this much code
+        //         esp barriers should be abstracted at least some what
+
+        VulkanRenderer* renderer = Engine::get()->getRenderer();
+        renderer->immediateSubmit(
+            [=](VkCommandBuffer cmd)
+            {
+                ResourceManager* rm = Engine::get()->getResourceManager();
+
+                // transfer dst texture to general layout
+                VkImageMemoryBarrier2 imgMemoryBarrier{
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+
+                    .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+
+                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+
+                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+
+                    .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+                    .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+
+                    .image = irradianceTex->image,
+                    .subresourceRange =
+                        {
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = irradianceTex->info.arrayLayers,
+                        },
+                };
+
+                VkDependencyInfo dependInfo{
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .memoryBarrierCount = 0,
+                    .bufferMemoryBarrierCount = 0,
+                    .imageMemoryBarrierCount = 1,
+                    .pImageMemoryBarriers = &imgMemoryBarrier,
+                };
+
+                vkCmdPipelineBarrier2(cmd, &dependInfo);
+
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, calcIrradianceShader->pipeline);
+                // Bind the bindless descriptor sets once per cmdbuffer
+                vkCmdBindDescriptorSets(
+                    cmd,
+                    VK_PIPELINE_BIND_POINT_COMPUTE,
+                    renderer->bindlessPipelineLayout,
+                    0,
+                    4,
+                    renderer->bindlessManager.bindlessDescriptorSets.data(),
+                    0,
+                    nullptr);
+
+                auto cubeSampler = rm->createSampler({
+                    .magFilter = VK_FILTER_LINEAR,
+                    .minFilter = VK_FILTER_LINEAR,
+                    .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                    .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                    .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                });
+
+                struct ConversionPushConstants
+                {
+                    uint32_t sourceIndex;
+                    uint32_t samplerIndex;
+                    uint32_t targetIndex;
+                };
+                ConversionPushConstants constants{
+                    .sourceIndex = rm->get(hdriCube)->sampledResourceIndex,
+                    .samplerIndex = rm->get(cubeSampler)->resourceIndex,
+                    .targetIndex = irradianceTex->storageResourceIndex,
+                };
+
+                // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
+                vkCmdPushConstants(
+                    cmd,
+                    renderer->bindlessPipelineLayout,
+                    VK_SHADER_STAGE_ALL,
+                    0,
+                    sizeof(ConversionPushConstants),
+                    &constants);
+
+                // TODO: dont hardcode sizes! retrieve programmatically
+                //       (workrgoup size form spirv, use UintDivAndCeil)
+                vkCmdDispatch(cmd, irradianceRes / 8, irradianceRes / 8, 6);
+
+                // transfer dst texture from general to shader read only layout
+                imgMemoryBarrier = VkImageMemoryBarrier2{
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+
+                    .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+
+                    .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+
+                    .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+
+                    .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+                    .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
+
+                    .image = irradianceTex->image,
+                    .subresourceRange =
+                        {
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = irradianceTex->info.arrayLayers,
+                        },
+                };
+
+                dependInfo = VkDependencyInfo{
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .memoryBarrierCount = 0,
+                    .bufferMemoryBarrierCount = 0,
+                    .imageMemoryBarrierCount = 1,
+                    .pImageMemoryBarriers = &imgMemoryBarrier,
+                };
+
+                vkCmdPipelineBarrier2(cmd, &dependInfo);
+            });
+    }
+
     auto defaultCube = rm->getMesh("DefaultCube");
 
     /*
@@ -179,7 +334,8 @@ int main()
     auto cubeSkyboxMatInst = rm->createMaterialInstance(cubeSkyboxMat);
     {
         auto* inst = rm->get(cubeSkyboxMatInst);
-        inst->parameters.setResource("cubeMap", rm->get(hdriCube)->sampledResourceIndex);
+        // inst->parameters.setResource("cubeMap", rm->get(hdriCube)->sampledResourceIndex);
+        inst->parameters.setResource("cubeMap", rm->get(irradianceTexHandle)->sampledResourceIndex);
         inst->parameters.setResource("defaultSampler", rm->get(linearSampler)->resourceIndex);
         inst->parameters.pushChanges();
     }

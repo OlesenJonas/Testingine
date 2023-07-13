@@ -38,6 +38,8 @@ ENABLE_SAMPLED_TEXTURE_ACCESS(Texture2D, float4)
 ENABLE_SAMPLED_TEXTURE_ACCESS(TextureCube, float4)
 ENABLE_STORAGE_TEXTURE_ACCESS(RWTexture2D, float4)
 // There doesnt seem to be a RWTextureCube in HLSL, but seems like aliasing as Texture2DArray works
+ENABLE_STORAGE_TEXTURE_ACCESS(RWTexture2DArray, float3)
+ENABLE_STORAGE_TEXTURE_ACCESS(Texture2DArray, float4)
 ENABLE_STORAGE_TEXTURE_ACCESS(RWTexture2DArray, float4)
 
 // //This could be useful if I ever want to add format or other specifiers without breaking the abstraction
