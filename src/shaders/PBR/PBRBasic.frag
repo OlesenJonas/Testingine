@@ -8,6 +8,18 @@
 #include "../Bindless/Setup.hlsl"
 #include "PBR.hlsl"
 
+StructForBindless(MaterialParameters,
+    /* TODO: should be part of scene information, not material */
+    Handle< TextureCube<float4> > irradianceTex;
+    Handle< SamplerState > irradianceSampler;
+);
+
+/*
+    Atm dont need a sampler per texture really...
+    just name the sampler after its settings and upload one
+        dont really know why glTF would realistically give any texture
+        a different sampler (for basic use cases)
+*/
 StructForBindless(MaterialInstanceParameters,
     //TODO: check again, but im pretty sure these are all float4 textures
     Handle< Texture2D<float4> > normalTexture;
@@ -32,7 +44,7 @@ DefineShaderInputs(
     Handle< StructuredBuffer<float4x4> > transformBuffer;
     uint transformIndex;
     // Buffer with material/-instance parameters
-    Handle< Placeholder > materialParamsBuffer;
+    Handle< ConstantBuffer<MaterialParameters> > materialParams;
     Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
 );
 
@@ -48,9 +60,10 @@ struct VSOutput
 float4 main(VSOutput input) : SV_TARGET
 {
     //Have to retrieve the buffer in its own line, otherwise dxc crashes :/
-    MaterialInstanceParameters params = shaderInputs.materialInstanceParams.Load();
-    Texture2D normalTexture =  params.normalTexture.get();
-    SamplerState normalSampler = params.normalSampler.get();
+    MaterialParameters params = shaderInputs.materialParams.Load();
+    MaterialInstanceParameters instanceParams = shaderInputs.materialInstanceParams.Load();
+    Texture2D normalTexture =  instanceParams.normalTexture.get();
+    SamplerState normalSampler = instanceParams.normalSampler.get();
 
     float3 nrmSampleTS = normalTexture.Sample(normalSampler, input.vTexCoord).xyz;
     nrmSampleTS = 2 * nrmSampleTS - 1;
@@ -70,18 +83,18 @@ float4 main(VSOutput input) : SV_TARGET
     RenderPassData renderPassData = shaderInputs.renderPassData.Load();
     const float3 cameraPositionWS = renderPassData.cameraPositionWS;
 
-    Texture2D colorTexture = params.baseColorTexture.get();
-    SamplerState colorSampler = params.baseColorSampler.get();
+    Texture2D colorTexture = instanceParams.baseColorTexture.get();
+    SamplerState colorSampler = instanceParams.baseColorSampler.get();
     float3 baseColor = colorTexture.Sample(colorSampler, input.vTexCoord).rgb;
 
-    Texture2D mrTexture = params.metalRoughTexture.get();
-    SamplerState mrSampler = params.metalRoughSampler.get();
+    Texture2D mrTexture = instanceParams.metalRoughTexture.get();
+    SamplerState mrSampler = instanceParams.metalRoughSampler.get();
     float3 metalRough = mrTexture.Sample(mrSampler, input.vTexCoord).rgb;
     float metal = metalRough.z;
     float roughness = metalRough.y;
 
-    Texture2D occlusionTexture = params.occlusionTexture.get();
-    SamplerState occlusionSampler = params.occlusionSampler.get();
+    Texture2D occlusionTexture = instanceParams.occlusionTexture.get();
+    SamplerState occlusionSampler = instanceParams.occlusionSampler.get();
     float occlusion = occlusionTexture.Sample(occlusionSampler, input.vTexCoord).x;
 
     // float3 color = 0.5+0.5*vNormalWS;
@@ -126,8 +139,16 @@ float4 main(VSOutput input) : SV_TARGET
         Lout += (kD * baseColor / PI + specular) * radiance * NdotL;
     }
 
+    // Ambient lighting
+    TextureCube<float4> irradianceTex = params.irradianceTex.get();
+    SamplerState irradianceSampler = params.irradianceSampler.get();
+    
+    float3 kS = fresnelSchlickRoughness(max(dot(normalWS, V),0), F0, roughness);
+    float3 kD = 1.0 - kS;
+    float3 irradiance = irradianceTex.SampleLevel(irradianceSampler, normalWS, 0).rgb;
+    float3 diffuse = irradiance * baseColor;
+    float3 ambient = (kD * diffuse) * occlusion;
 
-    const float3 ambient = 0.03 * baseColor * occlusion;
     Lout += ambient;
 
     float3 color = Lout;

@@ -302,6 +302,12 @@ int main()
             });
     }
 
+    // TODO: getPtrTmp() function (explicitetly state temporary!)
+    auto* basicPBRMaterial = rm->get(rm->getMaterial("PBRBasic"));
+    basicPBRMaterial->parameters.setResource("irradianceTex", rm->get(irradianceTexHandle)->sampledResourceIndex);
+    basicPBRMaterial->parameters.setResource("irradianceSampler", rm->get(linearSampler)->resourceIndex);
+    basicPBRMaterial->parameters.pushChanges();
+
     auto defaultCube = rm->getMesh("DefaultCube");
 
     /*
@@ -332,8 +338,8 @@ int main()
     auto cubeSkyboxMatInst = rm->createMaterialInstance(cubeSkyboxMat);
     {
         auto* inst = rm->get(cubeSkyboxMatInst);
-        // inst->parameters.setResource("cubeMap", rm->get(hdriCube)->sampledResourceIndex);
-        inst->parameters.setResource("cubeMap", rm->get(irradianceTexHandle)->sampledResourceIndex);
+        inst->parameters.setResource("cubeMap", rm->get(hdriCube)->sampledResourceIndex);
+        // inst->parameters.setResource("cubeMap", rm->get(irradianceTexHandle)->sampledResourceIndex);
         inst->parameters.setResource("defaultSampler", rm->get(linearSampler)->resourceIndex);
         inst->parameters.pushChanges();
     }
