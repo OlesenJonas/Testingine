@@ -10,6 +10,28 @@ DynamicBitset::DynamicBitset(uint32_t _size) : size(_size)
     std::fill(internal.begin(), internal.end(), 0);
 }
 
+DynamicBitset operator&(const DynamicBitset& lhs, const DynamicBitset& rhs)
+{
+    DynamicBitset ret = lhs;
+
+    if(ret.size < rhs.size)
+    {
+        ret.resize(rhs.size);
+        for(int i = 0; i < ret.internal.size(); i++)
+            ret.internal[i] &= rhs.internal[i];
+    }
+    else
+    {
+        if(ret.size > rhs.size)
+            ret.clear(rhs.size, ret.size - 1);
+
+        for(int i = 0; i < rhs.internal.size(); i++)
+            ret.internal[i] &= rhs.internal[i];
+    }
+
+    return ret;
+}
+
 bool DynamicBitset::anyBitSet() const
 {
     for(auto i = 0; i < internal.size(); i++)
@@ -70,6 +92,53 @@ void DynamicBitset::clear()
 {
     for(auto i = 0; i < internal.size(); i++)
         internal[i] = 0u;
+}
+void DynamicBitset::clear(uint32_t firstBit, uint32_t lastBit)
+{
+    assert(firstBit < size && lastBit < size);
+    if(lastBit == firstBit)
+    {
+        clearBit(firstBit);
+        return;
+    }
+    assert(firstBit < lastBit);
+
+    const uint32_t ones = 0xFFFFFFFF;
+
+    // Fast path: all bits to fill are contained in the same int
+    if(firstBit / 32u == lastBit / 32u)
+    {
+        const uint32_t amountOfBitsToClear = lastBit - firstBit + 1;
+        uint32_t clearBits = ones >> (32u - amountOfBitsToClear);
+        clearBits = clearBits << (firstBit % 32u);
+        clearBits = ~clearBits;
+        internal[firstBit / 32u] &= clearBits;
+        return;
+    }
+
+    // fill integers completly contained in [firstBit, lastBit]
+    const int32_t firstFullint = UintDivAndCeil(firstBit, 32u);
+    const int32_t lastFullint = (lastBit + 1u) / 32u - 1u;
+
+    for(int i = firstFullint; i <= lastFullint; i++)
+    {
+        internal[i] = 0u;
+    }
+
+    uint32_t clearBits = 0u;
+
+    // partial int at start
+    const uint32_t amountOfBitsInFirstInt = 32u - (firstBit % 32u);
+    clearBits = ones >> (32u - amountOfBitsInFirstInt);
+    clearBits = clearBits << (firstBit % 32u);
+    clearBits = ~clearBits;
+    internal[firstBit / 32u] &= clearBits;
+
+    // partial int at end
+    const uint32_t amountOfBitsInLastInt = (lastBit % 32u) + 1u;
+    clearBits = ones >> (32u - amountOfBitsInLastInt);
+    clearBits = ~clearBits;
+    internal[lastBit / 32u] &= clearBits;
 }
 void DynamicBitset::fill()
 {

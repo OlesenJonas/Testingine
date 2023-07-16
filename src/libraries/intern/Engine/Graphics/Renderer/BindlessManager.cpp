@@ -119,13 +119,41 @@ void BindlessManager::init()
         renderer.deleteQueue.pushBack([=]()
                                       { vkDestroyDescriptorSetLayout(renderer.device, setLayout, nullptr); });
     }
+
+    for(auto& entry : descriptorTypeTable)
+    {
+        entry.second.freeIndices.fill();
+    }
 }
 
-uint32_t BindlessManager::createUniformBufferBinding(VkBuffer buffer)
+uint32_t BindlessManager::getDescriptorSetsCount() const
 {
-    auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    uint32_t freeIndex = tableEntry.freeIndex;
-    tableEntry.freeIndex++;
+    return bindlessDescriptorSets.size();
+}
+const VkDescriptorSet* BindlessManager::getDescriptorSets()
+{
+    return bindlessDescriptorSets.data();
+}
+const VkDescriptorSetLayout* BindlessManager::getDescriptorSetLayouts()
+{
+    return bindlessSetLayouts.data();
+}
+
+uint32_t BindlessManager::createBufferBinding(VkBuffer buffer, BufferUsage possibleBufferUsage)
+{
+    VkDescriptorType descriptorType = possibleBufferUsage == BufferUsage::Uniform
+                                          ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+                                          : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+
+    auto& tableEntry = descriptorTypeTable.at(descriptorType);
+
+    DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+
+    uint32_t freeIndex = freeIndicesBitset.getFirstBitSet();
+    assert(freeIndex != 0xFFFFFFFF && "NO MORE FREE SLOTS LEFT IN DESCRIPTOR ARRAY!");
+    assert(freeIndicesBitset.getBit(freeIndex));
+    freeIndicesBitset.clearBit(freeIndex);
+    assert(!freeIndicesBitset.getBit(freeIndex));
 
     VkDescriptorBufferInfo bufferInfo{
         .buffer = buffer,
@@ -141,7 +169,7 @@ uint32_t BindlessManager::createUniformBufferBinding(VkBuffer buffer)
         .dstBinding = 0,
         .dstArrayElement = freeIndex,
         .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorType = descriptorType,
         .pImageInfo = nullptr,
         .pBufferInfo = &bufferInfo,
         .pTexelBufferView = nullptr,
@@ -152,64 +180,107 @@ uint32_t BindlessManager::createUniformBufferBinding(VkBuffer buffer)
     return freeIndex;
 }
 
-uint32_t BindlessManager::createStorageBufferBinding(VkBuffer buffer)
+void createImageDescriptor(
+    VkDevice device,
+    VkDescriptorSet set,
+    uint32_t index,
+    VkImageView view,
+    VkDescriptorType descriptorType,
+    VkImageLayout layout)
 {
-    auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-    uint32_t freeIndex = tableEntry.freeIndex;
-    tableEntry.freeIndex++;
-
-    VkDescriptorBufferInfo bufferInfo{
-        .buffer = buffer,
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-
-    VkWriteDescriptorSet setWrite{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .pNext = nullptr,
-
-        .dstSet = bindlessDescriptorSets[tableEntry.setIndex],
-        .dstBinding = 0,
-        .dstArrayElement = freeIndex,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .pImageInfo = nullptr,
-        .pBufferInfo = &bufferInfo,
-        .pTexelBufferView = nullptr,
-    };
-
-    vkUpdateDescriptorSets(renderer.device, 1, &setWrite, 0, nullptr);
-
-    return freeIndex;
-}
-
-uint32_t BindlessManager::createSampledImageBinding(VkImageView view, VkImageLayout layout)
-{
-    auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
-    uint32_t freeIndex = tableEntry.freeIndex;
-    tableEntry.freeIndex++;
-
     VkDescriptorImageInfo imageInfo{
         .sampler = VK_NULL_HANDLE,
         .imageView = view,
         .imageLayout = layout,
     };
 
+    uint32_t binding = descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ? ResourceManager::samplerLimit : 0;
+
     VkWriteDescriptorSet setWrite{
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .pNext = nullptr,
 
-        .dstSet = bindlessDescriptorSets[tableEntry.setIndex],
-        .dstBinding = ResourceManager::samplerLimit,
-        .dstArrayElement = freeIndex,
+        .dstSet = set,
+        .dstBinding = binding,
+        .dstArrayElement = index,
         .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .descriptorType = descriptorType,
         .pImageInfo = &imageInfo,
         .pBufferInfo = nullptr,
         .pTexelBufferView = nullptr,
     };
 
-    vkUpdateDescriptorSets(renderer.device, 1, &setWrite, 0, nullptr);
+    vkUpdateDescriptorSets(device, 1, &setWrite, 0, nullptr);
+}
+
+uint32_t BindlessManager::createImageBinding(VkImageView view, ImageUsage possibleImageUsages)
+{
+    if(possibleImageUsages != ImageUsage::Both)
+    {
+        VkDescriptorType descriptorType = possibleImageUsages == ImageUsage::Sampled
+                                              ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
+                                              : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+
+        auto& tableEntry = descriptorTypeTable.at(descriptorType);
+
+        DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+
+        uint32_t freeIndex = freeIndicesBitset.getFirstBitSet();
+        assert(freeIndex != 0xFFFFFFFF && "NO MORE FREE SLOTS LEFT IN DESCRIPTOR ARRAY!");
+        assert(freeIndicesBitset.getBit(freeIndex));
+        freeIndicesBitset.clearBit(freeIndex);
+        assert(!freeIndicesBitset.getBit(freeIndex));
+
+        VkImageLayout layout = possibleImageUsages == ImageUsage::Sampled
+                                   ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                   : VK_IMAGE_LAYOUT_GENERAL;
+
+        createImageDescriptor(
+            renderer.device, bindlessDescriptorSets[tableEntry.setIndex], freeIndex, view, descriptorType, layout);
+
+        return freeIndex;
+    }
+
+    // image could be used as both, so need to create both descriptors.
+    // ensure that a slot is used thats free in both arrays, so the same index can be used
+
+    auto& tableEntrySampled = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
+    auto& tableEntryStorage = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+
+    DynamicBitset& freeIndicesBitsetSampled = tableEntrySampled.freeIndices;
+    DynamicBitset& freeIndicesBitsetStorage = tableEntryStorage.freeIndices;
+
+    DynamicBitset combinedFreeIndices = freeIndicesBitsetSampled & freeIndicesBitsetStorage;
+
+    /*
+        TODO:
+            handle case where theres free slots left in both arrays, just not at the same index
+            would need to re-order descriptors while ensuring currently in flight stuff doesnt break
+    */
+
+    uint32_t freeIndex = combinedFreeIndices.getFirstBitSet();
+    assert(freeIndex != 0xFFFFFFFF && "NO MORE FREE SLOTS LEFT IN DESCRIPTOR ARRAYS!");
+    assert(freeIndicesBitsetSampled.getBit(freeIndex));
+    assert(freeIndicesBitsetStorage.getBit(freeIndex));
+    freeIndicesBitsetSampled.clearBit(freeIndex);
+    freeIndicesBitsetStorage.clearBit(freeIndex);
+    assert(!freeIndicesBitsetSampled.getBit(freeIndex));
+    assert(!freeIndicesBitsetStorage.getBit(freeIndex));
+
+    createImageDescriptor(
+        renderer.device,
+        bindlessDescriptorSets[tableEntrySampled.setIndex],
+        freeIndex,
+        view,
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    createImageDescriptor(
+        renderer.device,
+        bindlessDescriptorSets[tableEntryStorage.setIndex],
+        freeIndex,
+        view,
+        VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+        VK_IMAGE_LAYOUT_GENERAL);
 
     return freeIndex;
 }
@@ -241,37 +312,4 @@ uint32_t BindlessManager::createSamplerBinding(VkSampler sampler, uint32_t index
     vkUpdateDescriptorSets(renderer.device, 1, &setWrite, 0, nullptr);
 
     return index;
-}
-
-uint32_t BindlessManager::createStorageImageBinding(VkImageView view, VkImageLayout layout)
-{
-    // todo: not yet tested or even used, just here as code placeholder
-
-    auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-    uint32_t freeIndex = tableEntry.freeIndex;
-    tableEntry.freeIndex++;
-
-    VkDescriptorImageInfo imageInfo{
-        .sampler = VK_NULL_HANDLE,
-        .imageView = view,
-        .imageLayout = layout,
-    };
-
-    VkWriteDescriptorSet setWrite{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .pNext = nullptr,
-
-        .dstSet = bindlessDescriptorSets[tableEntry.setIndex],
-        .dstBinding = 0,
-        .dstArrayElement = freeIndex,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-        .pImageInfo = &imageInfo,
-        .pBufferInfo = nullptr,
-        .pTexelBufferView = nullptr,
-    };
-
-    vkUpdateDescriptorSets(renderer.device, 1, &setWrite, 0, nullptr);
-
-    return freeIndex;
 }

@@ -71,8 +71,6 @@ float4 main(VSOutput input) : SV_TARGET
     //  todo: make parameter? Can be controlled through texture view?
     nrmSampleTS.y *= -1;
 
-    //TODO: check resulting normals, make screenshot of GLSL result and compare!
-    //      think HLSL's cross is left handed, may need to flip order?
     float3 vBitangentWS = input.vTangentWS.w * cross(input.vNormalWS, input.vTangentWS.xyz);
     float3 normalWS = normalize(
         nrmSampleTS.x * input.vTangentWS.xyz +

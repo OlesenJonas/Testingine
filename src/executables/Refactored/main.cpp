@@ -66,7 +66,7 @@ void initScene()
     auto texturedMaterialInstance = rm->createMaterialInstance(texturedMaterial);
 
     MaterialInstance* matInst = rm->get(texturedMaterialInstance);
-    matInst->parameters.setResource("colorTexture", rm->get(lostEmpireTex)->sampledResourceIndex);
+    matInst->parameters.setResource("colorTexture", rm->get(lostEmpireTex)->resourceIndex);
     matInst->parameters.setResource("blockySampler", rm->get(blockySampler)->resourceIndex);
     matInst->parameters.pushChanges();
 
@@ -216,14 +216,15 @@ int main()
                 vkCmdPipelineBarrier2(cmd, &dependInfo);
 
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, calcIrradianceShader->pipeline);
+
                 // Bind the bindless descriptor sets once per cmdbuffer
                 vkCmdBindDescriptorSets(
                     cmd,
                     VK_PIPELINE_BIND_POINT_COMPUTE,
                     renderer->bindlessPipelineLayout,
                     0,
-                    4,
-                    renderer->bindlessManager.bindlessDescriptorSets.data(),
+                    renderer->bindlessManager.getDescriptorSetsCount(),
+                    renderer->bindlessManager.getDescriptorSets(),
                     0,
                     nullptr);
 
@@ -242,9 +243,9 @@ int main()
                     uint32_t targetIndex;
                 };
                 ConversionPushConstants constants{
-                    .sourceIndex = rm->get(hdriCube)->sampledResourceIndex,
+                    .sourceIndex = rm->get(hdriCube)->resourceIndex,
                     .samplerIndex = rm->get(cubeSampler)->resourceIndex,
-                    .targetIndex = irradianceTex->storageResourceIndex,
+                    .targetIndex = irradianceTex->resourceIndex,
                 };
 
                 // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
@@ -302,9 +303,20 @@ int main()
             });
     }
 
+    uint32_t prefilteredEnvMapBaseSize = 128;
+    auto prefilteredEnvMap = rm->createTexture(Texture::Info{
+        .debugName = "prefilteredEnvMap",
+        .size = {prefilteredEnvMapBaseSize, prefilteredEnvMapBaseSize, 1},
+        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+        .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+        .mipLevels = Texture::MipLevels::All,
+        .arrayLayers = 6,
+    });
+
     // TODO: getPtrTmp() function (explicitetly state temporary!)
     auto* basicPBRMaterial = rm->get(rm->getMaterial("PBRBasic"));
-    basicPBRMaterial->parameters.setResource("irradianceTex", rm->get(irradianceTexHandle)->sampledResourceIndex);
+    basicPBRMaterial->parameters.setResource("irradianceTex", rm->get(irradianceTexHandle)->resourceIndex);
     basicPBRMaterial->parameters.setResource("irradianceSampler", rm->get(linearSampler)->resourceIndex);
     basicPBRMaterial->parameters.pushChanges();
 
@@ -323,7 +335,7 @@ int main()
     auto equiSkyboxMatInst = rm->createMaterialInstance(equiSkyboxMat);
     {
         auto* inst = rm->get(equiSkyboxMatInst);
-        inst->parameters.setResource("equirectangularMap", rm->get(hdri)->sampledResourceIndex);
+        inst->parameters.setResource("equirectangularMap", rm->get(hdri)->resourceIndex);
         inst->parameters.setResource("defaultSampler", rm->get(linearSampler)->resourceIndex);
         inst->parameters.pushChanges();
     }
@@ -338,7 +350,7 @@ int main()
     auto cubeSkyboxMatInst = rm->createMaterialInstance(cubeSkyboxMat);
     {
         auto* inst = rm->get(cubeSkyboxMatInst);
-        inst->parameters.setResource("cubeMap", rm->get(hdriCube)->sampledResourceIndex);
+        inst->parameters.setResource("cubeMap", rm->get(hdriCube)->resourceIndex);
         // inst->parameters.setResource("cubeMap", rm->get(irradianceTexHandle)->sampledResourceIndex);
         inst->parameters.setResource("defaultSampler", rm->get(linearSampler)->resourceIndex);
         inst->parameters.pushChanges();

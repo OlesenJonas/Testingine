@@ -15,13 +15,15 @@ class DynamicBitset
   public:
     explicit DynamicBitset(uint32_t _size);
 
+    friend DynamicBitset operator&(const DynamicBitset& lhs, const DynamicBitset& rhs);
+
     void setBit(uint32_t index);
     void clearBit(uint32_t index);
     void toggleBit(uint32_t index);
     [[nodiscard]] bool getBit(uint32_t index) const;
 
     void clear();
-    // void clear(uint32_t firstBit, uint32_t lastBit);
+    void clear(uint32_t firstBit, uint32_t lastBit);
     void fill();
     void fill(uint32_t firstBit, uint32_t lastBit);
 
@@ -43,13 +45,12 @@ class DynamicBitset
         return (x + y - 1) / y;
     }
 
-    void fixLastInteger();
-
     uint32_t size = 0;
+    std::vector<uint32_t> internal;
     /*
         Some functions require that any bits in internal with position
         >= size are 0 for optimization purposes.
         This needs to be ensured!
     */
-    std::vector<uint32_t> internal;
+    void fixLastInteger();
 };

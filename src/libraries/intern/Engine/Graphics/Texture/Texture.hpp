@@ -47,8 +47,7 @@ struct Texture
 
     Info info;
     VkImage image = VK_NULL_HANDLE;
-    uint32_t sampledResourceIndex = 0xFFFFFFFF;
-    uint32_t storageResourceIndex = 0xFFFFFFFF;
+    uint32_t resourceIndex = 0xFFFFFFFF;
     VmaAllocation allocation = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
 

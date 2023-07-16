@@ -264,15 +264,24 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
     setDebugName(tex->imageView, (std::string{name} + "_mainView").c_str());
 
     VulkanRenderer& renderer = *VulkanRenderer::get();
-    if(tex->info.usage & VK_IMAGE_USAGE_SAMPLED_BIT)
+    bool usedForSampling = tex->info.usage & VK_IMAGE_USAGE_SAMPLED_BIT;
+    bool usedForStorage = tex->info.usage & VK_IMAGE_USAGE_STORAGE_BIT;
+
+    if(usedForSampling && usedForStorage)
     {
-        tex->sampledResourceIndex = renderer.bindlessManager.createSampledImageBinding(
-            tex->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        tex->resourceIndex =
+            renderer.bindlessManager.createImageBinding(tex->imageView, BindlessManager::ImageUsage::Both);
     }
-    if(tex->info.usage & VK_IMAGE_USAGE_STORAGE_BIT)
+    // else: not both but maybe one the two
+    else if(usedForSampling)
     {
-        tex->storageResourceIndex =
-            renderer.bindlessManager.createStorageImageBinding(tex->imageView, VK_IMAGE_LAYOUT_GENERAL);
+        tex->resourceIndex =
+            renderer.bindlessManager.createImageBinding(tex->imageView, BindlessManager::ImageUsage::Sampled);
+    }
+    else if(usedForStorage)
+    {
+        tex->resourceIndex =
+            renderer.bindlessManager.createImageBinding(tex->imageView, BindlessManager::ImageUsage::Storage);
     }
 
     return newTextureHandle;
@@ -331,9 +340,9 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
         uint32_t targetIndex;
     };
     ConversionPushConstants constants{
-        .sourceIndex = sourceTex->sampledResourceIndex,
+        .sourceIndex = sourceTex->resourceIndex,
         .samplerIndex = get(linearSampler)->resourceIndex,
-        .targetIndex = cubeTex->storageResourceIndex,
+        .targetIndex = cubeTex->resourceIndex,
     };
     renderer->immediateSubmit(
         [=](VkCommandBuffer cmd)
@@ -378,8 +387,8 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
                 VK_PIPELINE_BIND_POINT_COMPUTE,
                 renderer->bindlessPipelineLayout,
                 0,
-                4,
-                renderer->bindlessManager.bindlessDescriptorSets.data(),
+                renderer->bindlessManager.getDescriptorSetsCount(),
+                renderer->bindlessManager.getDescriptorSets(),
                 0,
                 nullptr);
 

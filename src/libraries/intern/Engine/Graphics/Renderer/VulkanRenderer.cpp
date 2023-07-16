@@ -236,8 +236,8 @@ void VulkanRenderer::initBindless()
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .setLayoutCount = (uint32_t)bindlessManager.bindlessSetLayouts.size(),
-        .pSetLayouts = bindlessManager.bindlessSetLayouts.data(),
+        .setLayoutCount = bindlessManager.getDescriptorSetsCount(),
+        .pSetLayouts = bindlessManager.getDescriptorSetLayouts(),
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &basicPushConstantRange,
     };
@@ -471,8 +471,8 @@ void VulkanRenderer::draw()
         VK_PIPELINE_BIND_POINT_GRAPHICS,
         bindlessPipelineLayout,
         0,
-        4,
-        bindlessManager.bindlessDescriptorSets.data(),
+        bindlessManager.getDescriptorSetsCount(),
+        bindlessManager.getDescriptorSets(),
         0,
         nullptr);
 
@@ -724,8 +724,8 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
     //---
 
     BindlessIndices pushConstants;
-    pushConstants.RenderInfoBuffer = cameraBuffer->uniformResourceIndex;
-    pushConstants.transformBuffer = transformBuffer->storageResourceIndex;
+    pushConstants.RenderInfoBuffer = cameraBuffer->resourceIndex;
+    pushConstants.transformBuffer = transformBuffer->resourceIndex;
 
     Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
     Handle<Material> lastMaterial = Handle<Material>::Invalid();
@@ -749,7 +749,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
                 Buffer* materialParamsBuffer = rm->get(newMat->parameters.getGPUBuffer());
                 if(materialParamsBuffer != nullptr)
                 {
-                    pushConstants.materialParamsBuffer = materialParamsBuffer->uniformResourceIndex;
+                    pushConstants.materialParamsBuffer = materialParamsBuffer->resourceIndex;
                 }
                 lastMaterial = newMatInst->parentMaterial;
             }
@@ -757,7 +757,7 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
             Buffer* materialInstanceParamsBuffer = rm->get(newMatInst->parameters.getGPUBuffer());
             if(materialInstanceParamsBuffer != nullptr)
             {
-                pushConstants.materialInstanceParamsBuffer = materialInstanceParamsBuffer->uniformResourceIndex;
+                pushConstants.materialInstanceParamsBuffer = materialInstanceParamsBuffer->resourceIndex;
             }
         }
 

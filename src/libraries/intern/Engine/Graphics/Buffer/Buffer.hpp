@@ -25,8 +25,7 @@ struct Buffer
     Info info;
 
     VkBuffer buffer;
-    uint32_t uniformResourceIndex = 0xFFFFFFFF;
-    uint32_t storageResourceIndex = 0xFFFFFFFF;
+    uint32_t resourceIndex = 0xFFFFFFFF;
 
     VmaAllocation allocation;
     VmaAllocationInfo allocInfo;

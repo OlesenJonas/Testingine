@@ -7,6 +7,14 @@
 
 Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::string_view name)
 {
+    if((crInfo.info.usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) &&
+       (crInfo.info.usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT))
+    {
+        // TODO: LOGGER: Cant use both, using just storage
+        crInfo.info.usage &= ~VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        assert(!(crInfo.info.usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT));
+    }
+
     Handle<Buffer> newBufferHandle = bufferPool.insert(Buffer{.info = crInfo.info});
 
     // if we can guarantee that no two threads access the pools at the same time we can
@@ -103,11 +111,13 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
 
     if(crInfo.info.usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
     {
-        buffer->uniformResourceIndex = renderer.bindlessManager.createUniformBufferBinding(buffer->buffer);
+        buffer->resourceIndex =
+            renderer.bindlessManager.createBufferBinding(buffer->buffer, BindlessManager::BufferUsage::Uniform);
     }
-    if(crInfo.info.usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+    else if(crInfo.info.usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
     {
-        buffer->storageResourceIndex = renderer.bindlessManager.createStorageBufferBinding(buffer->buffer);
+        buffer->resourceIndex =
+            renderer.bindlessManager.createBufferBinding(buffer->buffer, BindlessManager::BufferUsage::Storage);
     }
 
     return newBufferHandle;
