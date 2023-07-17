@@ -4,6 +4,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include <Datastructures/Span.hpp>
+#include <Engine/Misc/EnumHelpers.hpp>
 #include <string>
 
 template <typename T>
@@ -11,49 +12,97 @@ struct Handle;
 
 struct Texture
 {
+    struct Extent
+    {
+        uint32_t width;
+        uint32_t height;
+        uint32_t depth;
+    };
+
     enum MipLevels : int32_t
     {
         All = -1,
     };
 
-    struct Info
+    enum struct Type
     {
-        // todo: have a global string buffer and store only view into that here!
+        // identifier cant start with number 😑
+        t2D,
+        tCube,
+        // ...
+    };
+
+    // enum struct Format
+    enum struct Format
+    {
+        Undefined,
+        r8_unorm,
+        r8g8b8a8_unorm,
+        r8g8b8a8_srgb,
+        r16g16b16a16_float,
+        r32g32b32a32_float,
+        //-- Special Formats
+        d32_float,
+    };
+
+    enum Usage : uint32_t
+    {
+        Sampled = nthBit(0u),
+        Storage = nthBit(1u),
+        ColorAttachment = nthBit(2u),
+        DepthStencilAttachment = nthBit(3u),
+        TransferSrc = nthBit(4u),
+        TransferDst = nthBit(5u),
+    };
+
+    // Dont really like there being two structs for this (especially with all the duplication)
+    // but overall I do like the seperation into createInfo and descriptor
+    struct CreateInfo
+    {
         std::string debugName = ""; // NOLINT
 
-        VkExtent3D size = {1, 1, 1};
-        VkFormat format;
-        VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
-        VkImageUsageFlags usage = 0;
-        VkImageCreateFlags flags = 0;
+        Type type = Type::t2D;
+        Format format = Format::Undefined;
+        Usage usage = Usage::Sampled;
 
-        VkImageType imageType = VK_IMAGE_TYPE_2D;
+        Extent size = {1, 1, 1};
         int32_t mipLevels = 1;
-        uint32_t arrayLayers = 1;
+        uint32_t arrayLength = 1;
 
-        VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
-
-        // TODO: split completly, have image view as seperate object!
-        VkImageAspectFlags viewAspect = VK_IMAGE_ASPECT_COLOR_BIT;
-
-        /*
-            do not try to access this after the texture has been constructed
-            no lifetime guarantees
-        */
         Span<uint8_t> initialData;
     };
 
-    // todo: should be private and no setter available
+    struct Descriptor
+    {
+        Type type = Type::t2D;
+        Format format = Format::Undefined;
+        Usage usage = Usage::Sampled;
 
-    Info info;
+        Extent size = {1, 1, 1};
+        int32_t mipLevels = 1;
+        uint32_t arrayLength = 1;
+    };
+
+    /*
+        todo:
+            have a global string buffer and store debug name there, then store string_view here
+            That way debug name can be retrieved later without storing full string in here
+    */
+
+    Descriptor descriptor;
+
     VkImage image = VK_NULL_HANDLE;
     uint32_t resourceIndex = 0xFFFFFFFF;
     VmaAllocation allocation = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
 
+    // TODO: not sure I like this being here, maybe some renderer.utils ?
     static void fillMipLevels(Handle<Texture> texture);
 };
 
+ENUM_OPERATOR_OR(Texture::Usage);
+
+// TODO: seperate file!
 struct Sampler
 {
     struct Info

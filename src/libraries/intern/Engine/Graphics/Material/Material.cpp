@@ -4,6 +4,7 @@
 #include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
 #include <Engine/Graphics/Shaders/GLSL.hpp>
 #include <Engine/Graphics/Shaders/HLSL.hpp>
+#include <Engine/Graphics/Texture/TexToVulkan.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <Graphics/Shaders/Shaders.hpp>
 #include <SPIRV-Reflect/spirv_reflect.h>
@@ -366,7 +367,7 @@ void Material::createPipeline()
     };
 
     const Span<const VkFormat> colorAttachmentFormats = {renderer.swapchainImageFormat};
-    const VkFormat depthAttachmentFormat = renderer.depthFormat;
+    const VkFormat depthAttachmentFormat = toVkFormat(renderer.depthFormat);
     const VkFormat stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
     const VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{

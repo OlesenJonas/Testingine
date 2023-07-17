@@ -116,12 +116,11 @@ void VulkanRenderer::initSwapchain()
     swapchainImageViews = swapchainSetup.createSwapchainImageViews();
 
     ResourceManager& rsrcManager = *Engine::get()->getResourceManager();
-    depthTexture = rsrcManager.createTexture(Texture::Info{
+    depthTexture = rsrcManager.createTexture(Texture::CreateInfo{
         .debugName = "Depth Texture",
-        .size = {swapchainExtent.width, swapchainExtent.height, 1},
         .format = depthFormat,
-        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        .viewAspect = VK_IMAGE_ASPECT_DEPTH_BIT,
+        .usage = Texture::Usage::DepthStencilAttachment,
+        .size = {swapchainExtent.width, swapchainExtent.height, 1},
     });
 
     deleteQueue.pushBack([=]() { vkDestroySwapchainKHR(device, swapchain, nullptr); });

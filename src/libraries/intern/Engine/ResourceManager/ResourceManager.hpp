@@ -38,9 +38,9 @@ class ResourceManager
         Span<const uint32_t> indices,
         std::string_view name);
 
-    Handle<Texture> createTexture(Texture::Info&& info);
+    Handle<Texture> createTexture(Texture::CreateInfo&& createInfo);
     Handle<Texture>
-    createTexture(const char* file, VkImageUsageFlags usage, bool dataIsLinear, std::string_view name = "");
+    createTexture(const char* file, Texture::Usage usage, bool dataIsLinear, std::string_view name = "");
     Handle<Texture> createCubemapFromEquirectangular(
         uint32_t cubeResolution, Handle<Texture> equirectangularSource, std::string_view debugName);
 

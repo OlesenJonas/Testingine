@@ -7,7 +7,7 @@
 #include <Engine/Engine.hpp>
 #include <iostream>
 
-Handle<Texture> HDR::load(std::string_view path, std::string_view debugName, VkImageUsageFlags usage)
+Handle<Texture> HDR::load(std::string_view path, std::string_view debugName, Texture::Usage usage)
 {
     int texWidth = 0;
     int texHeight = 0;
@@ -20,19 +20,19 @@ Handle<Texture> HDR::load(std::string_view path, std::string_view debugName, VkI
     }
     void* pixelPtr = pixels;
     VkDeviceSize pixelCount = texWidth * texHeight * 4; // 4 since load forces rgb_alpha
-    VkFormat imageFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
-    VkExtent3D imageExtent{
+    Texture::Format imageFormat = Texture::Format::r32g32b32a32_float;
+    Texture::Extent imageExtent{
         .width = (uint32_t)texWidth,
         .height = (uint32_t)texHeight,
         .depth = 1,
     };
 
-    Handle<Texture> newTextureHandle = Engine::get()->getResourceManager()->createTexture(Texture::Info{
+    Handle<Texture> newTextureHandle = Engine::get()->getResourceManager()->createTexture(Texture::CreateInfo{
         // specifying non-default values only
         .debugName = std::string{debugName},
-        .size = imageExtent,
         .format = imageFormat,
-        .usage = usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .usage = usage | Texture::Usage::TransferDst,
+        .size = imageExtent,
         .initialData = {(uint8_t*)pixels, pixelCount * sizeof(float)},
     });
 

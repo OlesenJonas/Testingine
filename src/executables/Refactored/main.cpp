@@ -1,4 +1,5 @@
 #include <Engine/Engine.hpp>
+#include <Engine/Graphics/Texture/TexToVulkan.hpp>
 #include <Engine/Scene/DefaultComponents.hpp>
 #include <Engine/Scene/Scene.hpp>
 #include <glm/gtx/transform.hpp>
@@ -31,7 +32,7 @@ void initScene()
     auto lostEmpireMesh = ResourceManager::get()->createMesh(ASSETS_PATH "/vkguide/lost_empire.obj", "empire");
 
     auto lostEmpireTex = rm->createTexture(
-        ASSETS_PATH "/vkguide/lost_empire-RGBA.png", VK_IMAGE_USAGE_SAMPLED_BIT, false, "empire_diffuse");
+        ASSETS_PATH "/vkguide/lost_empire-RGBA.png", Texture::Usage::Sampled, false, "empire_diffuse");
 
     auto linearSampler = rm->createSampler({
         .magFilter = VK_FILTER_LINEAR,
@@ -146,7 +147,7 @@ int main()
     });
 
     auto hdri = engine.getResourceManager()->createTexture(
-        ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr", VK_IMAGE_USAGE_SAMPLED_BIT, true);
+        ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr", Texture::Usage::Sampled, true);
     auto hdriCube = rm->createCubemapFromEquirectangular(512, hdri, "HdriCubemap");
 
     Handle<ComputeShader> calcIrradianceComp = rm->createComputeShader(
@@ -156,11 +157,10 @@ int main()
     uint32_t irradianceRes = 32;
     auto irradianceTexHandle = rm->createTexture({
         .debugName = "hdriIrradiance",
+        .type = Texture::Type::tCube,
+        .format = Texture::Format::r16g16b16a16_float,
+        .usage = Texture::Usage::Sampled | Texture::Usage::Storage,
         .size = {irradianceRes, irradianceRes, 1},
-        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-        .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
-        .arrayLayers = 6,
     });
     {
         Texture* irradianceTex = rm->get(irradianceTexHandle);
@@ -199,7 +199,7 @@ int main()
                             .baseMipLevel = 0,
                             .levelCount = 1,
                             .baseArrayLayer = 0,
-                            .layerCount = irradianceTex->info.arrayLayers,
+                            .layerCount = toArrayLayers(irradianceTex->descriptor),
                         },
                 };
 
@@ -285,7 +285,7 @@ int main()
                             .baseMipLevel = 0,
                             .levelCount = 1,
                             .baseArrayLayer = 0,
-                            .layerCount = irradianceTex->info.arrayLayers,
+                            .layerCount = toArrayLayers(irradianceTex->descriptor),
                         },
                 };
 
@@ -304,14 +304,13 @@ int main()
     }
 
     uint32_t prefilteredEnvMapBaseSize = 128;
-    auto prefilteredEnvMap = rm->createTexture(Texture::Info{
+    auto prefilteredEnvMap = rm->createTexture({
         .debugName = "prefilteredEnvMap",
+        .type = Texture::Type::tCube,
+        .format = Texture::Format::r16g16b16a16_float,
+        .usage = Texture::Usage::Sampled | Texture::Usage::Storage,
         .size = {prefilteredEnvMapBaseSize, prefilteredEnvMapBaseSize, 1},
-        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-        .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
         .mipLevels = Texture::MipLevels::All,
-        .arrayLayers = 6,
     });
 
     // TODO: getPtrTmp() function (explicitetly state temporary!)

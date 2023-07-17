@@ -2,6 +2,7 @@
 #include "Graphics/Renderer/VulkanRenderer.hpp"
 #include "Graphics/Texture/Texture.hpp"
 #include "IO/HDR.hpp"
+#include "TexToVulkan.hpp"
 #include <Engine/Engine.hpp>
 #include <Engine/Graphics/Renderer/VulkanDebug.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
@@ -11,7 +12,7 @@
 #include <vulkan/vulkan_core.h>
 
 Handle<Texture>
-ResourceManager::createTexture(const char* file, VkImageUsageFlags usage, bool dataIsLinear, std::string_view name)
+ResourceManager::createTexture(const char* file, Texture::Usage usage, bool dataIsLinear, std::string_view name)
 {
     std::string_view fileView{file};
     auto lastDirSep = fileView.find_last_of("/\\");
@@ -44,19 +45,19 @@ ResourceManager::createTexture(const char* file, VkImageUsageFlags usage, bool d
     }
     void* pixelPtr = pixels;
     VkDeviceSize imageSize = texWidth * texHeight * 4;
-    VkFormat imageFormat = dataIsLinear ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_SRGB;
-    VkExtent3D imageExtent{
+    Texture::Format imageFormat = dataIsLinear ? Texture::Format::r8g8b8a8_unorm : Texture::Format::r8g8b8a8_srgb;
+    Texture::Extent imageExtent{
         .width = (uint32_t)texWidth,
         .height = (uint32_t)texHeight,
         .depth = 1,
     };
 
-    Handle<Texture> newTextureHandle = createTexture(Texture::Info{
+    Handle<Texture> newTextureHandle = createTexture(Texture::CreateInfo{
         // specifying non-default values only
         .debugName = std::string{texName},
-        .size = imageExtent,
         .format = imageFormat,
-        .usage = usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .usage = usage | Texture::Usage::TransferDst,
+        .size = imageExtent,
         .initialData = {pixels, imageSize},
     });
 
@@ -65,10 +66,10 @@ ResourceManager::createTexture(const char* file, VkImageUsageFlags usage, bool d
     return newTextureHandle;
 }
 
-Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
+Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 {
     // todo: handle naming collisions and also dont just use a random name...
-    std::string name = info.debugName;
+    std::string name = createInfo.debugName;
     if(name.empty())
     {
         name = "Texture" + std::format("{:03}", rand() % 199);
@@ -76,29 +77,47 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
     auto iterator = nameToMeshLUT.find(name);
     assert(iterator == nameToMeshLUT.end());
 
-    const uint32_t maxDimension = std::max({info.size.width, info.size.height, info.size.depth});
-    uint32_t actualMipLevels =
-        info.mipLevels == Texture::MipLevels::All ? uint32_t(floor(log2(maxDimension))) + 1 : info.mipLevels;
-    info.mipLevels = actualMipLevels;
+    const uint32_t maxDimension = std::max({createInfo.size.width, createInfo.size.height, createInfo.size.depth});
+    uint32_t actualMipLevels = createInfo.mipLevels == Texture::MipLevels::All
+                                   ? uint32_t(floor(log2(maxDimension))) + 1
+                                   : createInfo.mipLevels;
+    assert(actualMipLevels > 0);
+    createInfo.mipLevels = actualMipLevels;
 
-    Handle<Texture> newTextureHandle = texturePool.insert(Texture{.info = info});
+    Handle<Texture> newTextureHandle = texturePool.insert(Texture{
+        .descriptor = {
+            .type = createInfo.type,
+            .format = createInfo.format,
+            .usage = createInfo.usage,
+            .size = createInfo.size,
+            .mipLevels = createInfo.mipLevels,
+            .arrayLength = createInfo.arrayLength,
+        }});
     Texture* tex = texturePool.get(newTextureHandle);
     assert(tex);
+
+    VkImageCreateFlags flags = createInfo.type == Texture::Type::tCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
+    uint32_t arrayLayers = toArrayLayers(tex->descriptor);
 
     VkImageCreateInfo imageCrInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = nullptr,
-        .flags = info.flags,
+        .flags = flags,
 
-        .imageType = info.imageType,
-        .format = info.format,
-        .extent = info.size,
+        .imageType = toVkImgType(createInfo.type),
+        .format = toVkFormat(createInfo.format),
+        .extent =
+            {
+                .width = createInfo.size.width,
+                .height = createInfo.size.height,
+                .depth = createInfo.size.depth,
+            },
 
-        .mipLevels = actualMipLevels,
-        .arrayLayers = info.arrayLayers,
-        .samples = info.samples,
-        .tiling = info.tiling,
-        .usage = info.usage,
+        .mipLevels = static_cast<uint32_t>(createInfo.mipLevels),
+        .arrayLayers = arrayLayers,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = toVkUsage(createInfo.usage),
     };
     VmaAllocationCreateInfo imgAllocInfo{
         .usage = VMA_MEMORY_USAGE_AUTO,
@@ -107,7 +126,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
     VmaAllocator& allocator = Engine::get()->getRenderer()->allocator;
     vmaCreateImage(allocator, &imageCrInfo, &imgAllocInfo, &tex->image, &tex->allocation, nullptr);
 
-    if(!info.initialData.empty())
+    if(!createInfo.initialData.empty())
     {
         /*
             TODO:
@@ -125,7 +144,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
         VkBufferCreateInfo stagingBufferInfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             .pNext = nullptr,
-            .size = info.initialData.size(),
+            .size = createInfo.initialData.size(),
             .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         };
         VmaAllocationCreateInfo vmaallocCrInfo = {
@@ -145,7 +164,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
 
         void* data = nullptr;
         vmaMapMemory(allocator, stagingBuffer.allocation, &data);
-        memcpy(data, info.initialData.data(), info.initialData.size());
+        memcpy(data, createInfo.initialData.data(), createInfo.initialData.size());
         vmaUnmapMemory(allocator, stagingBuffer.allocation);
 
         Engine::get()->getRenderer()->immediateSubmit(
@@ -190,7 +209,12 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
                          .mipLevel = 0,
                          .baseArrayLayer = 0,
                          .layerCount = 1},
-                    .imageExtent = info.size,
+                    .imageExtent =
+                        {
+                            .width = createInfo.size.width,
+                            .height = createInfo.size.height,
+                            .depth = createInfo.size.depth,
+                        },
                 };
 
                 vkCmdCopyBufferToImage(
@@ -234,13 +258,13 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
 
     // create an image view covering the whole image
     VkImageViewType viewType =
-        info.flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+        createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
     VkImageViewCreateInfo imageViewCrInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
         .image = tex->image,
         .viewType = viewType,
-        .format = info.format,
+        .format = toVkFormat(createInfo.format),
         .components =
             VkComponentMapping{
                 .r = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -250,11 +274,11 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
             },
         .subresourceRange =
             {
-                .aspectMask = info.viewAspect,
+                .aspectMask = toVkImageAspect(createInfo.format),
                 .baseMipLevel = 0,
                 .levelCount = imageCrInfo.mipLevels,
                 .baseArrayLayer = 0,
-                .layerCount = info.arrayLayers,
+                .layerCount = arrayLayers,
             },
     };
 
@@ -264,15 +288,15 @@ Handle<Texture> ResourceManager::createTexture(Texture::Info&& info)
     setDebugName(tex->imageView, (std::string{name} + "_mainView").c_str());
 
     VulkanRenderer& renderer = *VulkanRenderer::get();
-    bool usedForSampling = tex->info.usage & VK_IMAGE_USAGE_SAMPLED_BIT;
-    bool usedForStorage = tex->info.usage & VK_IMAGE_USAGE_STORAGE_BIT;
+    bool usedForSampling = (createInfo.usage & Texture::Usage::Sampled) != 0u;
+    bool usedForStorage = (createInfo.usage & Texture::Usage::Storage) != 0u;
 
     if(usedForSampling && usedForStorage)
     {
         tex->resourceIndex =
             renderer.bindlessManager.createImageBinding(tex->imageView, BindlessManager::ImageUsage::Both);
     }
-    // else: not both but maybe one the two
+    // else: not both but maybe one of the two
     else if(usedForSampling)
     {
         tex->resourceIndex =
@@ -295,18 +319,16 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
 
     Texture* sourceTex = get(equirectangularSource);
 
-    Handle<Texture> cubeTextureHandle = createTexture(Texture::Info{
+    Handle<Texture> cubeTextureHandle = createTexture(Texture::CreateInfo{
         // specifying non-default values only
         .debugName = std::string{debugName},
-        .size = {.width = cubeResolution, .height = cubeResolution, .depth = 1},
-        .format = sourceTex->info.format,
+        .type = Texture::Type::tCube,
+        .format = sourceTex->descriptor.format,
         // TRANSFER_XXX_BITs are needed for blitting to downscale :/
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                 VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
-        .imageType = VK_IMAGE_TYPE_2D,
+        .usage = Texture::Usage::Sampled | Texture::Usage::Storage | Texture::Usage::TransferDst |
+                 Texture::Usage::TransferSrc,
+        .size = {.width = cubeResolution, .height = cubeResolution, .depth = 1},
         .mipLevels = Texture::MipLevels::All,
-        .arrayLayers = 6,
     });
 
     auto linearSampler = createSampler({
@@ -550,12 +572,12 @@ void Texture::fillMipLevels(Handle<Texture> texture)
 
     Texture* tex = rm->get(texture);
 
-    if(tex->info.mipLevels == 1)
+    if(tex->descriptor.mipLevels == 1)
         return;
 
-    uint32_t startWidth = tex->info.size.width;
-    uint32_t startHeight = tex->info.size.height;
-    uint32_t startDepth = tex->info.size.depth;
+    uint32_t startWidth = tex->descriptor.size.width;
+    uint32_t startHeight = tex->descriptor.size.height;
+    uint32_t startDepth = tex->descriptor.size.depth;
 
     renderer->immediateSubmit(
         [=](VkCommandBuffer cmd)
@@ -585,7 +607,7 @@ void Texture::fillMipLevels(Handle<Texture> texture)
                         .baseMipLevel = 0,
                         .levelCount = 1,
                         .baseArrayLayer = 0,
-                        .layerCount = tex->info.arrayLayers,
+                        .layerCount = toArrayLayers(tex->descriptor),
                     },
             };
 
@@ -604,7 +626,7 @@ void Texture::fillMipLevels(Handle<Texture> texture)
             // Generate mip chain
             // Downscaling from each level successively, but could also downscale mip 0 -> mip N each time
 
-            for(int i = 1; i < tex->info.mipLevels; i++)
+            for(int i = 1; i < tex->descriptor.mipLevels; i++)
             {
                 uint32_t lastWidth = std::max(startWidth >> (i - 1), 1u);
                 uint32_t lastHeight = std::max(startHeight >> (i - 1), 1u);
@@ -620,7 +642,7 @@ void Texture::fillMipLevels(Handle<Texture> texture)
                             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                             .mipLevel = uint32_t(i - 1),
                             .baseArrayLayer = 0,
-                            .layerCount = tex->info.arrayLayers,
+                            .layerCount = toArrayLayers(tex->descriptor),
                         },
                     .srcOffsets =
                         {{.x = 0, .y = 0, .z = 0}, {int32_t(lastWidth), int32_t(lastHeight), int32_t(lastDepth)}},
@@ -629,7 +651,7 @@ void Texture::fillMipLevels(Handle<Texture> texture)
                             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                             .mipLevel = uint32_t(i),
                             .baseArrayLayer = 0,
-                            .layerCount = tex->info.arrayLayers,
+                            .layerCount = toArrayLayers(tex->descriptor),
                         },
                     .dstOffsets =
                         {{.x = 0, .y = 0, .z = 0}, {int32_t(curWidth), int32_t(curHeight), int32_t(curDepth)}},
@@ -640,7 +662,7 @@ void Texture::fillMipLevels(Handle<Texture> texture)
                     .baseMipLevel = uint32_t(i),
                     .levelCount = 1,
                     .baseArrayLayer = 0,
-                    .layerCount = tex->info.arrayLayers,
+                    .layerCount = toArrayLayers(tex->descriptor),
                 };
 
                 // prepare current level to be transfer dst
@@ -731,9 +753,9 @@ void Texture::fillMipLevels(Handle<Texture> texture)
                 VkImageSubresourceRange fullSubRsrcRange{
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     .baseMipLevel = 0,
-                    .levelCount = uint32_t(tex->info.mipLevels),
+                    .levelCount = uint32_t(tex->descriptor.mipLevels),
                     .baseArrayLayer = 0,
-                    .layerCount = tex->info.arrayLayers,
+                    .layerCount = toArrayLayers(tex->descriptor),
                 };
 
                 VkImageMemoryBarrier2 fullImgMemoryBarrier{
