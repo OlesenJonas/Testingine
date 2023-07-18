@@ -97,6 +97,7 @@ std::vector<uint32_t> compileGLSL(std::string_view path, Shaders::Stage stage)
     case Shaders::Stage::Fragment:
         shaderKind = shaderc_fragment_shader;
         break;
+    case Shaders::Stage::Compute:
     default:
         assert(false);
     }

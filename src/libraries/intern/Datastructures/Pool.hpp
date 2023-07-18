@@ -6,7 +6,6 @@
 #include <cassert>
 #include <type_traits>
 
-
 /*
     not sure this is correct yet, will see
         https://stackoverflow.com/questions/222557/what-uses-are-there-for-placement-new
@@ -134,7 +133,6 @@ class Pool
         return {index, generations[index]};
     }
 
-  private:
     bool isHandleValid(Handle<T> handle)
     {
         assert(handle.index < capacity);
@@ -142,6 +140,7 @@ class Pool
         return generations[handle.index] == handle.generation && !freeArray.getBit(handle.index);
     }
 
+  private:
     void grow()
     {
         size_t oldCapacity = capacity;

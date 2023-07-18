@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Texture.hpp"
+#include <Engine/Graphics/Graphics.hpp>
 #include <bit>
 #include <vulkan/vulkan_core.h>
 
@@ -22,7 +23,7 @@ constexpr VkImageType toVkImgType(Texture::Type type)
     case Texture::Type::tCube:
         return VK_IMAGE_TYPE_2D;
     default:
-        assert(false && "Unhandeled type to convert");
+        assert(false && "Unhandled type to convert");
     }
 }
 
@@ -45,7 +46,7 @@ constexpr VkFormat toVkFormat(Texture::Format format)
     case Texture::Format::d32_float:
         return VK_FORMAT_D32_SFLOAT;
     default:
-        assert(false && "Unhandeled formats to convert");
+        assert(false && "Unhandled formats to convert");
     }
 }
 
@@ -63,7 +64,7 @@ constexpr VkImageAspectFlags toVkImageAspect(Texture::Format format)
     case Texture::Format::d32_float:
         return VK_IMAGE_ASPECT_DEPTH_BIT;
     default:
-        assert(false && "Unhandeled formats to convert");
+        assert(false && "Unhandled formats to convert");
     }
 }
 
@@ -84,7 +85,44 @@ constexpr VkImageUsageFlags toVkUsageSingle(Texture::Usage usage)
     case Texture::Usage::TransferDst:
         return VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     default:
-        assert(false && "Unhandeled usages to convert");
+        assert(false && "Unhandled usages to convert");
+    }
+}
+
+constexpr VkImageLayout toVkImageLayout(ResourceState state)
+{
+    switch(state)
+    {
+    case ResourceState::None:
+        assert(false);
+    case ResourceState::Undefined:
+        return VK_IMAGE_LAYOUT_UNDEFINED;
+    case ResourceState::TransferSrc:
+        return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    case ResourceState::TransferDst:
+        return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    case ResourceState::Storage:
+    case ResourceState::StorageGraphics:
+    case ResourceState::StorageCompute:
+        return VK_IMAGE_LAYOUT_GENERAL;
+    case ResourceState::SampleSource:
+    case ResourceState::SampleSourceGraphics:
+    case ResourceState::SampleSourceCompute:
+        return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    case ResourceState::Rendertarget:
+        return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    case ResourceState::DepthStencilTarget:
+        return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    case ResourceState::DepthStencilReadOnly:
+        return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    case ResourceState::VertexBuffer:
+    case ResourceState::IndexBuffer:
+    case ResourceState::UniformBuffer:
+    case ResourceState::UniformBufferGraphics:
+    case ResourceState::UniformBufferCompute:
+    case ResourceState::IndirectArgument:
+        assert(false && "Invalid resource state for texture!");
+        return VK_IMAGE_LAYOUT_UNDEFINED;
     }
 }
 

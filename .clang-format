@@ -14,6 +14,7 @@ BraceWrapping:
   AfterFunction: true
   AfterNamespace: true
   AfterStruct: true
+  AfterUnion: true
   BeforeElse: true
   BeforeLambdaBody: true
   BeforeWhile: true

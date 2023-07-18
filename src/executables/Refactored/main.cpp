@@ -1,4 +1,5 @@
 #include <Engine/Engine.hpp>
+#include <Engine/Graphics/Barriers/Barrier.hpp>
 #include <Engine/Graphics/Texture/TexToVulkan.hpp>
 #include <Engine/Scene/DefaultComponents.hpp>
 #include <Engine/Scene/Scene.hpp>
@@ -167,7 +168,6 @@ int main()
 
         // generate the irradiance
         //   TODO: factor out stuff from here, shouldnt be this much code
-        //         esp barriers should be abstracted at least some what
 
         VulkanRenderer* renderer = Engine::get()->getRenderer();
         renderer->immediateSubmit(
@@ -176,44 +176,15 @@ int main()
                 ResourceManager* rm = Engine::get()->getResourceManager();
 
                 // transfer dst texture to general layout
-                VkImageMemoryBarrier2 imgMemoryBarrier{
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-
-                    .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-
-                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                    .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-
-                    .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-                    .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-
-                    .image = irradianceTex->image,
-                    .subresourceRange =
-                        {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = 1,
-                            .baseArrayLayer = 0,
-                            .layerCount = toArrayLayers(irradianceTex->descriptor),
-                        },
-                };
-
-                VkDependencyInfo dependInfo{
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .dependencyFlags = 0,
-                    .memoryBarrierCount = 0,
-                    .bufferMemoryBarrierCount = 0,
-                    .imageMemoryBarrierCount = 1,
-                    .pImageMemoryBarriers = &imgMemoryBarrier,
-                };
-
-                vkCmdPipelineBarrier2(cmd, &dependInfo);
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = irradianceTexHandle,
+                            .stateBefore = ResourceState::Undefined,
+                            .stateAfter = ResourceState::StorageCompute,
+                        }),
+                    });
 
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, calcIrradianceShader->pipeline);
 
@@ -262,44 +233,15 @@ int main()
                 vkCmdDispatch(cmd, irradianceRes / 8, irradianceRes / 8, 6);
 
                 // transfer dst texture from general to shader read only layout
-                imgMemoryBarrier = VkImageMemoryBarrier2{
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-
-                    .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-
-                    .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-
-                    .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-                    .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-
-                    .image = irradianceTex->image,
-                    .subresourceRange =
-                        {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = 1,
-                            .baseArrayLayer = 0,
-                            .layerCount = toArrayLayers(irradianceTex->descriptor),
-                        },
-                };
-
-                dependInfo = VkDependencyInfo{
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .dependencyFlags = 0,
-                    .memoryBarrierCount = 0,
-                    .bufferMemoryBarrierCount = 0,
-                    .imageMemoryBarrierCount = 1,
-                    .pImageMemoryBarriers = &imgMemoryBarrier,
-                };
-
-                vkCmdPipelineBarrier2(cmd, &dependInfo);
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = irradianceTexHandle,
+                            .stateBefore = ResourceState::StorageCompute,
+                            .stateAfter = ResourceState::SampleSource,
+                        }),
+                    });
             });
     }
 

@@ -30,3 +30,5 @@ IF(VULKAN_ENABLE_VALIDATION)
     message(STATUS "Compiling with vulkan validation enabled")
     target_compile_definitions(Engine PUBLIC ENABLE_VULKAN_VALIDATION)
 ENDIF()
+
+target_compile_options(Engine PRIVATE -Werror=switch-enum)

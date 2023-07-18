@@ -4,6 +4,7 @@
 #include "IO/HDR.hpp"
 #include "TexToVulkan.hpp"
 #include <Engine/Engine.hpp>
+#include <Engine/Graphics/Barriers/Barrier.hpp>
 #include <Engine/Graphics/Renderer/VulkanDebug.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <format>
@@ -170,35 +171,15 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
         Engine::get()->getRenderer()->immediateSubmit(
             [&](VkCommandBuffer cmd)
             {
-                VkImageSubresourceRange range{
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                };
-
-                VkImageMemoryBarrier imageBarrierToTransfer{
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                    .srcAccessMask = 0,
-                    .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                    .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    .image = tex->image,
-                    .subresourceRange = range,
-                };
-
-                vkCmdPipelineBarrier(
+                submitBarriers(
                     cmd,
-                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    0,
-                    0,
-                    nullptr,
-                    0,
-                    nullptr,
-                    1,
-                    &imageBarrierToTransfer);
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = newTextureHandle,
+                            .stateBefore = ResourceState::Undefined,
+                            .stateAfter = ResourceState::TransferDst,
+                        }),
+                    });
 
                 VkBufferImageCopy copyRegion{
                     .bufferOffset = 0,
@@ -220,34 +201,15 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                 vkCmdCopyBufferToImage(
                     cmd, stagingBuffer.buffer, tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
-                VkImageMemoryBarrier imageBarrierToReadable{
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                    .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-                    .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    .image = tex->image,
-                    .subresourceRange =
-                        {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = imageCrInfo.mipLevels,
-                            .baseArrayLayer = 0,
-                            .layerCount = 1,
-                        },
-                };
-
-                vkCmdPipelineBarrier(
+                submitBarriers(
                     cmd,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                    0,
-                    0,
-                    nullptr,
-                    0,
-                    nullptr,
-                    1,
-                    &imageBarrierToReadable);
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = newTextureHandle,
+                            .stateBefore = ResourceState::TransferDst,
+                            .stateAfter = ResourceState::SampleSource,
+                        }),
+                    });
             });
 
         // immediate submit also waits on device idle so staging buffer is not being used here anymore
@@ -369,38 +331,15 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
     renderer->immediateSubmit(
         [=](VkCommandBuffer cmd)
         {
-            // TODO: THE CURRENT SYNCHRONIZATION IS BY NO MEANS OPTIMAL !
-            //       but could at least switch to synch2
-
-            VkImageSubresourceRange range{
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 6,
-            };
-
-            VkImageMemoryBarrier imageBarrierToTransfer{
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                .srcAccessMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .image = cubeTex->image,
-                .subresourceRange = range,
-            };
-
-            vkCmdPipelineBarrier(
+            submitBarriers(
                 cmd,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                0,
-                0,
-                nullptr,
-                0,
-                nullptr,
-                1,
-                &imageBarrierToTransfer);
+                {
+                    Barrier::from(Barrier::Image{
+                        .texture = cubeTextureHandle,
+                        .stateBefore = ResourceState::Undefined,
+                        .stateAfter = ResourceState::StorageCompute,
+                    }),
+                });
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, conversionShader->pipeline);
             // Bind the bindless descriptor sets once per cmdbuffer
@@ -427,27 +366,15 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
             //       (workrgoup size form spirv, use UintDivAndCeil)
             vkCmdDispatch(cmd, cubeResolution / 8, cubeResolution / 8, 6);
 
-            VkImageMemoryBarrier imageBarrierToReadable{
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .image = cubeTex->image,
-                .subresourceRange = range,
-            };
-
-            vkCmdPipelineBarrier(
+            submitBarriers(
                 cmd,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                0,
-                0,
-                nullptr,
-                0,
-                nullptr,
-                1,
-                &imageBarrierToReadable);
+                {
+                    Barrier::from(Barrier::Image{
+                        .texture = cubeTextureHandle,
+                        .stateBefore = ResourceState::StorageCompute,
+                        .stateAfter = ResourceState::SampleSource,
+                    }),
+                });
         });
 
     Texture::fillMipLevels(cubeTextureHandle);
@@ -583,51 +510,36 @@ void Texture::fillMipLevels(Handle<Texture> texture)
         [=](VkCommandBuffer cmd)
         {
             // Transfer 1st mip to transfer source
-            VkImageMemoryBarrier2 imgMemoryBarrier{
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-
-                .srcStageMask =
-                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, // TODO: dont, but im not sure whats better here
-                .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-
-                .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-
-                .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-
-                .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-                .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-
-                .image = tex->image,
-                .subresourceRange =
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = toArrayLayers(tex->descriptor),
-                    },
-            };
-
-            VkDependencyInfo dependInfo{
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .pNext = nullptr,
-                .dependencyFlags = 0,
-                .memoryBarrierCount = 0,
-                .bufferMemoryBarrierCount = 0,
-                .imageMemoryBarrierCount = 1,
-                .pImageMemoryBarriers = &imgMemoryBarrier,
-            };
-
-            vkCmdPipelineBarrier2(cmd, &dependInfo);
+            submitBarriers(
+                cmd,
+                {
+                    Barrier::from(Barrier::Image{
+                        .texture = texture,
+                        // TODO: need better way to determine initial state, pass as parameter?
+                        .stateBefore = ResourceState::SampleSource,
+                        .stateAfter = ResourceState::TransferSrc,
+                    }),
+                });
 
             // Generate mip chain
             // Downscaling from each level successively, but could also downscale mip 0 -> mip N each time
 
             for(int i = 1; i < tex->descriptor.mipLevels; i++)
             {
+                // prepare current level to be transfer dst
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = texture,
+                            // TODO: need better way to determine initial state, pass as parameter?
+                            .stateBefore = ResourceState::TransferSrc,
+                            .stateAfter = ResourceState::TransferDst,
+                            .mipLevel = i,
+                            .arrayLength = int32_t(tex->descriptor.arrayLength),
+                        }),
+                    });
+
                 uint32_t lastWidth = std::max(startWidth >> (i - 1), 1u);
                 uint32_t lastHeight = std::max(startHeight >> (i - 1), 1u);
                 uint32_t lastDepth = std::max(startDepth >> (i - 1), 1u);
@@ -657,49 +569,6 @@ void Texture::fillMipLevels(Handle<Texture> texture)
                         {{.x = 0, .y = 0, .z = 0}, {int32_t(curWidth), int32_t(curHeight), int32_t(curDepth)}},
                 };
 
-                VkImageSubresourceRange mipSubRsrcRange{
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = uint32_t(i),
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = toArrayLayers(tex->descriptor),
-                };
-
-                // prepare current level to be transfer dst
-                {
-                    VkImageMemoryBarrier2 mipImgMemoryBarrier{
-                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                        .pNext = nullptr,
-
-                        .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                        .srcAccessMask = 0,
-
-                        .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-
-                        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-
-                        .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-                        .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-
-                        .image = tex->image,
-                        .subresourceRange = mipSubRsrcRange,
-                    };
-
-                    VkDependencyInfo mipDependInfo{
-                        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                        .pNext = nullptr,
-                        .dependencyFlags = 0,
-                        .memoryBarrierCount = 0,
-                        .bufferMemoryBarrierCount = 0,
-                        .imageMemoryBarrierCount = 1,
-                        .pImageMemoryBarriers = &mipImgMemoryBarrier,
-                    };
-
-                    vkCmdPipelineBarrier2(cmd, &mipDependInfo);
-                }
-
                 // do the blit
                 vkCmdBlitImage(
                     cmd,
@@ -712,83 +581,33 @@ void Texture::fillMipLevels(Handle<Texture> texture)
                     VK_FILTER_LINEAR);
 
                 // prepare current level to be transfer src for next mip
-                {
-                    VkImageMemoryBarrier2 mipImgMemoryBarrier{
-                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                        .pNext = nullptr,
-
-                        .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-
-                        .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                        .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-
-                        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-
-                        .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-                        .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-
-                        .image = tex->image,
-                        .subresourceRange = mipSubRsrcRange,
-                    };
-
-                    VkDependencyInfo mipDependInfo{
-                        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                        .pNext = nullptr,
-                        .dependencyFlags = 0,
-                        .memoryBarrierCount = 0,
-                        .bufferMemoryBarrierCount = 0,
-                        .imageMemoryBarrierCount = 1,
-                        .pImageMemoryBarriers = &mipImgMemoryBarrier,
-                    };
-
-                    vkCmdPipelineBarrier2(cmd, &mipDependInfo);
-                }
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = texture,
+                            // TODO: need better way to determine initial state, pass as parameter?
+                            .stateBefore = ResourceState::TransferDst,
+                            .stateAfter = ResourceState::TransferSrc,
+                            .mipLevel = i,
+                            .arrayLength = int32_t(tex->descriptor.arrayLength),
+                        }),
+                    });
             }
 
             // after the loop, transfer all mips to SHADER_READ_OPTIMAL
-            {
-
-                VkImageSubresourceRange fullSubRsrcRange{
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = uint32_t(tex->descriptor.mipLevels),
-                    .baseArrayLayer = 0,
-                    .layerCount = toArrayLayers(tex->descriptor),
-                };
-
-                VkImageMemoryBarrier2 fullImgMemoryBarrier{
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-
-                    .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                    .srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
-
-                    .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-
-                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-
-                    .srcQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-                    .dstQueueFamilyIndex = renderer->graphicsAndComputeQueueFamily,
-
-                    .image = tex->image,
-                    .subresourceRange = fullSubRsrcRange,
-                };
-
-                VkDependencyInfo fullDependInfo{
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .dependencyFlags = 0,
-                    .memoryBarrierCount = 0,
-                    .bufferMemoryBarrierCount = 0,
-                    .imageMemoryBarrierCount = 1,
-                    .pImageMemoryBarriers = &fullImgMemoryBarrier,
-                };
-
-                vkCmdPipelineBarrier2(cmd, &fullDependInfo);
-            }
+            submitBarriers(
+                cmd,
+                {
+                    Barrier::from(Barrier::Image{
+                        .texture = texture,
+                        // TODO: need better way to determine initial state, pass as parameter?
+                        .stateBefore = ResourceState::TransferSrc,
+                        .stateAfter = ResourceState::SampleSource,
+                        .mipLevel = 0,
+                        .mipCount = tex->descriptor.mipLevels,
+                        .arrayLength = int32_t(tex->descriptor.arrayLength),
+                    }),
+                });
         });
 }

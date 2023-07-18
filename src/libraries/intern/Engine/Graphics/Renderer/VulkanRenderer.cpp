@@ -479,9 +479,8 @@ void VulkanRenderer::draw()
     Texture* depthTexture = rsrcManager.get(this->depthTexture);
     assert(depthTexture);
 
-    insertImageMemoryBarriers(
-        curFrameData.mainCommandBuffer,
-        {
+    {
+        VkImageMemoryBarrier2 imageBarriers[2]{
             {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                 .pNext = nullptr,
@@ -527,7 +526,21 @@ void VulkanRenderer::draw()
                         .layerCount = 1,
                     },
             },
-        });
+        };
+
+        const VkDependencyInfo dependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = 0,
+            .pBufferMemoryBarriers = nullptr,
+            .imageMemoryBarrierCount = (sizeof(imageBarriers) / sizeof(imageBarriers[0])),
+            .pImageMemoryBarriers = &imageBarriers[0],
+        };
+
+        vkCmdPipelineBarrier2(curFrameData.mainCommandBuffer, &dependencyInfo);
+    }
 
     float flash = abs(sin(frameNumber / 1200.0f));
     VkClearValue clearValue{.color = {0.0f, 0.0f, flash, 1.0f}};
@@ -630,28 +643,39 @@ void VulkanRenderer::draw()
 
     vkCmdEndRendering(curFrameData.mainCommandBuffer);
 
-    insertImageMemoryBarriers(
-        curFrameData.mainCommandBuffer,
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                .dstAccessMask = 0,
-                .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                .image = swapchainImages[swapchainImageIndex],
-                .subresourceRange =
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-            },
-        });
+    {
+        VkImageMemoryBarrier2 imageBarrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            .dstAccessMask = 0,
+            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            .image = swapchainImages[swapchainImageIndex],
+            .subresourceRange =
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+        };
+
+        const VkDependencyInfo dependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .memoryBarrierCount = 0,
+            .pMemoryBarriers = nullptr,
+            .bufferMemoryBarrierCount = 0,
+            .pBufferMemoryBarriers = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &imageBarrier,
+        };
+
+        vkCmdPipelineBarrier2(curFrameData.mainCommandBuffer, &dependencyInfo);
+    }
 
     assertVkResult(vkEndCommandBuffer(curFrameData.mainCommandBuffer));
 
