@@ -12,8 +12,8 @@
 #include <stb/stb_image.h>
 #include <vulkan/vulkan_core.h>
 
-Handle<Texture>
-ResourceManager::createTexture(const char* file, Texture::Usage usage, bool dataIsLinear, std::string_view name)
+Handle<Texture> ResourceManager::createTexture(
+    const char* file, ResourceStateMulti states, ResourceState initial, bool dataIsLinear, std::string_view name)
 {
     std::string_view fileView{file};
     auto lastDirSep = fileView.find_last_of("/\\");
@@ -27,9 +27,12 @@ ResourceManager::createTexture(const char* file, Texture::Usage usage, bool data
 
     std::string_view extension = fileView.substr(extensionStart);
 
+    // TODO: LOG: warn if not alraedy set
+    states |= ResourceState::TransferDst;
+
     if(extension == ".hdr")
     {
-        return HDR::load(fileView, texName, usage);
+        return HDR::load(fileView, texName, states, initial);
     }
 
     // else just use default stbi_load for now
@@ -57,7 +60,8 @@ ResourceManager::createTexture(const char* file, Texture::Usage usage, bool data
         // specifying non-default values only
         .debugName = std::string{texName},
         .format = imageFormat,
-        .usage = usage | Texture::Usage::TransferDst,
+        .allStates = states,
+        .initialState = initial,
         .size = imageExtent,
         .initialData = {pixels, imageSize},
     });
@@ -85,11 +89,17 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
     assert(actualMipLevels > 0);
     createInfo.mipLevels = actualMipLevels;
 
+    if(!createInfo.initialData.empty())
+    {
+        // TODO: LOG: warn
+        createInfo.allStates |= ResourceState::TransferDst;
+    }
+
     Handle<Texture> newTextureHandle = texturePool.insert(Texture{
         .descriptor = {
             .type = createInfo.type,
             .format = createInfo.format,
-            .usage = createInfo.usage,
+            .allStates = createInfo.allStates,
             .size = createInfo.size,
             .mipLevels = createInfo.mipLevels,
             .arrayLength = createInfo.arrayLength,
@@ -98,7 +108,6 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
     assert(tex);
 
     VkImageCreateFlags flags = createInfo.type == Texture::Type::tCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
-    uint32_t arrayLayers = toArrayLayers(tex->descriptor);
 
     VkImageCreateInfo imageCrInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -115,10 +124,10 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
             },
 
         .mipLevels = static_cast<uint32_t>(createInfo.mipLevels),
-        .arrayLayers = arrayLayers,
+        .arrayLayers = toVkArrayLayers(tex->descriptor),
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = toVkUsage(createInfo.usage),
+        .usage = toVkImageUsage(createInfo.allStates),
     };
     VmaAllocationCreateInfo imgAllocInfo{
         .usage = VMA_MEMORY_USAGE_AUTO,
@@ -207,13 +216,30 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                         Barrier::from(Barrier::Image{
                             .texture = newTextureHandle,
                             .stateBefore = ResourceState::TransferDst,
-                            .stateAfter = ResourceState::SampleSource,
+                            .stateAfter = createInfo.initialState,
                         }),
                     });
             });
 
         // immediate submit also waits on device idle so staging buffer is not being used here anymore
         vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+    }
+    else if(createInfo.initialState != ResourceState::Undefined)
+    {
+        // Dont upload anything, just transition
+        Engine::get()->getRenderer()->immediateSubmit(
+            [&](VkCommandBuffer cmd)
+            {
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = newTextureHandle,
+                            .stateBefore = ResourceState::Undefined,
+                            .stateAfter = createInfo.initialState,
+                        }),
+                    });
+            });
     }
 
     nameToTextureLUT.insert({std::string{name}, newTextureHandle});
@@ -240,7 +266,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                 .baseMipLevel = 0,
                 .levelCount = imageCrInfo.mipLevels,
                 .baseArrayLayer = 0,
-                .layerCount = arrayLayers,
+                .layerCount = toVkArrayLayers(tex->descriptor),
             },
     };
 
@@ -250,8 +276,12 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
     setDebugName(tex->imageView, (std::string{name} + "_mainView").c_str());
 
     VulkanRenderer& renderer = *VulkanRenderer::get();
-    bool usedForSampling = (createInfo.usage & Texture::Usage::Sampled) != 0u;
-    bool usedForStorage = (createInfo.usage & Texture::Usage::Storage) != 0u;
+    bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
+                           (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
+                           (createInfo.allStates & ResourceState::SampleSourceCompute);
+    bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
+                          (createInfo.allStates & ResourceState::StorageGraphics) ||
+                          (createInfo.allStates & ResourceState::StorageCompute);
 
     if(usedForSampling && usedForStorage)
     {
@@ -286,9 +316,10 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
         .debugName = std::string{debugName},
         .type = Texture::Type::tCube,
         .format = sourceTex->descriptor.format,
-        // TRANSFER_XXX_BITs are needed for blitting to downscale :/
-        .usage = Texture::Usage::Sampled | Texture::Usage::Storage | Texture::Usage::TransferDst |
-                 Texture::Usage::TransferSrc,
+        // TransferXXX states are needed for blitting to downscale :/
+        .allStates = ResourceState::SampleSource | ResourceState::Storage | ResourceState::TransferDst |
+                     ResourceState::TransferSrc,
+        .initialState = ResourceState::SampleSource,
         .size = {.width = cubeResolution, .height = cubeResolution, .depth = 1},
         .mipLevels = Texture::MipLevels::All,
     });
@@ -554,7 +585,7 @@ void Texture::fillMipLevels(Handle<Texture> texture)
                             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                             .mipLevel = uint32_t(i - 1),
                             .baseArrayLayer = 0,
-                            .layerCount = toArrayLayers(tex->descriptor),
+                            .layerCount = toVkArrayLayers(tex->descriptor),
                         },
                     .srcOffsets =
                         {{.x = 0, .y = 0, .z = 0}, {int32_t(lastWidth), int32_t(lastHeight), int32_t(lastDepth)}},
@@ -563,7 +594,7 @@ void Texture::fillMipLevels(Handle<Texture> texture)
                             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                             .mipLevel = uint32_t(i),
                             .baseArrayLayer = 0,
-                            .layerCount = toArrayLayers(tex->descriptor),
+                            .layerCount = toVkArrayLayers(tex->descriptor),
                         },
                     .dstOffsets =
                         {{.x = 0, .y = 0, .z = 0}, {int32_t(curWidth), int32_t(curHeight), int32_t(curDepth)}},

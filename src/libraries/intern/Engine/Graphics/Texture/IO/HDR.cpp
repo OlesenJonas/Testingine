@@ -7,7 +7,8 @@
 #include <Engine/Engine.hpp>
 #include <iostream>
 
-Handle<Texture> HDR::load(std::string_view path, std::string_view debugName, Texture::Usage usage)
+Handle<Texture>
+HDR::load(std::string_view path, std::string_view debugName, ResourceStateMulti states, ResourceState initial)
 {
     int texWidth = 0;
     int texHeight = 0;
@@ -31,7 +32,8 @@ Handle<Texture> HDR::load(std::string_view path, std::string_view debugName, Tex
         // specifying non-default values only
         .debugName = std::string{debugName},
         .format = imageFormat,
-        .usage = usage | Texture::Usage::TransferDst,
+        .allStates = states,
+        .initialState = initial,
         .size = imageExtent,
         .initialData = {(uint8_t*)pixels, pixelCount * sizeof(float)},
     });

@@ -4,6 +4,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include <Datastructures/Span.hpp>
+#include <Engine/Graphics/Graphics.hpp>
 #include <Engine/Misc/EnumHelpers.hpp>
 #include <string>
 
@@ -45,16 +46,6 @@ struct Texture
         d32_float,
     };
 
-    enum Usage : uint32_t
-    {
-        Sampled = nthBit(0u),
-        Storage = nthBit(1u),
-        ColorAttachment = nthBit(2u),
-        DepthStencilAttachment = nthBit(3u),
-        TransferSrc = nthBit(4u),
-        TransferDst = nthBit(5u),
-    };
-
     // Dont really like there being two structs for this (especially with all the duplication)
     // but overall I do like the seperation into createInfo and descriptor
     struct CreateInfo
@@ -63,7 +54,8 @@ struct Texture
 
         Type type = Type::t2D;
         Format format = Format::Undefined;
-        Usage usage = Usage::Sampled;
+        ResourceStateMulti allStates = ResourceState::None;
+        ResourceState initialState = ResourceState::None;
 
         Extent size = {1, 1, 1};
         int32_t mipLevels = 1;
@@ -76,7 +68,7 @@ struct Texture
     {
         Type type = Type::t2D;
         Format format = Format::Undefined;
-        Usage usage = Usage::Sampled;
+        ResourceStateMulti allStates = ResourceState::None;
 
         Extent size = {1, 1, 1};
         int32_t mipLevels = 1;
@@ -99,8 +91,6 @@ struct Texture
     // TODO: not sure I like this being here, maybe some renderer.utils ?
     static void fillMipLevels(Handle<Texture> texture);
 };
-
-ENUM_OPERATOR_OR(Texture::Usage);
 
 // TODO: seperate file!
 struct Sampler

@@ -119,7 +119,8 @@ void VulkanRenderer::initSwapchain()
     depthTexture = rsrcManager.createTexture(Texture::CreateInfo{
         .debugName = "Depth Texture",
         .format = depthFormat,
-        .usage = Texture::Usage::DepthStencilAttachment,
+        .allStates = ResourceState::DepthStencilTarget,
+        .initialState = ResourceState::Undefined,
         .size = {swapchainExtent.width, swapchainExtent.height, 1},
     });
 

@@ -9,7 +9,7 @@
     Should this be here, or next to the vulkan renderer?
 */
 
-constexpr uint32_t toArrayLayers(const Texture::Descriptor& desc)
+constexpr uint32_t toVkArrayLayers(const Texture::Descriptor& desc)
 {
     return desc.type == Texture::Type::tCube ? 6 * desc.arrayLength : desc.arrayLength;
 }
@@ -68,27 +68,6 @@ constexpr VkImageAspectFlags toVkImageAspect(Texture::Format format)
     }
 }
 
-constexpr VkImageUsageFlags toVkUsageSingle(Texture::Usage usage)
-{
-    switch(usage)
-    {
-    case Texture::Usage::Sampled:
-        return VK_IMAGE_USAGE_SAMPLED_BIT;
-    case Texture::Usage::Storage:
-        return VK_IMAGE_USAGE_STORAGE_BIT;
-    case Texture::Usage::ColorAttachment:
-        return VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    case Texture::Usage::DepthStencilAttachment:
-        return VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    case Texture::Usage::TransferSrc:
-        return VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    case Texture::Usage::TransferDst:
-        return VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    default:
-        assert(false && "Unhandled usages to convert");
-    }
-}
-
 constexpr VkImageLayout toVkImageLayout(ResourceState state)
 {
     switch(state)
@@ -125,5 +104,3 @@ constexpr VkImageLayout toVkImageLayout(ResourceState state)
         return VK_IMAGE_LAYOUT_UNDEFINED;
     }
 }
-
-VkImageUsageFlags toVkUsage(Texture::Usage usage);

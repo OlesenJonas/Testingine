@@ -33,7 +33,11 @@ void initScene()
     auto lostEmpireMesh = ResourceManager::get()->createMesh(ASSETS_PATH "/vkguide/lost_empire.obj", "empire");
 
     auto lostEmpireTex = rm->createTexture(
-        ASSETS_PATH "/vkguide/lost_empire-RGBA.png", Texture::Usage::Sampled, false, "empire_diffuse");
+        ASSETS_PATH "/vkguide/lost_empire-RGBA.png",
+        ResourceState::SampleSource,
+        ResourceState::SampleSource,
+        false,
+        "empire_diffuse");
 
     auto linearSampler = rm->createSampler({
         .magFilter = VK_FILTER_LINEAR,
@@ -148,7 +152,10 @@ int main()
     });
 
     auto hdri = engine.getResourceManager()->createTexture(
-        ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr", Texture::Usage::Sampled, true);
+        ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr",
+        ResourceState::SampleSource,
+        ResourceState::SampleSource,
+        true);
     auto hdriCube = rm->createCubemapFromEquirectangular(512, hdri, "HdriCubemap");
 
     Handle<ComputeShader> calcIrradianceComp = rm->createComputeShader(
@@ -160,14 +167,13 @@ int main()
         .debugName = "hdriIrradiance",
         .type = Texture::Type::tCube,
         .format = Texture::Format::r16g16b16a16_float,
-        .usage = Texture::Usage::Sampled | Texture::Usage::Storage,
+        // .usage = Texture::Usage::Sampled | Texture::Usage::Storage,
+        .allStates = ResourceState::SampleSource | ResourceState::Storage,
+        .initialState = ResourceState::Undefined,
         .size = {irradianceRes, irradianceRes, 1},
     });
     {
         Texture* irradianceTex = rm->get(irradianceTexHandle);
-
-        // generate the irradiance
-        //   TODO: factor out stuff from here, shouldnt be this much code
 
         VulkanRenderer* renderer = Engine::get()->getRenderer();
         renderer->immediateSubmit(
@@ -175,7 +181,7 @@ int main()
             {
                 ResourceManager* rm = Engine::get()->getResourceManager();
 
-                // transfer dst texture to general layout
+                // transfer dst texture to compute storage state
                 submitBarriers(
                     cmd,
                     {
@@ -250,7 +256,8 @@ int main()
         .debugName = "prefilteredEnvMap",
         .type = Texture::Type::tCube,
         .format = Texture::Format::r16g16b16a16_float,
-        .usage = Texture::Usage::Sampled | Texture::Usage::Storage,
+        .allStates = ResourceState::SampleSource | ResourceState::Storage,
+        .initialState = ResourceState::Storage,
         .size = {prefilteredEnvMapBaseSize, prefilteredEnvMapBaseSize, 1},
         .mipLevels = Texture::MipLevels::All,
     });
