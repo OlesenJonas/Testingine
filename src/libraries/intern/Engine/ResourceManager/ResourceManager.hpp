@@ -8,6 +8,7 @@
 #include <Engine/Graphics/Material/Material.hpp>
 #include <Engine/Graphics/Material/MaterialInstance.hpp>
 #include <Engine/Graphics/Mesh/Mesh.hpp>
+#include <Engine/Graphics/Texture/Sampler.hpp>
 #include <Engine/Graphics/Texture/Texture.hpp>
 #include <Engine/Graphics/Texture/TextureView.hpp>
 #include <Engine/Misc/StringHash.hpp>

@@ -1,7 +1,7 @@
 #include "Scene.hpp"
 #include "DefaultComponents.hpp"
 #include "glTF/glTF.hpp"
-#include "glTF/glTFtoVK.hpp"
+#include "glTF/glTFtoTI.hpp"
 
 #include <Datastructures/Pool.hpp>
 #include <Engine.hpp>
@@ -77,11 +77,11 @@ void Scene::load(std::string path)
     {
         auto& samplerInfo = gltf.samplers[i];
         samplers[i] = rm->createSampler(Sampler::Info{
-            .magFilter = glTF::toVk::magFilter(samplerInfo.magFilter),
-            .minFilter = glTF::toVk::minFilter(samplerInfo.minFilter),
-            .mipmapMode = glTF::toVk::mipmapMode(samplerInfo.minFilter),
-            .addressModeU = glTF::toVk::addressMode(samplerInfo.wrapS),
-            .addressModeV = glTF::toVk::addressMode(samplerInfo.wrapT),
+            .magFilter = glTF::toEngine::magFilter(samplerInfo.magFilter),
+            .minFilter = glTF::toEngine::minFilter(samplerInfo.minFilter),
+            .mipMapFilter = glTF::toEngine::mipmapMode(samplerInfo.minFilter),
+            .addressModeU = glTF::toEngine::addressMode(samplerInfo.wrapS),
+            .addressModeV = glTF::toEngine::addressMode(samplerInfo.wrapT),
         });
     }
 

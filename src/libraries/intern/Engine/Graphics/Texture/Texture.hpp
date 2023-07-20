@@ -16,9 +16,9 @@ struct Texture
 {
     struct Extent
     {
-        uint32_t width;
-        uint32_t height;
-        uint32_t depth;
+        uint32_t width = 1;
+        uint32_t height = 1;
+        uint32_t depth = 1;
     };
 
     enum MipLevels : int32_t
@@ -110,31 +110,3 @@ struct Texture
     // TODO: not sure I like this being here, maybe some renderer.utils ?
     static void fillMipLevels(Handle<Texture> texture, ResourceState state);
 };
-
-// TODO: seperate file!
-struct Sampler
-{
-    struct Info
-    {
-        VkSamplerCreateFlags flags = 0;
-        VkFilter magFilter = VK_FILTER_LINEAR;
-        VkFilter minFilter = VK_FILTER_LINEAR;
-        VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        VkSamplerAddressMode addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        VkSamplerAddressMode addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        VkSamplerAddressMode addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        float mipLodBias = 0.0f;
-        VkBool32 anisotropyEnable = VK_FALSE;
-        float maxAnisotropy = 0.0f;
-        VkBool32 compareEnable = VK_FALSE;
-        VkCompareOp compareOp = VK_COMPARE_OP_NEVER;
-        float minLod = 0.0;
-        float maxLod = VK_LOD_CLAMP_NONE;
-        VkBorderColor borderColor;
-        VkBool32 unnormalizedCoordinates = VK_FALSE;
-    };
-    Info info;
-    VkSampler sampler;
-    uint32_t resourceIndex = 0xFFFFFFFF;
-};
-bool operator==(const Sampler::Info& lhs, const Sampler::Info& rhs);

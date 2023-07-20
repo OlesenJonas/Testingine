@@ -1,6 +1,7 @@
 #include <Engine/Engine.hpp>
 #include <Engine/Graphics/Barriers/Barrier.hpp>
-#include <Engine/Graphics/Texture/TexToVulkan.hpp>
+#include <Engine/Graphics/Texture/Sampler.hpp>
+#include <Engine/Graphics/Texture/TextureToVulkan.hpp>
 #include <Engine/Scene/DefaultComponents.hpp>
 #include <Engine/Scene/Scene.hpp>
 #include <glm/gtx/transform.hpp>
@@ -39,21 +40,6 @@ void initScene()
         .initialState = ResourceState::SampleSource,
     });
 
-    auto linearSampler = rm->createSampler({
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    });
-    auto blockySampler = rm->createSampler({
-        .magFilter = VK_FILTER_NEAREST,
-        .minFilter = VK_FILTER_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    });
-
     auto defaultMaterial = rm->createMaterial(
         {
             .vertexShader = {.sourcePath = SHADERS_PATH "/tri_mesh.vert"},
@@ -73,7 +59,7 @@ void initScene()
 
     MaterialInstance* matInst = rm->get(texturedMaterialInstance);
     matInst->parameters.setResource("colorTexture", rm->get(lostEmpireTex)->resourceIndex);
-    matInst->parameters.setResource("blockySampler", rm->get(blockySampler)->resourceIndex);
+    // matInst->parameters.setResource("blockySampler", rm->get(blockySampler)->resourceIndex);
     matInst->parameters.pushChanges();
 
     // Scene
@@ -144,11 +130,20 @@ int main()
     Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf");
 
     auto linearSampler = rm->createSampler({
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .magFilter = Sampler::Filter::Linear,
+        .minFilter = Sampler::Filter::Linear,
+        .mipMapFilter = Sampler::Filter::Linear,
+        .addressModeU = Sampler::AddressMode::Repeat,
+        .addressModeV = Sampler::AddressMode::Repeat,
+        .addressModeW = Sampler::AddressMode::Repeat,
+    });
+    auto blockySampler = rm->createSampler({
+        .magFilter = Sampler::Filter::Nearest,
+        .minFilter = Sampler::Filter::Nearest,
+        .mipMapFilter = Sampler::Filter::Nearest,
+        .addressModeU = Sampler::AddressMode::Repeat,
+        .addressModeV = Sampler::AddressMode::Repeat,
+        .addressModeW = Sampler::AddressMode::Repeat,
     });
 
     auto hdri = engine.getResourceManager()->createTexture(Texture::LoadInfo{
@@ -279,14 +274,6 @@ int main()
                     0,
                     nullptr);
 
-                auto cubeSampler = rm->createSampler({
-                    .magFilter = VK_FILTER_LINEAR,
-                    .minFilter = VK_FILTER_LINEAR,
-                    .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                    .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                    .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                });
-
                 struct ConversionPushConstants
                 {
                     uint32_t sourceIndex;
@@ -295,7 +282,7 @@ int main()
                 };
                 ConversionPushConstants constants{
                     .sourceIndex = rm->get(hdriCube)->resourceIndex,
-                    .samplerIndex = rm->get(cubeSampler)->resourceIndex,
+                    .samplerIndex = rm->get(linearSampler)->resourceIndex,
                     .targetIndex = irradianceTex->resourceIndex,
                 };
 

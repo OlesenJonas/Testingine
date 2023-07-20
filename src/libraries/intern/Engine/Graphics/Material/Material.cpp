@@ -4,7 +4,7 @@
 #include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
 #include <Engine/Graphics/Shaders/GLSL.hpp>
 #include <Engine/Graphics/Shaders/HLSL.hpp>
-#include <Engine/Graphics/Texture/TexToVulkan.hpp>
+#include <Engine/Graphics/Texture/TextureToVulkan.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <Graphics/Shaders/Shaders.hpp>
 #include <SPIRV-Reflect/spirv_reflect.h>

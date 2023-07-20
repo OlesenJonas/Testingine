@@ -2,7 +2,7 @@
 
 #include "Barrier.hpp"
 #include <Engine/Engine.hpp>
-#include <Graphics/Texture/TexToVulkan.hpp>
+#include <Graphics/Texture/TextureToVulkan.hpp>
 
 void submitBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers)
 {
