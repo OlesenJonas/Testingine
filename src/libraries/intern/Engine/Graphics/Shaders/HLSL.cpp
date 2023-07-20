@@ -86,6 +86,9 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
         L"-fspv-target-env=vulkan1.3",
         L"-fvk-use-scalar-layout",
     // L"-fspv-reflect",
+    // TODO: not sure if vcpkg version uses latest yet, which includes this, but its needed for RWStructuredBuffer
+    // L"fvk_allow_rwstructuredbuffer_arrays",
+
 #ifndef NDEBUG
     // L"-fspv-debug=vulkan-with-source", //CURRENTLY BROKEN :/
 #endif
