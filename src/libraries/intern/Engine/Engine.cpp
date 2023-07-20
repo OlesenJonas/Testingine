@@ -24,6 +24,40 @@ Engine::Engine()
     sceneRoot.addComponent<Transform>();
     sceneRoot.addComponent<Hierarchy>();
 
+    // Create default Samplers
+
+// WARNING when changing these, also change them in Shaders/Bindless/Sampler.hlsl
+#define DEFAULT_SAMPLER_LINEAR 0
+#define DEFAULT_SAMPLER_NEAREST 1
+    constexpr Sampler::Info defaultInfos[] = {
+        {
+            .magFilter = Sampler::Filter::Linear,
+            .minFilter = Sampler::Filter::Linear,
+            .mipMapFilter = Sampler::Filter::Linear,
+            .addressModeU = Sampler::AddressMode::Repeat,
+            .addressModeV = Sampler::AddressMode::Repeat,
+            .addressModeW = Sampler::AddressMode::Repeat,
+        },
+        {
+            .magFilter = Sampler::Filter::Nearest,
+            .minFilter = Sampler::Filter::Nearest,
+            .mipMapFilter = Sampler::Filter::Nearest,
+            .addressModeU = Sampler::AddressMode::Repeat,
+            .addressModeV = Sampler::AddressMode::Repeat,
+            .addressModeW = Sampler::AddressMode::Repeat,
+        },
+    };
+    {
+        auto linearSampler = resourceManager.createSampler(Sampler::Info{defaultInfos[DEFAULT_SAMPLER_LINEAR]});
+        assert(resourceManager.get(linearSampler)->info == defaultInfos[DEFAULT_SAMPLER_LINEAR]);
+        assert(resourceManager.get(linearSampler)->resourceIndex == DEFAULT_SAMPLER_LINEAR);
+    }
+    {
+        auto nearestSampler = resourceManager.createSampler(Sampler::Info{defaultInfos[DEFAULT_SAMPLER_NEAREST]});
+        assert(resourceManager.get(nearestSampler)->info == defaultInfos[DEFAULT_SAMPLER_NEAREST]);
+        assert(resourceManager.get(nearestSampler)->resourceIndex == DEFAULT_SAMPLER_NEAREST);
+    }
+
     resourceManager.createMaterial(
         {
             .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},

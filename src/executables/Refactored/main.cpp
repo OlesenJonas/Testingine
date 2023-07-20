@@ -129,23 +129,6 @@ int main()
     //  would engine.loadScene(...) make more sense?
     Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf");
 
-    auto linearSampler = rm->createSampler({
-        .magFilter = Sampler::Filter::Linear,
-        .minFilter = Sampler::Filter::Linear,
-        .mipMapFilter = Sampler::Filter::Linear,
-        .addressModeU = Sampler::AddressMode::Repeat,
-        .addressModeV = Sampler::AddressMode::Repeat,
-        .addressModeW = Sampler::AddressMode::Repeat,
-    });
-    auto blockySampler = rm->createSampler({
-        .magFilter = Sampler::Filter::Nearest,
-        .minFilter = Sampler::Filter::Nearest,
-        .mipMapFilter = Sampler::Filter::Nearest,
-        .addressModeU = Sampler::AddressMode::Repeat,
-        .addressModeV = Sampler::AddressMode::Repeat,
-        .addressModeW = Sampler::AddressMode::Repeat,
-    });
-
     auto hdri = engine.getResourceManager()->createTexture(Texture::LoadInfo{
         .path = ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr",
         .fileDataIsLinear = true,
@@ -169,11 +152,9 @@ int main()
     struct ConversionPushConstants
     {
         uint32_t sourceIndex;
-        uint32_t samplerIndex;
         uint32_t targetIndex;
     } constants = {
         .sourceIndex = rm->get(hdri)->resourceIndex,
-        .samplerIndex = rm->get(linearSampler)->resourceIndex,
         .targetIndex = rm->get(hdriCube)->resourceIndex,
     };
     {
@@ -277,12 +258,10 @@ int main()
                 struct ConversionPushConstants
                 {
                     uint32_t sourceIndex;
-                    uint32_t samplerIndex;
                     uint32_t targetIndex;
                 };
                 ConversionPushConstants constants{
                     .sourceIndex = rm->get(hdriCube)->resourceIndex,
-                    .samplerIndex = rm->get(linearSampler)->resourceIndex,
                     .targetIndex = irradianceTex->resourceIndex,
                 };
 
@@ -326,7 +305,6 @@ int main()
     // TODO: getPtrTmp() function (explicitetly state temporary!)
     auto* basicPBRMaterial = rm->get(rm->getMaterial("PBRBasic"));
     basicPBRMaterial->parameters.setResource("irradianceTex", rm->get(irradianceTexHandle)->resourceIndex);
-    basicPBRMaterial->parameters.setResource("irradianceSampler", rm->get(linearSampler)->resourceIndex);
     basicPBRMaterial->parameters.pushChanges();
 
     auto defaultCube = rm->getMesh("DefaultCube");
@@ -345,7 +323,6 @@ int main()
     {
         auto* inst = rm->get(equiSkyboxMatInst);
         inst->parameters.setResource("equirectangularMap", rm->get(hdri)->resourceIndex);
-        inst->parameters.setResource("defaultSampler", rm->get(linearSampler)->resourceIndex);
         inst->parameters.pushChanges();
     }
 
@@ -361,7 +338,6 @@ int main()
         auto* inst = rm->get(cubeSkyboxMatInst);
         inst->parameters.setResource("cubeMap", rm->get(hdriCube)->resourceIndex);
         // inst->parameters.setResource("cubeMap", rm->get(irradianceTexHandle)->sampledResourceIndex);
-        inst->parameters.setResource("defaultSampler", rm->get(linearSampler)->resourceIndex);
         inst->parameters.pushChanges();
     }
 

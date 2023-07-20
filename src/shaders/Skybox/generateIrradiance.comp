@@ -2,7 +2,6 @@
 
 DefineShaderInputs(
     Handle< TextureCube<float4> > sourceTex;
-    Handle< SamplerState > sourceSampler;
     Handle< RWTexture2DArray<float4> > irradianceTex;
 );
 
@@ -19,7 +18,6 @@ void main(
     int3 id = GlobalInvocationID;
 
     TextureCube<float4> sourceTex = shaderInputs.sourceTex.get();
-    SamplerState sourceSampler = shaderInputs.sourceSampler.get();
 
     //TODO: getLocalPos(tex, id) helper function?
     RWTexture2DArray<float4> targetTex = shaderInputs.irradianceTex.get();
@@ -64,7 +62,7 @@ void main(
             float3 tempVec = cos(phi) * right + sin(phi) * up;
             float3 sampleVector = cos(theta) * N + sin(theta) * tempVec;
             // color += textureCubeLod(s_source, sampleVector, 0).rgb * cos(theta) * sin(theta);
-            color += sourceTex.SampleLevel(sourceSampler, sampleVector, 0).rgb * cos(theta) * sin(theta);
+            color += sourceTex.SampleLevel(LinearRepeatSampler, sampleVector, 0).rgb * cos(theta) * sin(theta);
             sampleCount++;
         }
     }

@@ -3,19 +3,8 @@
 
 #include "Common.hlsl"
 #include "Buffers.hlsl"
-
+#include "Samplers.hlsl"
 // todo: split into multiple files?
-
-// ------------- Samplers
-
-// Just one type of SamplerState, so this is done "manually"
-[[vk::binding(0, SAMPLED_IMG_SET)]]
-SamplerState g_samplerState[GLOBAL_SAMPLER_COUNT];
-template<>
-SamplerState Handle<SamplerState>::get()
-{
-    return g_samplerState[resourceHandle];
-}
 
 // ------------- Textures                                                            
 

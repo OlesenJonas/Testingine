@@ -2,7 +2,6 @@
 
 StructForBindless(MaterialInstanceParameters,
     Handle< Texture2D<float4> > equirectangularMap;
-    Handle< SamplerState > defaultSampler;
 );
 
 DefineShaderInputs(
@@ -36,8 +35,7 @@ float4 main(VSOutput input) : SV_TARGET
 {
     const MaterialInstanceParameters params = shaderInputs.materialInstanceParams.Load();
     const Texture2D<float4> equirectangularMap = params.equirectangularMap.get();
-    const SamplerState defaultSampler = params.defaultSampler.get();
 
-    float4 color = equirectangularMap.Sample(defaultSampler, sampleSphericalMap(normalize(input.localPos)));
+    float4 color = equirectangularMap.Sample(LinearRepeatSampler, sampleSphericalMap(normalize(input.localPos)));
     return color;
 }

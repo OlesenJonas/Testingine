@@ -2,7 +2,6 @@
 
 DefineShaderInputs(
     Handle< Texture2D<float4> > sourceTex;
-    Handle< SamplerState > sourceSampler;
     Handle< RWTexture2DArray<float4> > targetTex;
 );
 
@@ -46,7 +45,7 @@ void main(
 
     float3 color =
         shaderInputs.sourceTex.get().SampleLevel(
-            shaderInputs.sourceSampler.get(),
+            LinearRepeatSampler,
             sampleSphericalMap(normalize(localPos)),
             0
         ).xyz;

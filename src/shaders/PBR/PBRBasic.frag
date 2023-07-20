@@ -11,28 +11,17 @@
 StructForBindless(MaterialParameters,
     /* TODO: should be part of scene information, not material */
     Handle< TextureCube<float4> > irradianceTex;
-    Handle< SamplerState > irradianceSampler;
 );
 
-/*
-    Atm dont need a sampler per texture really...
-    just name the sampler after its settings and upload one
-        dont really know why glTF would realistically give any texture
-        a different sampler (for basic use cases)
-*/
 StructForBindless(MaterialInstanceParameters,
     //TODO: check again, but im pretty sure these are all float4 textures
     Handle< Texture2D<float4> > normalTexture;
-    Handle< SamplerState > normalSampler;
 
     Handle< Texture2D<float4> > baseColorTexture;
-    Handle< SamplerState > baseColorSampler;
 
     Handle< Texture2D<float4> > metalRoughTexture;
-    Handle< SamplerState > metalRoughSampler;
 
     Handle< Texture2D<float4> > occlusionTexture;
-    Handle< SamplerState > occlusionSampler;
 );
 
 DefineShaderInputs(
@@ -63,9 +52,8 @@ float4 main(VSOutput input) : SV_TARGET
     MaterialParameters params = shaderInputs.materialParams.Load();
     MaterialInstanceParameters instanceParams = shaderInputs.materialInstanceParams.Load();
     Texture2D normalTexture =  instanceParams.normalTexture.get();
-    SamplerState normalSampler = instanceParams.normalSampler.get();
 
-    float3 nrmSampleTS = normalTexture.Sample(normalSampler, input.vTexCoord).xyz;
+    float3 nrmSampleTS = normalTexture.Sample(LinearRepeatSampler, input.vTexCoord).xyz;
     nrmSampleTS = 2 * nrmSampleTS - 1;
     // normal map is OpenGL style y direction
     //  todo: make parameter? Can be controlled through texture view?
@@ -82,18 +70,15 @@ float4 main(VSOutput input) : SV_TARGET
     const float3 cameraPositionWS = renderPassData.cameraPositionWS;
 
     Texture2D colorTexture = instanceParams.baseColorTexture.get();
-    SamplerState colorSampler = instanceParams.baseColorSampler.get();
-    float3 baseColor = colorTexture.Sample(colorSampler, input.vTexCoord).rgb;
+    float3 baseColor = colorTexture.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
 
     Texture2D mrTexture = instanceParams.metalRoughTexture.get();
-    SamplerState mrSampler = instanceParams.metalRoughSampler.get();
-    float3 metalRough = mrTexture.Sample(mrSampler, input.vTexCoord).rgb;
+    float3 metalRough = mrTexture.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
     float metal = metalRough.z;
     float roughness = metalRough.y;
 
     Texture2D occlusionTexture = instanceParams.occlusionTexture.get();
-    SamplerState occlusionSampler = instanceParams.occlusionSampler.get();
-    float occlusion = occlusionTexture.Sample(occlusionSampler, input.vTexCoord).x;
+    float occlusion = occlusionTexture.Sample(LinearRepeatSampler, input.vTexCoord).x;
 
     // float3 color = 0.5+0.5*vNormalWS;
     // float3 color = 0.5+0.5*normalWS;
@@ -139,11 +124,10 @@ float4 main(VSOutput input) : SV_TARGET
 
     // Ambient lighting
     TextureCube<float4> irradianceTex = params.irradianceTex.get();
-    SamplerState irradianceSampler = params.irradianceSampler.get();
     
     float3 kS = fresnelSchlickRoughness(max(dot(normalWS, V),0), F0, roughness);
     float3 kD = 1.0 - kS;
-    float3 irradiance = irradianceTex.SampleLevel(irradianceSampler, normalWS, 0).rgb;
+    float3 irradiance = irradianceTex.SampleLevel(LinearRepeatSampler, normalWS, 0).rgb;
     float3 diffuse = irradiance * baseColor;
     float3 ambient = (kD * diffuse) * occlusion;
 

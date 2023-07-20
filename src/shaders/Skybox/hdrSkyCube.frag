@@ -2,7 +2,6 @@
 
 StructForBindless(MaterialInstanceParameters,
     Handle< TextureCube<float4> > cubeMap;
-    Handle< SamplerState > defaultSampler;
 );
 
 DefineShaderInputs(
@@ -27,9 +26,8 @@ float4 main(VSOutput input) : SV_TARGET
 {
     const MaterialInstanceParameters params = shaderInputs.materialInstanceParams.Load();
     const TextureCube<float4> cubeMap = params.cubeMap.get();
-    const SamplerState defaultSampler = params.defaultSampler.get();
 
-    float4 color = cubeMap.Sample(defaultSampler, normalize(input.localPos));
+    float4 color = cubeMap.Sample(LinearRepeatSampler, normalize(input.localPos));
 
     return color;
 }
