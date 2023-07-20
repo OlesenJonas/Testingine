@@ -1,7 +1,6 @@
 #include "Texture.hpp"
 #include "Graphics/Renderer/VulkanRenderer.hpp"
 #include "Graphics/Texture/Texture.hpp"
-#include "IO/HDR.hpp"
 #include "TexToVulkan.hpp"
 #include <Engine/Engine.hpp>
 #include <Engine/Graphics/Barriers/Barrier.hpp>
@@ -12,61 +11,39 @@
 #include <stb/stb_image.h>
 #include <vulkan/vulkan_core.h>
 
-Handle<Texture> ResourceManager::createTexture(
-    const char* file, ResourceStateMulti states, ResourceState initial, bool dataIsLinear, std::string_view name)
+Handle<Texture> ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
 {
-    std::string_view fileView{file};
-    auto lastDirSep = fileView.find_last_of("/\\");
-    auto extensionStart = fileView.find_last_of('.');
-    std::string_view texName =
-        name.empty() ? fileView.substr(lastDirSep + 1, extensionStart - lastDirSep - 1) : name;
+    auto lastDirSep = loadInfo.path.find_last_of("/\\");
+    auto extensionStart = loadInfo.path.find_last_of('.');
+    std::string_view texName = loadInfo.debugName.empty()
+                                   ? loadInfo.path.substr(lastDirSep + 1, extensionStart - lastDirSep - 1)
+                                   : loadInfo.debugName;
+
+    loadInfo.debugName = texName;
 
     // todo: handle naming collisions
     auto iterator = nameToMeshLUT.find(texName);
     assert(iterator == nameToMeshLUT.end());
 
-    std::string_view extension = fileView.substr(extensionStart);
+    std::string_view extension = loadInfo.path.substr(extensionStart);
 
     // TODO: LOG: warn if not alraedy set
-    states |= ResourceState::TransferDst;
+    loadInfo.allStates |= ResourceState::TransferDst;
 
+    Texture::CreateInfo createInfo;
+    std::function<void()> cleanupFunc;
     if(extension == ".hdr")
     {
-        return HDR::load(fileView, texName, states, initial);
+        std::tie(createInfo, cleanupFunc) = Texture::loadHDR(std::move(loadInfo));
     }
-
-    // else just use default stbi_load for now
-    //   TODO: refactor and split into multiple functions
-
-    int texWidth = 0;
-    int texHeight = 0;
-    int texChannels = 0;
-    stbi_uc* pixels = stbi_load(file, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-    if(pixels == nullptr)
+    else
     {
-        std::cout << "Failed to load texture file: " << file << std::endl;
-        return {};
+        std::tie(createInfo, cleanupFunc) = Texture::loadDefault(std::move(loadInfo));
     }
-    void* pixelPtr = pixels;
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
-    Texture::Format imageFormat = dataIsLinear ? Texture::Format::r8g8b8a8_unorm : Texture::Format::r8g8b8a8_srgb;
-    Texture::Extent imageExtent{
-        .width = (uint32_t)texWidth,
-        .height = (uint32_t)texHeight,
-        .depth = 1,
-    };
 
-    Handle<Texture> newTextureHandle = createTexture(Texture::CreateInfo{
-        // specifying non-default values only
-        .debugName = std::string{texName},
-        .format = imageFormat,
-        .allStates = states,
-        .initialState = initial,
-        .size = imageExtent,
-        .initialData = {pixels, imageSize},
-    });
+    Handle<Texture> newTextureHandle = createTexture(std::move(createInfo));
 
-    stbi_image_free(pixels);
+    cleanupFunc();
 
     return newTextureHandle;
 }
@@ -223,6 +200,11 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 
         // immediate submit also waits on device idle so staging buffer is not being used here anymore
         vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+
+        if(createInfo.fillMipLevels && createInfo.mipLevels > 1)
+        {
+            Texture::fillMipLevels(newTextureHandle, createInfo.initialState);
+        }
     }
     else if(createInfo.initialState != ResourceState::Undefined)
     {
@@ -408,7 +390,7 @@ Handle<Texture> ResourceManager::createCubemapFromEquirectangular(
                 });
         });
 
-    Texture::fillMipLevels(cubeTextureHandle);
+    Texture::fillMipLevels(cubeTextureHandle, ResourceState::SampleSource);
 
     return cubeTextureHandle;
 }
@@ -516,7 +498,7 @@ bool operator==(const Sampler::Info& lhs, const Sampler::Info& rhs)
 #undef EQUAL_MEMBER
 }
 
-void Texture::fillMipLevels(Handle<Texture> texture)
+void Texture::fillMipLevels(Handle<Texture> texture, ResourceState state)
 {
     /*
         TODO: check that image was created with usage_transfer_src_bit !
@@ -540,17 +522,23 @@ void Texture::fillMipLevels(Handle<Texture> texture)
     renderer->immediateSubmit(
         [=](VkCommandBuffer cmd)
         {
-            // Transfer 1st mip to transfer source
-            submitBarriers(
-                cmd,
-                {
-                    Barrier::from(Barrier::Image{
-                        .texture = texture,
-                        // TODO: need better way to determine initial state, pass as parameter?
-                        .stateBefore = ResourceState::SampleSource,
-                        .stateAfter = ResourceState::TransferSrc,
-                    }),
-                });
+            // Transition mip 0 to transfer source
+            if(state != ResourceState::TransferSrc)
+            {
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = texture,
+                            .stateBefore = state,
+                            .stateAfter = ResourceState::TransferSrc,
+                            .mipLevel = 0,
+                            .mipCount = 1,
+                            // TODO: also have a Texture::ArrayLayers::All value? And set that as default?
+                            .arrayLength = int32_t(tex->descriptor.arrayLength),
+                        }),
+                    });
+            }
 
             // Generate mip chain
             // Downscaling from each level successively, but could also downscale mip 0 -> mip N each time
@@ -558,18 +546,21 @@ void Texture::fillMipLevels(Handle<Texture> texture)
             for(int i = 1; i < tex->descriptor.mipLevels; i++)
             {
                 // prepare current level to be transfer dst
-                submitBarriers(
-                    cmd,
-                    {
-                        Barrier::from(Barrier::Image{
-                            .texture = texture,
-                            // TODO: need better way to determine initial state, pass as parameter?
-                            .stateBefore = ResourceState::TransferSrc,
-                            .stateAfter = ResourceState::TransferDst,
-                            .mipLevel = i,
-                            .arrayLength = int32_t(tex->descriptor.arrayLength),
-                        }),
-                    });
+                if(state != ResourceState::TransferSrc)
+                {
+                    submitBarriers(
+                        cmd,
+                        {
+                            Barrier::from(Barrier::Image{
+                                .texture = texture,
+                                .stateBefore = state,
+                                .stateAfter = ResourceState::TransferDst,
+                                .mipLevel = i,
+                                .mipCount = 1,
+                                .arrayLength = int32_t(tex->descriptor.arrayLength),
+                            }),
+                        });
+                }
 
                 uint32_t lastWidth = std::max(startWidth >> (i - 1), 1u);
                 uint32_t lastHeight = std::max(startHeight >> (i - 1), 1u);
@@ -621,20 +612,20 @@ void Texture::fillMipLevels(Handle<Texture> texture)
                             .stateBefore = ResourceState::TransferDst,
                             .stateAfter = ResourceState::TransferSrc,
                             .mipLevel = i,
+                            .mipCount = 1,
                             .arrayLength = int32_t(tex->descriptor.arrayLength),
                         }),
                     });
             }
 
-            // after the loop, transfer all mips to SHADER_READ_OPTIMAL
+            // after the loop, transfer all mips to input state
             submitBarriers(
                 cmd,
                 {
                     Barrier::from(Barrier::Image{
                         .texture = texture,
-                        // TODO: need better way to determine initial state, pass as parameter?
                         .stateBefore = ResourceState::TransferSrc,
-                        .stateAfter = ResourceState::SampleSource,
+                        .stateAfter = state,
                         .mipLevel = 0,
                         .mipCount = tex->descriptor.mipLevels,
                         .arrayLength = int32_t(tex->descriptor.arrayLength),

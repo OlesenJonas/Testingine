@@ -3,21 +3,21 @@
 
 #include <iostream>
 
-Texture::LoadResult Texture::loadHDR(Texture::LoadInfo&& loadInfo)
+Texture::LoadResult Texture::loadDefault(Texture::LoadInfo&& loadInfo)
 {
-    assert(!loadInfo.debugName.empty());
     int texWidth = 0;
     int texHeight = 0;
     int texChannels = 0;
-    float* pixels = stbi_loadf(loadInfo.path.data(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(loadInfo.path.data(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     if(pixels == nullptr)
     {
         std::cout << "Failed to load texture file: " << loadInfo.path << std::endl;
         return {};
     }
     void* pixelPtr = pixels;
-    VkDeviceSize pixelCount = texWidth * texHeight * 4; // 4 since load forces rgb_alpha
-    Texture::Format imageFormat = Texture::Format::r32g32b32a32_float;
+    VkDeviceSize imageSize = texWidth * texHeight * 4;
+    Texture::Format imageFormat =
+        loadInfo.fileDataIsLinear ? Texture::Format::r8g8b8a8_unorm : Texture::Format::r8g8b8a8_srgb;
     Texture::Extent imageExtent{
         .width = (uint32_t)texWidth,
         .height = (uint32_t)texHeight,
@@ -45,7 +45,7 @@ Texture::LoadResult Texture::loadHDR(Texture::LoadInfo&& loadInfo)
             .initialState = loadInfo.initialState,
             .size = imageExtent,
             .mipLevels = loadInfo.mipLevels,
-            .initialData = {(uint8_t*)pixels, pixelCount * sizeof(float)},
+            .initialData = {pixels, imageSize},
         },
         [pixels]()
         {

@@ -6,6 +6,7 @@
 #include <Datastructures/Span.hpp>
 #include <Engine/Graphics/Graphics.hpp>
 #include <Engine/Misc/EnumHelpers.hpp>
+#include <functional>
 #include <string>
 
 template <typename T>
@@ -46,8 +47,17 @@ struct Texture
         d32_float,
     };
 
-    // Dont really like there being two structs for this (especially with all the duplication)
-    // but overall I do like the seperation into createInfo and descriptor
+    struct LoadInfo
+    {
+        std::string_view path;
+        std::string_view debugName;
+        bool fileDataIsLinear = false;
+        int32_t mipLevels = 1;
+        bool fillMipLevels = true;
+        ResourceStateMulti allStates = ResourceState::None;
+        ResourceState initialState = ResourceState::Undefined;
+    };
+
     struct CreateInfo
     {
         std::string debugName = ""; // NOLINT
@@ -62,7 +72,13 @@ struct Texture
         uint32_t arrayLength = 1;
 
         Span<uint8_t> initialData;
+        bool fillMipLevels = true;
     };
+
+    /*
+        2nd member is a destroyer function to handle the memory pointed to by inital data inside the create info
+    */
+    using LoadResult = std::pair<Texture::CreateInfo, std::function<void()>>;
 
     struct Descriptor
     {
@@ -88,8 +104,11 @@ struct Texture
     VmaAllocation allocation = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
 
+    static LoadResult loadHDR(Texture::LoadInfo&& loadInfo);
+    static LoadResult loadDefault(Texture::LoadInfo&& loadInfo);
+
     // TODO: not sure I like this being here, maybe some renderer.utils ?
-    static void fillMipLevels(Handle<Texture> texture);
+    static void fillMipLevels(Handle<Texture> texture, ResourceState state);
 };
 
 // TODO: seperate file!

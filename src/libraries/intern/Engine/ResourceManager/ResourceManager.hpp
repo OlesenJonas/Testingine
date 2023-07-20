@@ -39,14 +39,7 @@ class ResourceManager
         std::string_view name);
 
     Handle<Texture> createTexture(Texture::CreateInfo&& createInfo);
-    // TODO: no longer take all parameters individually, also expose a "loadInfo"
-    //       struct?
-    Handle<Texture> createTexture(
-        const char* file,
-        ResourceStateMulti states,
-        ResourceState initialState,
-        bool dataIsLinear,
-        std::string_view name = "");
+    Handle<Texture> createTexture(Texture::LoadInfo&& loadInfo);
     Handle<Texture> createCubemapFromEquirectangular(
         uint32_t cubeResolution, Handle<Texture> equirectangularSource, std::string_view debugName);
 

@@ -26,6 +26,10 @@ void submitBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers)
                 BREAKPOINT;
                 continue; // TODO: LOG warning
             }
+            assert(tex->descriptor.mipLevels > 0);
+            int32_t mipCount = barrier.image.mipCount == Texture::MipLevels::All
+                                   ? tex->descriptor.mipLevels - barrier.image.mipLevel
+                                   : barrier.image.mipCount;
 
             VkImageMemoryBarrier2 vkBarrier{
                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -48,7 +52,7 @@ void submitBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers)
                     {
                         .aspectMask = toVkImageAspect(tex->descriptor.format),
                         .baseMipLevel = static_cast<uint32_t>(barrier.image.mipLevel),
-                        .levelCount = static_cast<uint32_t>(barrier.image.mipCount),
+                        .levelCount = static_cast<uint32_t>(mipCount),
                         .baseArrayLayer = static_cast<uint32_t>(barrier.image.arrayLayer),
                         .layerCount = static_cast<uint32_t>(
                             tex->descriptor.type == Texture::Type::tCube ? 6 * barrier.image.arrayLength

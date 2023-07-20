@@ -32,12 +32,12 @@ void initScene()
 
     auto lostEmpireMesh = ResourceManager::get()->createMesh(ASSETS_PATH "/vkguide/lost_empire.obj", "empire");
 
-    auto lostEmpireTex = rm->createTexture(
-        ASSETS_PATH "/vkguide/lost_empire-RGBA.png",
-        ResourceState::SampleSource,
-        ResourceState::SampleSource,
-        false,
-        "empire_diffuse");
+    auto lostEmpireTex = rm->createTexture(Texture::LoadInfo{
+        .path = ASSETS_PATH "/vkguide/lost_empire-RGBA.png",
+        .debugName = "empire_diffuse",
+        .allStates = ResourceState::SampleSource,
+        .initialState = ResourceState::SampleSource,
+    });
 
     auto linearSampler = rm->createSampler({
         .magFilter = VK_FILTER_LINEAR,
@@ -151,11 +151,12 @@ int main()
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
     });
 
-    auto hdri = engine.getResourceManager()->createTexture(
-        ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr",
-        ResourceState::SampleSource,
-        ResourceState::SampleSource,
-        true);
+    auto hdri = engine.getResourceManager()->createTexture(Texture::LoadInfo{
+        .path = ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr",
+        .fileDataIsLinear = true,
+        .allStates = ResourceState::SampleSource,
+        .initialState = ResourceState::SampleSource,
+    });
     auto hdriCube = rm->createCubemapFromEquirectangular(512, hdri, "HdriCubemap");
 
     Handle<ComputeShader> calcIrradianceComp = rm->createComputeShader(
@@ -167,7 +168,6 @@ int main()
         .debugName = "hdriIrradiance",
         .type = Texture::Type::tCube,
         .format = Texture::Format::r16g16b16a16_float,
-        // .usage = Texture::Usage::Sampled | Texture::Usage::Storage,
         .allStates = ResourceState::SampleSource | ResourceState::Storage,
         .initialState = ResourceState::Undefined,
         .size = {irradianceRes, irradianceRes, 1},
@@ -179,9 +179,7 @@ int main()
         renderer->immediateSubmit(
             [=](VkCommandBuffer cmd)
             {
-                ResourceManager* rm = Engine::get()->getResourceManager();
-
-                // transfer dst texture to compute storage state
+                // transition dst texture to compute storage state
                 submitBarriers(
                     cmd,
                     {
