@@ -40,8 +40,6 @@ class ResourceManager
 
     Handle<Texture> createTexture(Texture::CreateInfo&& createInfo);
     Handle<Texture> createTexture(Texture::LoadInfo&& loadInfo);
-    Handle<Texture> createCubemapFromEquirectangular(
-        uint32_t cubeResolution, Handle<Texture> equirectangularSource, std::string_view debugName);
 
     // Handle<Texture> createTextureView(Handle<Texture> texture, TextureView::Info info, std::string_view name);
 

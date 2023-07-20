@@ -157,7 +157,83 @@ int main()
         .allStates = ResourceState::SampleSource,
         .initialState = ResourceState::SampleSource,
     });
-    auto hdriCube = rm->createCubemapFromEquirectangular(512, hdri, "HdriCubemap");
+    const int32_t hdriCubeRes = 512;
+    auto hdriCube = rm->createTexture(Texture::CreateInfo{
+        // specifying non-default values only
+        .debugName = "HdriCubemap",
+        .type = Texture::Type::tCube,
+        .format = rm->get(hdri)->descriptor.format,
+        .allStates = ResourceState::SampleSource | ResourceState::Storage,
+        .initialState = ResourceState::Undefined,
+        .size = {.width = hdriCubeRes, .height = hdriCubeRes},
+        .mipLevels = Texture::MipLevels::All,
+    });
+    Handle<ComputeShader> conversionShaderHandle =
+        rm->createComputeShader({.sourcePath = SHADERS_PATH "/Skybox/equiToCube.hlsl"}, "equiToCubeCompute");
+    ComputeShader* conversionShader = rm->get(conversionShaderHandle);
+    struct ConversionPushConstants
+    {
+        uint32_t sourceIndex;
+        uint32_t samplerIndex;
+        uint32_t targetIndex;
+    } constants = {
+        .sourceIndex = rm->get(hdri)->resourceIndex,
+        .samplerIndex = rm->get(linearSampler)->resourceIndex,
+        .targetIndex = rm->get(hdriCube)->resourceIndex,
+    };
+    {
+        auto* renderer = Engine::get()->getRenderer();
+        renderer->immediateSubmit(
+            [=](VkCommandBuffer cmd)
+            {
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = hdriCube,
+                            .stateBefore = ResourceState::Undefined,
+                            .stateAfter = ResourceState::StorageCompute,
+                        }),
+                    });
+
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, conversionShader->pipeline);
+                // Bind the bindless descriptor sets once per cmdbuffer
+                vkCmdBindDescriptorSets(
+                    cmd,
+                    VK_PIPELINE_BIND_POINT_COMPUTE,
+                    renderer->bindlessPipelineLayout,
+                    0,
+                    renderer->bindlessManager.getDescriptorSetsCount(),
+                    renderer->bindlessManager.getDescriptorSets(),
+                    0,
+                    nullptr);
+
+                // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
+                vkCmdPushConstants(
+                    cmd,
+                    renderer->bindlessPipelineLayout,
+                    VK_SHADER_STAGE_ALL,
+                    0,
+                    sizeof(ConversionPushConstants),
+                    &constants);
+
+                // TODO: dont hardcode sizes! retrieve programmatically
+                //       (workrgoup size form spirv, use UintDivAndCeil)
+                vkCmdDispatch(cmd, hdriCubeRes / 8, hdriCubeRes / 8, 6);
+
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = hdriCube,
+                            .stateBefore = ResourceState::StorageCompute,
+                            .stateAfter = ResourceState::SampleSource,
+                        }),
+                    });
+            });
+
+        Texture::fillMipLevels(hdriCube, ResourceState::SampleSource);
+    }
 
     Handle<ComputeShader> calcIrradianceComp = rm->createComputeShader(
         {.sourcePath = SHADERS_PATH "/Skybox/generateIrradiance.comp"}, "generateIrradiance");
