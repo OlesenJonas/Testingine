@@ -29,6 +29,11 @@ Handle<Texture> ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
 
     // TODO: LOG: warn if not alraedy set
     loadInfo.allStates |= ResourceState::TransferDst;
+    if(loadInfo.fillMipLevels && (loadInfo.mipLevels == Texture::MipLevels::All || loadInfo.mipLevels > 1))
+    {
+        // TODO: LOG: warn if not already set
+        loadInfo.allStates |= ResourceState::TransferSrc; // needed for blit source :/
+    }
 
     Texture::CreateInfo createInfo;
     std::function<void()> cleanupFunc;
