@@ -58,7 +58,7 @@ void initScene()
     auto texturedMaterialInstance = rm->createMaterialInstance(texturedMaterial);
 
     MaterialInstance* matInst = rm->get(texturedMaterialInstance);
-    matInst->parameters.setResource("colorTexture", rm->get(lostEmpireTex)->resourceIndex);
+    matInst->parameters.setResource("colorTexture", rm->get(lostEmpireTex)->fullResourceIndex());
     // matInst->parameters.setResource("blockySampler", rm->get(blockySampler)->resourceIndex);
     matInst->parameters.pushChanges();
 
@@ -154,8 +154,8 @@ int main()
         uint32_t sourceIndex;
         uint32_t targetIndex;
     } constants = {
-        .sourceIndex = rm->get(hdri)->resourceIndex,
-        .targetIndex = rm->get(hdriCube)->resourceIndex,
+        .sourceIndex = rm->get(hdri)->fullResourceIndex(),
+        .targetIndex = rm->get(hdriCube)->mipResourceIndex(0),
     };
     {
         auto* renderer = Engine::get()->getRenderer();
@@ -261,8 +261,8 @@ int main()
                     uint32_t targetIndex;
                 };
                 ConversionPushConstants constants{
-                    .sourceIndex = rm->get(hdriCube)->resourceIndex,
-                    .targetIndex = irradianceTex->resourceIndex,
+                    .sourceIndex = rm->get(hdriCube)->fullResourceIndex(),
+                    .targetIndex = irradianceTex->mipResourceIndex(0),
                 };
 
                 // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
@@ -304,7 +304,7 @@ int main()
 
     // TODO: getPtrTmp() function (explicitetly state temporary!)
     auto* basicPBRMaterial = rm->get(rm->getMaterial("PBRBasic"));
-    basicPBRMaterial->parameters.setResource("irradianceTex", rm->get(irradianceTexHandle)->resourceIndex);
+    basicPBRMaterial->parameters.setResource("irradianceTex", rm->get(irradianceTexHandle)->fullResourceIndex());
     basicPBRMaterial->parameters.pushChanges();
 
     auto defaultCube = rm->getMesh("DefaultCube");
@@ -322,7 +322,7 @@ int main()
     auto equiSkyboxMatInst = rm->createMaterialInstance(equiSkyboxMat);
     {
         auto* inst = rm->get(equiSkyboxMatInst);
-        inst->parameters.setResource("equirectangularMap", rm->get(hdri)->resourceIndex);
+        inst->parameters.setResource("equirectangularMap", rm->get(hdri)->fullResourceIndex());
         inst->parameters.pushChanges();
     }
 
@@ -336,7 +336,7 @@ int main()
     auto cubeSkyboxMatInst = rm->createMaterialInstance(cubeSkyboxMat);
     {
         auto* inst = rm->get(cubeSkyboxMatInst);
-        inst->parameters.setResource("cubeMap", rm->get(hdriCube)->resourceIndex);
+        inst->parameters.setResource("cubeMap", rm->get(hdriCube)->fullResourceIndex());
         // inst->parameters.setResource("cubeMap", rm->get(irradianceTexHandle)->sampledResourceIndex);
         inst->parameters.pushChanges();
     }

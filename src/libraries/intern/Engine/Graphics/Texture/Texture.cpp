@@ -65,9 +65,9 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
     assert(iterator == nameToMeshLUT.end());
 
     const uint32_t maxDimension = std::max({createInfo.size.width, createInfo.size.height, createInfo.size.depth});
-    uint32_t actualMipLevels = createInfo.mipLevels == Texture::MipLevels::All
-                                   ? uint32_t(floor(log2(maxDimension))) + 1
-                                   : createInfo.mipLevels;
+    int32_t actualMipLevels = createInfo.mipLevels == Texture::MipLevels::All
+                                  ? int32_t(floor(log2(maxDimension))) + 1
+                                  : createInfo.mipLevels;
     assert(actualMipLevels > 0);
     createInfo.mipLevels = actualMipLevels;
 
@@ -239,60 +239,179 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 
     nameToTextureLUT.insert({std::string{name}, newTextureHandle});
 
-    // create an image view covering the whole image
-    VkImageViewType viewType =
-        createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
-    VkImageViewCreateInfo imageViewCrInfo{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .pNext = nullptr,
-        .image = tex->image,
-        .viewType = viewType,
-        .format = toVkFormat(createInfo.format),
-        .components =
-            VkComponentMapping{
-                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                .a = VK_COMPONENT_SWIZZLE_IDENTITY,
-            },
-        .subresourceRange =
-            {
-                .aspectMask = toVkImageAspect(createInfo.format),
-                .baseMipLevel = 0,
-                .levelCount = imageCrInfo.mipLevels,
-                .baseArrayLayer = 0,
-                .layerCount = toVkArrayLayers(tex->descriptor),
-            },
-    };
-
-    vkCreateImageView(Engine::get()->getRenderer()->device, &imageViewCrInfo, nullptr, &tex->imageView);
-
     setDebugName(tex->image, (std::string{name} + "_image").c_str());
-    setDebugName(tex->imageView, (std::string{name} + "_mainView").c_str());
 
-    VulkanRenderer& renderer = *VulkanRenderer::get();
-    bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
-                           (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
-                           (createInfo.allStates & ResourceState::SampleSourceCompute);
-    bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
-                          (createInfo.allStates & ResourceState::StorageGraphics) ||
-                          (createInfo.allStates & ResourceState::StorageCompute);
+    // Creating the resourceViews and descriptors for bindless
 
-    if(usedForSampling && usedForStorage)
+    assert(actualMipLevels > 0);
+    tex->_mipResourceIndices = std::make_unique<uint32_t[]>(actualMipLevels);
+    for(int i = 0; i < actualMipLevels; i++)
+        tex->_mipResourceIndices[i] = 0xFFFFFFFF;
+    tex->_mipImageViews = std::make_unique<VkImageView[]>(actualMipLevels);
+    for(int i = 0; i < actualMipLevels; i++)
+        tex->_mipImageViews[i] = VK_NULL_HANDLE;
+
+    if(actualMipLevels == 1)
     {
-        tex->resourceIndex =
-            renderer.bindlessManager.createImageBinding(tex->imageView, BindlessManager::ImageUsage::Both);
+        // create a single view and single resourceIndex
+        VkImageViewType viewType =
+            createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+        VkImageViewCreateInfo imageViewCrInfo{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .image = tex->image,
+            .viewType = viewType,
+            .format = toVkFormat(createInfo.format),
+            .components =
+                VkComponentMapping{
+                    .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                },
+            .subresourceRange =
+                {
+                    .aspectMask = toVkImageAspect(createInfo.format),
+                    .baseMipLevel = 0,
+                    .levelCount = imageCrInfo.mipLevels,
+                    .baseArrayLayer = 0,
+                    .layerCount = toVkArrayLayers(tex->descriptor),
+                },
+        };
+
+        vkCreateImageView(Engine::get()->getRenderer()->device, &imageViewCrInfo, nullptr, &tex->_fullImageView);
+        tex->_mipImageViews[0] = tex->_fullImageView;
+        setDebugName(tex->_fullImageView, (std::string{name} + "_viewFull").c_str());
+
+        VulkanRenderer& renderer = *VulkanRenderer::get();
+        bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
+                               (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
+                               (createInfo.allStates & ResourceState::SampleSourceCompute);
+        bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
+                              (createInfo.allStates & ResourceState::StorageGraphics) ||
+                              (createInfo.allStates & ResourceState::StorageCompute);
+
+        if(usedForSampling && usedForStorage)
+        {
+            tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+                tex->_fullImageView, BindlessManager::ImageUsage::Both);
+        }
+        // else: not both but maybe one of the two
+        else if(usedForSampling)
+        {
+            tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+                tex->_fullImageView, BindlessManager::ImageUsage::Sampled);
+        }
+        else if(usedForStorage)
+        {
+            tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+                tex->_fullImageView, BindlessManager::ImageUsage::Storage);
+        }
+        tex->_mipResourceIndices[0] = tex->_fullResourceIndex;
     }
-    // else: not both but maybe one of the two
-    else if(usedForSampling)
+    else
     {
-        tex->resourceIndex =
-            renderer.bindlessManager.createImageBinding(tex->imageView, BindlessManager::ImageUsage::Sampled);
-    }
-    else if(usedForStorage)
-    {
-        tex->resourceIndex =
-            renderer.bindlessManager.createImageBinding(tex->imageView, BindlessManager::ImageUsage::Storage);
+        // create a view for the full image, can not be used for storage!
+        {
+            VkImageViewType viewType =
+                createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+            VkImageViewCreateInfo imageViewCrInfo{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = nullptr,
+                .image = tex->image,
+                .viewType = viewType,
+                .format = toVkFormat(createInfo.format),
+                .components =
+                    VkComponentMapping{
+                        .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+                .subresourceRange =
+                    {
+                        .aspectMask = toVkImageAspect(createInfo.format),
+                        .baseMipLevel = 0,
+                        .levelCount = imageCrInfo.mipLevels,
+                        .baseArrayLayer = 0,
+                        .layerCount = toVkArrayLayers(tex->descriptor),
+                    },
+            };
+
+            vkCreateImageView(
+                Engine::get()->getRenderer()->device, &imageViewCrInfo, nullptr, &tex->_fullImageView);
+            setDebugName(tex->_fullImageView, (std::string{name} + "_viewFull").c_str());
+
+            VulkanRenderer& renderer = *VulkanRenderer::get();
+            bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
+                                   (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
+                                   (createInfo.allStates & ResourceState::SampleSourceCompute);
+
+            if(usedForSampling)
+            {
+                tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+                    tex->_fullImageView, BindlessManager::ImageUsage::Sampled);
+            }
+        }
+
+        // Create views for all individual mips, storage only for now, but wouldnt be hard to change
+        for(int m = 0; m < actualMipLevels; m++)
+        {
+            VkImageViewType viewType =
+                createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+            VkImageViewCreateInfo imageViewCrInfo{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = nullptr,
+                .image = tex->image,
+                .viewType = viewType,
+                .format = toVkFormat(createInfo.format),
+                .components =
+                    VkComponentMapping{
+                        .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+                .subresourceRange =
+                    {
+                        .aspectMask = toVkImageAspect(createInfo.format),
+                        .baseMipLevel = static_cast<uint32_t>(m),
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = toVkArrayLayers(tex->descriptor),
+                    },
+            };
+
+            vkCreateImageView(
+                Engine::get()->getRenderer()->device, &imageViewCrInfo, nullptr, &tex->_mipImageViews[m]);
+            setDebugName(tex->_mipImageViews[m], (std::string{name} + "_viewMip" + std::to_string(m)).c_str());
+
+            VulkanRenderer& renderer = *VulkanRenderer::get();
+            bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
+                                   (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
+                                   (createInfo.allStates & ResourceState::SampleSourceCompute);
+            bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
+                                  (createInfo.allStates & ResourceState::StorageGraphics) ||
+                                  (createInfo.allStates & ResourceState::StorageCompute);
+
+            // if(usedForSampling && usedForStorage)
+            // {
+            //     tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+            //         tex->_fullImageView, BindlessManager::ImageUsage::Both);
+            // }
+            // // else: not both but maybe one of the two
+            // else if(usedForSampling)
+            // {
+            //     tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+            //         tex->_fullImageView, BindlessManager::ImageUsage::Sampled);
+            // }
+            // else if(usedForStorage)
+            if(usedForStorage)
+            {
+                tex->_mipResourceIndices[m] = renderer.bindlessManager.createImageBinding(
+                    tex->_mipImageViews[m], BindlessManager::ImageUsage::Storage);
+            }
+        }
     }
 
     return newTextureHandle;
@@ -313,14 +432,44 @@ void ResourceManager::free(Handle<Texture> handle)
     }
     const VmaAllocator* allocator = &Engine::get()->getRenderer()->allocator;
     VkImage image = texture->image;
-    VkImageView imageView = texture->imageView;
     VmaAllocation vmaAllocation = texture->allocation;
     VkDevice device = Engine::get()->getRenderer()->device;
     auto& renderer = *Engine::get()->getRenderer();
     renderer.deleteQueue.pushBack([=]() { vmaDestroyImage(renderer.allocator, image, vmaAllocation); });
+
+    VkImageView imageView = texture->_fullImageView;
     renderer.deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
+    if(texture->descriptor.mipLevels > 1)
+        for(int i = 0; i < texture->descriptor.mipLevels; i++)
+        {
+            imageView = texture->_mipImageViews[i];
+            renderer.deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
+        }
 
     texturePool.remove(handle);
+}
+
+uint32_t Texture::fullResourceIndex() const
+{
+    return _fullResourceIndex;
+}
+/*
+    WARNING: ATM ALL SINGLE MIPS ONLY GET STORAGE RESOURCES!
+    IF SINGLE MIPS ARE NEEDED FOR SAMPLED RESOURCES, USE fullResouceIndex() INSTEAD!
+*/
+uint32_t Texture::mipResourceIndex(uint32_t level) const
+{
+    return _mipResourceIndices[level];
+}
+
+// TODO: own textureView abstraction
+VkImageView Texture::fullResourceView() const
+{
+    return _fullImageView;
+}
+VkImageView Texture::mipResourceView(uint32_t level) const
+{
+    return _mipImageViews[level];
 }
 
 void Texture::fillMipLevels(Handle<Texture> texture, ResourceState state)

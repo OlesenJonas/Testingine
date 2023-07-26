@@ -7,6 +7,7 @@
 #include <Engine/Graphics/Graphics.hpp>
 #include <Engine/Misc/EnumHelpers.hpp>
 #include <functional>
+#include <memory>
 #include <string>
 
 template <typename T>
@@ -100,13 +101,23 @@ struct Texture
     Descriptor descriptor;
 
     VkImage image = VK_NULL_HANDLE;
-    uint32_t resourceIndex = 0xFFFFFFFF;
     VmaAllocation allocation = VK_NULL_HANDLE;
-    VkImageView imageView = VK_NULL_HANDLE;
 
     static LoadResult loadHDR(Texture::LoadInfo&& loadInfo);
     static LoadResult loadDefault(Texture::LoadInfo&& loadInfo);
 
     // TODO: not sure I like this being here, maybe some renderer.utils ?
     static void fillMipLevels(Handle<Texture> texture, ResourceState state);
+
+    uint32_t fullResourceIndex() const;
+    uint32_t mipResourceIndex(uint32_t level) const;
+    // TODO: own textureView abstraction
+    VkImageView fullResourceView() const;
+    VkImageView mipResourceView(uint32_t level) const;
+
+    // TODO: could make this private with getter and setter, but would also need resource manager as friend
+    uint32_t _fullResourceIndex = 0xFFFFFFFF;
+    std::unique_ptr<uint32_t[]> _mipResourceIndices;
+    VkImageView _fullImageView = VK_NULL_HANDLE;
+    std::unique_ptr<VkImageView[]> _mipImageViews = VK_NULL_HANDLE;
 };
