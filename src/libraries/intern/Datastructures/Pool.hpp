@@ -170,7 +170,7 @@ class Pool
                 // C++20 has construct_at, just trying it out
                 std::construct_at(&storage[i], std::move(oldStorage[i]));
                 // explicitly destroy left over object in old storage
-                storage[i].~T();
+                oldStorage[i].~T();
             }
         }
 
