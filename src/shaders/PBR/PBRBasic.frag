@@ -9,8 +9,11 @@
 #include "PBR.hlsl"
 
 StructForBindless(MaterialParameters,
-    /* TODO: should be part of scene information, not material */
+    /* TODO: should be part of scene information, not material ? */
     Handle< TextureCube<float4> > irradianceTex;
+    Handle< TextureCube<float4> > prefilterTex;
+
+    Handle< Texture2D<float2> > brdfLUT;
 );
 
 StructForBindless(MaterialInstanceParameters,
@@ -124,14 +127,33 @@ float4 main(VSOutput input) : SV_TARGET
 
     // Ambient lighting
     TextureCube<float4> irradianceTex = params.irradianceTex.get();
+    TextureCube<float4> prefilteredEnvTex = params.prefilterTex.get();
+    Texture2D<float2> brdfLUT = params.brdfLUT.get();
+
+    float3 R = reflect(-V,normalWS);
+
+    const float MAX_REFLECTION_LOD = 4.0;
+    float3 prefilteredColor = prefilteredEnvTex.SampleLevel(LinearRepeatSampler, R, roughness*MAX_REFLECTION_LOD).rgb;
+    float3 F = fresnelSchlickRoughness(max(dot(normalWS, V),0.0),F0,roughness);
+    float2 brdfLUTCoords = float2(
+        max(dot(normalWS, V), 0.0),
+        roughness
+    );
+    float2 envBRDF = brdfLUT.SampleLevel(LinearClampSampler, brdfLUTCoords, 0.0);
+    float3 specular = prefilteredColor * (F * envBRDF.x + envBRDF.y);
     
-    float3 kS = fresnelSchlickRoughness(max(dot(normalWS, V),0), F0, roughness);
+    float3 kS = F;
     float3 kD = 1.0 - kS;
+    kD *= 1.0 - metal;
+
     float3 irradiance = irradianceTex.SampleLevel(LinearRepeatSampler, normalWS, 0).rgb;
     float3 diffuse = irradiance * baseColor;
-    float3 ambient = (kD * diffuse) * occlusion;
+
+    float3 ambient = (kD * diffuse + specular) * occlusion;
 
     Lout += ambient;
+
+    // ---------------------
 
     float3 color = Lout;
 

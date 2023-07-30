@@ -40,10 +40,15 @@ struct Texture
     {
         Undefined,
         r8_unorm,
+
         r8g8b8a8_unorm,
         r8g8b8a8_srgb,
+
+        r16_g16_float,
+
         r16g16b16a16_float,
         r32g32b32a32_float,
+
         //-- Special Formats
         d32_float,
     };

@@ -39,6 +39,8 @@ constexpr VkFormat toVkFormat(Texture::Format format)
         return VK_FORMAT_R8G8B8A8_UNORM;
     case Texture::Format::r8g8b8a8_srgb:
         return VK_FORMAT_R8G8B8A8_SRGB;
+    case Texture::Format::r16_g16_float:
+        return VK_FORMAT_R16G16_SFLOAT;
     case Texture::Format::r16g16b16a16_float:
         return VK_FORMAT_R16G16B16A16_SFLOAT;
     case Texture::Format::r32g32b32a32_float:
@@ -58,6 +60,7 @@ constexpr VkImageAspectFlags toVkImageAspect(Texture::Format format)
     case Texture::Format::r8_unorm:
     case Texture::Format::r8g8b8a8_unorm:
     case Texture::Format::r8g8b8a8_srgb:
+    case Texture::Format::r16_g16_float:
     case Texture::Format::r16g16b16a16_float:
     case Texture::Format::r32g32b32a32_float:
         return VK_IMAGE_ASPECT_COLOR_BIT;

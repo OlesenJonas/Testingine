@@ -30,12 +30,33 @@ float GeometrySchlickGGX(float NdotV, float roughness)
     return num/denom;
 }
 
+float GeometrySchlickGGX_IBL(float NdotV, float roughness)
+{
+    float a = roughness;
+    float k = (a*a)/8.0;
+
+    const float num = NdotV;
+    const float denom = NdotV * (1.0 - k) + k;
+    
+    return num/denom;
+}
+
 float GeometrySmith(float3 N, float3 V, float3 L, float roughness)
 {
     const float NdotV = max(dot(N,V),0.0);
     const float NdotL = max(dot(N,L),0.0);
     const float ggx1 = GeometrySchlickGGX(NdotV, roughness);
     const float ggx2 = GeometrySchlickGGX(NdotL, roughness);
+
+    return ggx1 * ggx2;
+}
+
+float GeometrySmith_IBL(float3 N, float3 V, float3 L, float roughness)
+{
+    const float NdotV = max(dot(N,V),0.0);
+    const float NdotL = max(dot(N,L),0.0);
+    const float ggx1 = GeometrySchlickGGX_IBL(NdotV, roughness);
+    const float ggx2 = GeometrySchlickGGX_IBL(NdotL, roughness);
 
     return ggx1 * ggx2;
 }

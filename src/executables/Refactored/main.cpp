@@ -2,6 +2,7 @@
 #include <Engine/Graphics/Barriers/Barrier.hpp>
 #include <Engine/Graphics/Texture/Sampler.hpp>
 #include <Engine/Graphics/Texture/TextureToVulkan.hpp>
+#include <Engine/Misc/Math.hpp>
 #include <Engine/Scene/DefaultComponents.hpp>
 #include <Engine/Scene/Scene.hpp>
 #include <glm/gtx/transform.hpp>
@@ -291,6 +292,10 @@ int main()
             });
     }
 
+    Handle<ComputeShader> prefilterEnvShaderHandle =
+        rm->createComputeShader({.sourcePath = SHADERS_PATH "/Skybox/prefilter.comp"}, "prefilterEnvComp");
+    ComputeShader* prefilterEnvShader = rm->get(prefilterEnvShaderHandle);
+
     uint32_t prefilteredEnvMapBaseSize = 128;
     auto prefilteredEnvMap = rm->createTexture({
         .debugName = "prefilteredEnvMap",
@@ -298,13 +303,147 @@ int main()
         .format = Texture::Format::r16g16b16a16_float,
         .allStates = ResourceState::SampleSource | ResourceState::Storage,
         .initialState = ResourceState::Storage,
-        .size = {prefilteredEnvMapBaseSize, prefilteredEnvMapBaseSize, 1},
-        .mipLevels = Texture::MipLevels::All,
+        .size = {prefilteredEnvMapBaseSize, prefilteredEnvMapBaseSize},
+        .mipLevels = 5,
     });
+    {
+        Texture* prefilteredEnv = rm->get(prefilteredEnvMap);
+
+        VulkanRenderer* renderer = Engine::get()->getRenderer();
+        renderer->immediateSubmit(
+            [=](VkCommandBuffer cmd)
+            {
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, prefilterEnvShader->pipeline);
+
+                // Bind the bindless descriptor sets once per cmdbuffer
+                vkCmdBindDescriptorSets(
+                    cmd,
+                    VK_PIPELINE_BIND_POINT_COMPUTE,
+                    renderer->bindlessPipelineLayout,
+                    0,
+                    renderer->bindlessManager.getDescriptorSetsCount(),
+                    renderer->bindlessManager.getDescriptorSets(),
+                    0,
+                    nullptr);
+
+                struct PrefilterPushConstants
+                {
+                    uint32_t sourceIndex;
+                    uint32_t targetIndex;
+                    float roughness;
+                };
+                PrefilterPushConstants constants{
+                    .sourceIndex = rm->get(hdriCube)->fullResourceIndex(),
+                    .targetIndex = prefilteredEnv->mipResourceIndex(0),
+                    .roughness = 0.0,
+                };
+
+                uint32_t mipCount = prefilteredEnv->descriptor.mipLevels;
+                for(uint32_t mip = 0; mip < mipCount; mip++)
+                {
+                    uint32_t mipSize = glm::max(prefilteredEnvMapBaseSize >> mip, 1u);
+
+                    constants = {
+                        .sourceIndex = rm->get(hdriCube)->fullResourceIndex(),
+                        .targetIndex = prefilteredEnv->mipResourceIndex(mip),
+                        .roughness = float(mip) / float(mipCount - 1),
+                    };
+
+                    // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
+                    vkCmdPushConstants(
+                        cmd,
+                        renderer->bindlessPipelineLayout,
+                        VK_SHADER_STAGE_ALL,
+                        0,
+                        sizeof(PrefilterPushConstants),
+                        &constants);
+
+                    // TODO: dont hardcode sizes! retrieve programmatically (workrgoup size form spirv)
+                    vkCmdDispatch(cmd, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
+                }
+
+                // transfer dst texture from general to shader read only layout
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = prefilteredEnvMap,
+                            .stateBefore = ResourceState::StorageCompute,
+                            .stateAfter = ResourceState::SampleSource,
+                        }),
+                    });
+            });
+    }
+
+    Handle<ComputeShader> integrateBrdfShaderHandle =
+        rm->createComputeShader({.sourcePath = SHADERS_PATH "/PBR/integrateBRDF.comp"}, "integrateBRDFComp");
+    ComputeShader* integrateBRDFShader = rm->get(integrateBrdfShaderHandle);
+    uint32_t brdfIntegralSize = 512;
+    auto brdfIntegralMap = rm->createTexture({
+        .debugName = "brdfIntegral",
+        .type = Texture::Type::t2D,
+        .format = Texture::Format::r16_g16_float,
+        .allStates = ResourceState::SampleSource | ResourceState::Storage,
+        .initialState = ResourceState::Storage,
+        .size = {brdfIntegralSize, brdfIntegralSize},
+        .mipLevels = 1,
+    });
+    {
+        Texture* brdfIntegral = rm->get(brdfIntegralMap);
+
+        VulkanRenderer* renderer = Engine::get()->getRenderer();
+        renderer->immediateSubmit(
+            [=](VkCommandBuffer cmd)
+            {
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, integrateBRDFShader->pipeline);
+
+                // Bind the bindless descriptor sets once per cmdbuffer
+                vkCmdBindDescriptorSets(
+                    cmd,
+                    VK_PIPELINE_BIND_POINT_COMPUTE,
+                    renderer->bindlessPipelineLayout,
+                    0,
+                    renderer->bindlessManager.getDescriptorSetsCount(),
+                    renderer->bindlessManager.getDescriptorSets(),
+                    0,
+                    nullptr);
+
+                struct IntegratePushConstants
+                {
+                    uint32_t outTexture;
+                };
+                IntegratePushConstants constants{brdfIntegral->mipResourceIndex(0)};
+
+                // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
+                vkCmdPushConstants(
+                    cmd,
+                    renderer->bindlessPipelineLayout,
+                    VK_SHADER_STAGE_ALL,
+                    0,
+                    sizeof(IntegratePushConstants),
+                    &constants);
+
+                // TODO: dont hardcode sizes! retrieve programmatically (workrgoup size form spirv)
+                vkCmdDispatch(cmd, UintDivAndCeil(brdfIntegralSize, 8), UintDivAndCeil(brdfIntegralSize, 8), 6);
+
+                // transfer dst texture from general to shader read only layout
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = brdfIntegralMap,
+                            .stateBefore = ResourceState::StorageCompute,
+                            .stateAfter = ResourceState::SampleSource,
+                        }),
+                    });
+            });
+    }
 
     // TODO: getPtrTmp() function (explicitetly state temporary!)
     auto* basicPBRMaterial = rm->get(rm->getMaterial("PBRBasic"));
     basicPBRMaterial->parameters.setResource("irradianceTex", rm->get(irradianceTexHandle)->fullResourceIndex());
+    basicPBRMaterial->parameters.setResource("prefilterTex", rm->get(prefilteredEnvMap)->fullResourceIndex());
+    basicPBRMaterial->parameters.setResource("brdfLUT", rm->get(brdfIntegralMap)->fullResourceIndex());
     basicPBRMaterial->parameters.pushChanges();
 
     auto defaultCube = rm->getMesh("DefaultCube");

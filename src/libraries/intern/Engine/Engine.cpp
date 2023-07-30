@@ -27,8 +27,9 @@ Engine::Engine()
     // Create default Samplers
 
 // WARNING when changing these, also change them in Shaders/Bindless/Sampler.hlsl
-#define DEFAULT_SAMPLER_LINEAR 0
-#define DEFAULT_SAMPLER_NEAREST 1
+#define DEFAULT_SAMPLER_LINEAR_REPEAT 0
+#define DEFAULT_SAMPLER_LINEAR_CLAMP 1
+#define DEFAULT_SAMPLER_NEAREST 2
     constexpr Sampler::Info defaultInfos[] = {
         {
             .magFilter = Sampler::Filter::Linear,
@@ -37,6 +38,14 @@ Engine::Engine()
             .addressModeU = Sampler::AddressMode::Repeat,
             .addressModeV = Sampler::AddressMode::Repeat,
             .addressModeW = Sampler::AddressMode::Repeat,
+        },
+        {
+            .magFilter = Sampler::Filter::Linear,
+            .minFilter = Sampler::Filter::Linear,
+            .mipMapFilter = Sampler::Filter::Linear,
+            .addressModeU = Sampler::AddressMode::ClampEdge,
+            .addressModeV = Sampler::AddressMode::ClampEdge,
+            .addressModeW = Sampler::AddressMode::ClampEdge,
         },
         {
             .magFilter = Sampler::Filter::Nearest,
@@ -48,9 +57,16 @@ Engine::Engine()
         },
     };
     {
-        auto linearSampler = resourceManager.createSampler(Sampler::Info{defaultInfos[DEFAULT_SAMPLER_LINEAR]});
-        assert(resourceManager.get(linearSampler)->info == defaultInfos[DEFAULT_SAMPLER_LINEAR]);
-        assert(resourceManager.get(linearSampler)->resourceIndex == DEFAULT_SAMPLER_LINEAR);
+        auto linearSampler =
+            resourceManager.createSampler(Sampler::Info{defaultInfos[DEFAULT_SAMPLER_LINEAR_REPEAT]});
+        assert(resourceManager.get(linearSampler)->info == defaultInfos[DEFAULT_SAMPLER_LINEAR_REPEAT]);
+        assert(resourceManager.get(linearSampler)->resourceIndex == DEFAULT_SAMPLER_LINEAR_REPEAT);
+    }
+    {
+        auto linearSampler =
+            resourceManager.createSampler(Sampler::Info{defaultInfos[DEFAULT_SAMPLER_LINEAR_CLAMP]});
+        assert(resourceManager.get(linearSampler)->info == defaultInfos[DEFAULT_SAMPLER_LINEAR_CLAMP]);
+        assert(resourceManager.get(linearSampler)->resourceIndex == DEFAULT_SAMPLER_LINEAR_CLAMP);
     }
     {
         auto nearestSampler = resourceManager.createSampler(Sampler::Info{defaultInfos[DEFAULT_SAMPLER_NEAREST]});

@@ -1,0 +1,118 @@
+#include "../Bindless/Setup.hlsl"
+
+DefineShaderInputs(
+    Handle< TextureCube<float4> > sourceTex;
+    Handle< RWTexture2DArray<float4> > targetTex;
+    float roughness;
+);
+
+#include "../PBR/PBR.hlsl"
+
+float RadicalInverse_VdC(uint bits) 
+{
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float(bits) * 2.3283064365386963e-10; // / 0x100000000
+}
+// ----------------------------------------------------------------------------
+float2 Hammersley(uint i, uint N)
+{
+    return float2(float(i)/float(N), RadicalInverse_VdC(i));
+}
+
+float3 ImportanceSampleGGX(float2 Xi, float3 N, float roughness)
+{
+    float a = roughness*roughness;
+	
+    float phi = 2.0 * PI * Xi.x;
+    float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a*a - 1.0) * Xi.y));
+    float sinTheta = sqrt(1.0 - cosTheta*cosTheta);
+	
+    // from spherical coordinates to cartesian coordinates
+    float3 H;
+    H.x = cos(phi) * sinTheta;
+    H.y = sin(phi) * sinTheta;
+    H.z = cosTheta;
+	
+    // from tangent-space vector to world-space sample vector
+    float3 up        = abs(N.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
+    float3 tangent   = normalize(cross(up, N));
+    float3 bitangent = cross(N, tangent);
+	
+    float3 sampleVec = tangent * H.x + bitangent * H.y + N * H.z;
+    return normalize(sampleVec);
+} 
+
+[numthreads(8, 8, 1)]
+void main(uint3 GlobalInvocationID : SV_DispatchThreadID)
+{
+    int3 id = GlobalInvocationID;
+
+    TextureCube<float4> sourceTex = shaderInputs.sourceTex.get();
+    int2 sourceSize;
+    sourceTex.GetDimensions(sourceSize.x,sourceSize.y);
+
+    //TODO: getLocalPos(tex, id) helper function?
+    RWTexture2DArray<float4> targetTex = shaderInputs.targetTex.get();
+    int3 size;
+    targetTex.GetDimensions(size.x, size.y, size.z);
+    float2 uv = float2(id.xy + 0.5) / size.xy;
+    uv.y = 1.0 - uv.y;
+    uv = 2.0 * uv - 1.0;
+
+    int2 inputResolution;
+    sourceTex.GetDimensions(inputResolution.x,inputResolution.y);
+
+    float3 localPos;
+    if(id.z == 0)
+        localPos = float3(1.0, uv.y, -uv.x); // pos x
+    else if(id.z == 1)
+        localPos = float3(-1.0, uv.y, uv.x); // neg x
+    else if(id.z == 2)
+        localPos = float3(uv.x, 1.0, -uv.y); // pos y
+    else if(id.z == 3)
+        localPos = float3(uv.x, -1.0, uv.y); // neg y
+    else if(id.z == 4)
+        localPos = float3(uv.x, uv.y, 1.0); // pos z
+    else if(id.z == 5)
+        localPos = float3(-uv.x, uv.y, -1.0); // neg z
+
+    float3 N = normalize(localPos);
+    float3 R = N;
+    float3 V = R;
+
+    const uint SAMPLES = 2048u;
+    float totalWeight = 0.0;
+    float3 prefilteredColor = 0.0;
+
+    for (int i=0; i<SAMPLES; i++)
+    {
+        float2 Xi = Hammersley(i, SAMPLES);
+        float3 H = ImportanceSampleGGX(Xi, N, shaderInputs.roughness);
+        float3 L = normalize(2 * dot(V,H) * H - V);
+
+        float NdotL = max(dot(N,L), 0.0);
+        if(NdotL > 0.0)
+        {
+            float D = NDFTrowbridgeReitzGGX(N, H, shaderInputs.roughness);
+            float NdotH = max(dot(N,H),0.0);
+            float HdotV = max(dot(H,V),0.0);
+            float pdf = (D * NdotH / (4 * HdotV)) + 0.0001;
+
+            float saTexel = 4.0 * PI / (6.0 * sourceSize.x * sourceSize.y);
+            float saSample = 1.0/(SAMPLES * pdf + 0.0001);
+
+            float mipLevel = shaderInputs.roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
+
+            prefilteredColor += sourceTex.SampleLevel(LinearRepeatSampler, L, mipLevel).rgb * NdotL;
+            totalWeight += NdotL;
+        }
+    }
+
+    prefilteredColor = prefilteredColor / totalWeight;
+
+    targetTex[id] = float4(prefilteredColor, 1.0);
+}
