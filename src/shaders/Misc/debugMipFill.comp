@@ -1,0 +1,25 @@
+#include "../Bindless/Setup.hlsl"
+
+DefineShaderInputs(
+    Handle< RWTexture2D<float4> > outTex;
+    uint level;
+);
+
+[numthreads(8, 8, 1)]
+void main(uint3 GlobalInvocationID : SV_DispatchThreadID)
+{
+    int3 id = GlobalInvocationID;
+
+    uint level = shaderInputs.level;
+
+    float4 color = float4(
+        (level & 4u) > 0,
+        (level & 2u) > 0,
+        (level & 1u) > 0,
+        1
+    );
+
+    RWTexture2D<float4> outTex = shaderInputs.outTex.get();
+
+    outTex[id.xy] = color;
+}

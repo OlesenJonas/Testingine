@@ -121,6 +121,7 @@ int main()
 {
     Engine engine;
     ResourceManager* rm = engine.getResourceManager();
+    ECS& ecs = Engine::get()->ecs;
 
     glm::quat rotAroundY = glm::quat_cast(glm::rotate(glm::radians(90.0f), glm::vec3{0.f, 1.f, 0.f}));
 
@@ -129,6 +130,133 @@ int main()
     // not sure I like this bein called like this.
     //  would engine.loadScene(...) make more sense?
     Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf");
+
+    Handle<ComputeShader> debugMipFillShaderH =
+        rm->createComputeShader({.sourcePath = SHADERS_PATH "/Misc/debugMipFill.comp"}, "debugMipFill");
+    ComputeShader* debugMipFillShader = rm->get(debugMipFillShaderH);
+
+    auto mipTestTexH = rm->createTexture({
+        .debugName = "mipTest",
+        .type = Texture::Type::t2D,
+        .format = Texture::Format::r8g8b8a8_unorm,
+        .allStates = ResourceState::SampleSource | ResourceState::Storage,
+        .initialState = ResourceState::Storage,
+        .size = {128, 128},
+        .mipLevels = Texture::MipLevels::All,
+    });
+    {
+        Texture* mipTestTex = rm->get(mipTestTexH);
+
+        VulkanRenderer* renderer = Engine::get()->getRenderer();
+        renderer->immediateSubmit(
+            [=](VkCommandBuffer cmd)
+            {
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugMipFillShader->pipeline);
+
+                // Bind the bindless descriptor sets once per cmdbuffer
+                vkCmdBindDescriptorSets(
+                    cmd,
+                    VK_PIPELINE_BIND_POINT_COMPUTE,
+                    renderer->bindlessPipelineLayout,
+                    0,
+                    renderer->bindlessManager.getDescriptorSetsCount(),
+                    renderer->bindlessManager.getDescriptorSets(),
+                    0,
+                    nullptr);
+
+                struct DebugMipFillPushConstants
+                {
+                    uint32_t targetIndex;
+                    uint32_t level;
+                };
+                DebugMipFillPushConstants constants{
+                    .targetIndex = mipTestTex->mipResourceIndex(0),
+                    .level = 0,
+                };
+
+                uint32_t mipCount = mipTestTex->descriptor.mipLevels;
+                for(uint32_t mip = 0; mip < mipCount; mip++)
+                {
+                    uint32_t mipSize = glm::max(128u >> mip, 1u);
+
+                    constants = {
+                        .targetIndex = mipTestTex->mipResourceIndex(mip),
+                        .level = mip,
+                    };
+
+                    // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
+                    vkCmdPushConstants(
+                        cmd,
+                        renderer->bindlessPipelineLayout,
+                        VK_SHADER_STAGE_ALL,
+                        0,
+                        sizeof(DebugMipFillPushConstants),
+                        &constants);
+
+                    // TODO: dont hardcode sizes! retrieve programmatically (workrgoup size form spirv)
+                    vkCmdDispatch(cmd, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
+                }
+
+                // transfer dst texture from general to shader read only layout
+                submitBarriers(
+                    cmd,
+                    {
+                        Barrier::from(Barrier::Image{
+                            .texture = mipTestTexH,
+                            .stateBefore = ResourceState::StorageCompute,
+                            .stateAfter = ResourceState::SampleSource,
+                        }),
+                    });
+            });
+    }
+
+    Handle<Mesh> triangleMesh;
+    {
+        std::vector<glm::vec3> triangleVertexPositions;
+        std::vector<Mesh::VertexAttributes> triangleVertexAttributes;
+        triangleVertexPositions.resize(3);
+        triangleVertexAttributes.resize(3);
+
+        triangleVertexPositions[0] = {1.f, 1.f, 0.0f};
+        triangleVertexPositions[1] = {-1.f, 1.f, 0.0f};
+        triangleVertexPositions[2] = {0.f, -1.f, 0.0f};
+
+        triangleVertexAttributes[0].uv = {1.0f, 0.0f};
+        triangleVertexAttributes[1].uv = {0.0f, 0.0f};
+        triangleVertexAttributes[2].uv = {0.5f, 1.0f};
+
+        triangleMesh = rm->createMesh(triangleVertexPositions, triangleVertexAttributes, {}, "triangle");
+    }
+
+    auto unlitTexturedMaterialH = rm->createMaterial(
+        {
+            .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
+        },
+        "texturedUnlit");
+
+    auto unlitTexturedMaterial = rm->createMaterialInstance(unlitTexturedMaterialH);
+    rm->get(unlitTexturedMaterial)->parameters.setResource("texture", rm->get(mipTestTexH)->fullResourceIndex());
+    rm->get(unlitTexturedMaterial)->parameters.pushChanges();
+
+    auto newRenderable = ecs.createEntity();
+    {
+        auto* renderInfo = newRenderable.addComponent<RenderInfo>();
+        renderInfo->mesh = triangleMesh;
+        renderInfo->materialInstance = unlitTexturedMaterial;
+        auto* transform = newRenderable.addComponent<Transform>();
+        transform->position = glm::vec3{3.0f, 0.0f, 0.0f};
+        transform->calculateLocalTransformMatrix();
+        // dont like having to call this manually
+        transform->localToWorld = transform->localTransform;
+        /*
+            maybe a wrapper around entt + default component creation like
+            scene.addObject() that just conatins Transform+Hierarchy component (and default parenting
+            settings) would be nice
+        */
+        assert(renderInfo->mesh.isValid());
+        assert(renderInfo->materialInstance.isValid());
+    }
 
     auto hdri = engine.getResourceManager()->createTexture(Texture::LoadInfo{
         .path = ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr",
