@@ -35,4 +35,9 @@ VulkanValidationSettings:
             settings:
                 VULKAN_ENABLE_VALIDATION: True
                 VULKAN_VALIDATION_FILE: vk_layer_settings_best_practices.txt
+        GPUAssisted:
+            short: Vk GPU Assisted Validation
+            settings:
+                VULKAN_ENABLE_VALIDATION: True
+                VULKAN_VALIDATION_FILE: vk_layer_settings_gpu_assisted.txt
                 
