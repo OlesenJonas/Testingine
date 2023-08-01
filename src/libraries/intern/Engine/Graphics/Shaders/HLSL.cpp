@@ -6,7 +6,7 @@
 // why doesnt dxc include these?
 #include <atlbase.h>
 
-#include <dxc/dxcapi.h>
+#include <DXCLatest/include/dxc/dxcapi.h>
 
 #include <cassert>
 #include <cstring>
