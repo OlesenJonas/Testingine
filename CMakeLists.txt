@@ -73,11 +73,13 @@ endif()
 add_compile_definitions(
 	$<$<CONFIG:DEBUG>:ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets">
 	$<$<CONFIG:RELEASE>:ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets">
+	$<$<CONFIG:RELWITHDEBINFO>:ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets">
 )
 
 add_compile_definitions(
 	$<$<CONFIG:DEBUG>:SHADERS_PATH="${CMAKE_SOURCE_DIR}/src/shaders">
 	$<$<CONFIG:RELEASE>:SHADERS_PATH="${CMAKE_SOURCE_DIR}/src/shaders">
+	$<$<CONFIG:RELWITHDEBINFO>:SHADERS_PATH="${CMAKE_SOURCE_DIR}/src/shaders">
 )
 
 ##############################################################################

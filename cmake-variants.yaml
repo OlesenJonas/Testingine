@@ -8,6 +8,9 @@ buildType:
         release:
             short: Release
             buildType: Release
+        releaseWithDebugInfo:
+            short: RelWithDebInfo
+            buildType: RelWithDebInfo
 
 VulkanValidationSettings:
     default: Disabled

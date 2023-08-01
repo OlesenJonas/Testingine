@@ -359,22 +359,22 @@ void Material::createPipeline()
         .pAttachments = &colorBlendAttachmentState,
     };
 
-    const Span<const VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    constexpr VkDynamicState dynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     const VkPipelineDynamicStateCreateInfo dynamicState = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = (uint32_t)dynamicStates.size(),
-        .pDynamicStates = dynamicStates.data(),
+        .dynamicStateCount = ArraySize(dynamicStates),
+        .pDynamicStates = &dynamicStates[0],
     };
 
-    const Span<const VkFormat> colorAttachmentFormats = {renderer.swapchainImageFormat};
+    const VkFormat colorAttachmentFormats[1] = {renderer.swapchainImageFormat};
     const VkFormat depthAttachmentFormat = toVkFormat(renderer.depthFormat);
     const VkFormat stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
     const VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .pNext = nullptr,
-        .colorAttachmentCount = static_cast<uint32_t>(colorAttachmentFormats.size()),
-        .pColorAttachmentFormats = colorAttachmentFormats.data(),
+        .colorAttachmentCount = ArraySize(colorAttachmentFormats),
+        .pColorAttachmentFormats = &colorAttachmentFormats[0],
         .depthAttachmentFormat = depthAttachmentFormat,
         .stencilAttachmentFormat = stencilAttachmentFormat,
     };
