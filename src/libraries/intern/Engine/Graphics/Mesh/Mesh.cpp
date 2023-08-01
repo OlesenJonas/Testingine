@@ -305,5 +305,6 @@ void Mesh::generateTangents(
     mktInterface.m_getTexCoord = mktGetTexCoord;
     mktInterface.m_getNormal = mktGetNormal;
     mktInterface.m_setTSpaceBasic = mktSetTSpaceBasic;
-    assert(genTangSpaceDefault(&mktContext));
+    auto res = genTangSpaceDefault(&mktContext);
+    assert(res);
 }
