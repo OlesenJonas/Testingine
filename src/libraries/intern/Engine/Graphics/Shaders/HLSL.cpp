@@ -52,6 +52,19 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
         throw std::runtime_error("Could not init DXC Utiliy");
     }
 
+    CComPtr<IDxcVersionInfo2> info;
+    hres = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&info));
+    if(FAILED(hres))
+    {
+        throw std::runtime_error("Could not init DXC Utiliy");
+    }
+    uint32_t compilerMajor = 1;
+    uint32_t compilerMinor = 0;
+    info->GetVersion(&compilerMajor, &compilerMinor);
+    UINT32 commitCount = 0;
+    CComHeapPtr<char> commitHash;
+    info->GetCommitInfo(&commitCount, &commitHash);
+
     // Create default include handler. (You can create your own...)
     CComPtr<IDxcIncludeHandler> pIncludeHandler;
     utils->CreateDefaultIncludeHandler(&pIncludeHandler);
@@ -86,7 +99,7 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
         L"-fspv-target-env=vulkan1.3",
         L"-fvk-use-scalar-layout",
     // L"-fspv-reflect",
-    // TODO: not sure if vcpkg version uses latest yet, which includes this, but its needed for RWStructuredBuffer
+    // TODO: not sure if PR was merged into main yet, needed for RWStructuredBuffer arrays
     // L"fvk_allow_rwstructuredbuffer_arrays",
 
 #ifndef NDEBUG

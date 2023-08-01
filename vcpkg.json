@@ -5,8 +5,7 @@
         "glfw3",
         "glm",
         "eastl",
-        "daw-json-link",
-        "directx-dxc"
+        "daw-json-link"
     ],
     "builtin-baseline": "78784c0b0aa87ae63bce01c2c040ce1b3269ecd1"
 }

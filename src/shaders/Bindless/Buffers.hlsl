@@ -15,6 +15,8 @@ struct Handle< ConstantBuffer<X> >
     uint resourceHandle;
 
     X Load();
+
+    ConstantBuffer<X> get();
 };
 
 // ---------------------
@@ -33,12 +35,12 @@ template <>                                                                 \
 TYPE Handle< ConstantBuffer<TYPE> >::Load()                                 \
 {                                                                           \
     return g_ConstantBuffer_##TYPE[resourceHandle];                         \
-}          
-// template <>                                                                 \
-// ConstantBuffer<TYPE> Handle< ConstantBuffer<TYPE> >::get()                  \
-// {                                                                           \
-//     return g_ConstantBuffer_##TYPE[resourceHandle];                         \
-// }                                                                           
+}                                                                           \
+template <>                                                                 \
+ConstantBuffer<TYPE> Handle< ConstantBuffer<TYPE> >::get()                  \
+{                                                                           \
+    return g_ConstantBuffer_##TYPE[resourceHandle];                         \
+}                                                                           
 
 // ---------------------
 

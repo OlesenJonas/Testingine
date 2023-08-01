@@ -31,9 +31,9 @@ struct VSOutput
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    MaterialInstanceParameters instanceParams = shaderInputs.materialInstanceParams.Load();
-
-    Texture2D tex = instanceParams.texture.get();
+    // MaterialInstanceParameters instanceParams = shaderInputs.materialInstanceParams.Load();
+    // Texture2D tex = instanceParams.texture.get();
+    Texture2D tex = shaderInputs.materialInstanceParams.get().texture.get();
     float3 baseColor = tex.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
 
     return float4(baseColor, 1.0);

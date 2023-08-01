@@ -1,0 +1,17 @@
+add_library(DXCLatest SHARED IMPORTED GLOBAL)
+
+set_target_properties(DXCLatest PROPERTIES
+    IMPORTED_LOCATION_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/x64-Release/bin/dxcompiler.dll"
+    IMPORTED_LOCATION_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/x64-Debug/bin/dxcompiler.dll"
+
+    IMPORTED_CONFIGURATIONS "RELEASE;DEBUG"
+)
+
+set_target_properties(DXCLatest PROPERTIES
+    IMPORTED_IMPLIB_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/x64-Release/bin/dxcompiler.lib"
+    IMPORTED_IMPLIB_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/x64-Debug/bin/dxcompiler.lib"
+)
+
+set_property(TARGET DXCLatest PROPERTY
+    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
