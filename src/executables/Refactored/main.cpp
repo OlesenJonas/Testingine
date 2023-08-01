@@ -139,8 +139,8 @@ int main()
         .debugName = "mipTest",
         .type = Texture::Type::t2D,
         .format = Texture::Format::r8g8b8a8_unorm,
-        .allStates = ResourceState::SampleSource | ResourceState::Storage,
-        .initialState = ResourceState::Storage,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageComputeWrite,
+        .initialState = ResourceState::StorageComputeWrite,
         .size = {128, 128},
         .mipLevels = Texture::MipLevels::All,
     });
@@ -203,7 +203,7 @@ int main()
                     {
                         Barrier::from(Barrier::Image{
                             .texture = mipTestTexH,
-                            .stateBefore = ResourceState::StorageCompute,
+                            .stateBefore = ResourceState::StorageComputeWrite,
                             .stateAfter = ResourceState::SampleSource,
                         }),
                     });
@@ -270,37 +270,20 @@ int main()
         .debugName = "HdriCubemap",
         .type = Texture::Type::tCube,
         .format = rm->get(hdri)->descriptor.format,
-        .allStates = ResourceState::SampleSource | ResourceState::Storage,
-        .initialState = ResourceState::Undefined,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageComputeWrite,
+        .initialState = ResourceState::StorageComputeWrite,
         .size = {.width = hdriCubeRes, .height = hdriCubeRes},
         .mipLevels = Texture::MipLevels::All,
     });
     Handle<ComputeShader> conversionShaderHandle =
         rm->createComputeShader({.sourcePath = SHADERS_PATH "/Skybox/equiToCube.hlsl"}, "equiToCubeCompute");
     ComputeShader* conversionShader = rm->get(conversionShaderHandle);
-    struct ConversionPushConstants
-    {
-        uint32_t sourceIndex;
-        uint32_t targetIndex;
-    } constants = {
-        .sourceIndex = rm->get(hdri)->fullResourceIndex(),
-        .targetIndex = rm->get(hdriCube)->mipResourceIndex(0),
-    };
+
     {
         auto* renderer = Engine::get()->getRenderer();
         renderer->immediateSubmit(
             [=](VkCommandBuffer cmd)
             {
-                submitBarriers(
-                    cmd,
-                    {
-                        Barrier::from(Barrier::Image{
-                            .texture = hdriCube,
-                            .stateBefore = ResourceState::Undefined,
-                            .stateAfter = ResourceState::StorageCompute,
-                        }),
-                    });
-
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, conversionShader->pipeline);
                 // Bind the bindless descriptor sets once per cmdbuffer
                 vkCmdBindDescriptorSets(
@@ -313,6 +296,14 @@ int main()
                     0,
                     nullptr);
 
+                struct ConversionPushConstants
+                {
+                    uint32_t sourceIndex;
+                    uint32_t targetIndex;
+                } constants = {
+                    .sourceIndex = rm->get(hdri)->fullResourceIndex(),
+                    .targetIndex = rm->get(hdriCube)->mipResourceIndex(0),
+                };
                 // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
                 vkCmdPushConstants(
                     cmd,
@@ -331,7 +322,7 @@ int main()
                     {
                         Barrier::from(Barrier::Image{
                             .texture = hdriCube,
-                            .stateBefore = ResourceState::StorageCompute,
+                            .stateBefore = ResourceState::StorageComputeWrite,
                             .stateAfter = ResourceState::SampleSource,
                         }),
                     });
@@ -349,8 +340,8 @@ int main()
         .debugName = "hdriIrradiance",
         .type = Texture::Type::tCube,
         .format = Texture::Format::r16g16b16a16_float,
-        .allStates = ResourceState::SampleSource | ResourceState::Storage,
-        .initialState = ResourceState::Undefined,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageComputeWrite,
+        .initialState = ResourceState::StorageComputeWrite,
         .size = {irradianceRes, irradianceRes, 1},
     });
     {
@@ -360,17 +351,6 @@ int main()
         renderer->immediateSubmit(
             [=](VkCommandBuffer cmd)
             {
-                // transition dst texture to compute storage state
-                submitBarriers(
-                    cmd,
-                    {
-                        Barrier::from(Barrier::Image{
-                            .texture = irradianceTexHandle,
-                            .stateBefore = ResourceState::Undefined,
-                            .stateAfter = ResourceState::StorageCompute,
-                        }),
-                    });
-
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, calcIrradianceShader->pipeline);
 
                 // Bind the bindless descriptor sets once per cmdbuffer
@@ -413,7 +393,7 @@ int main()
                     {
                         Barrier::from(Barrier::Image{
                             .texture = irradianceTexHandle,
-                            .stateBefore = ResourceState::StorageCompute,
+                            .stateBefore = ResourceState::StorageComputeWrite,
                             .stateAfter = ResourceState::SampleSource,
                         }),
                     });
@@ -429,8 +409,8 @@ int main()
         .debugName = "prefilteredEnvMap",
         .type = Texture::Type::tCube,
         .format = Texture::Format::r16g16b16a16_float,
-        .allStates = ResourceState::SampleSource | ResourceState::Storage,
-        .initialState = ResourceState::Storage,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageComputeWrite,
+        .initialState = ResourceState::StorageComputeWrite,
         .size = {prefilteredEnvMapBaseSize, prefilteredEnvMapBaseSize},
         .mipLevels = 5,
     });
@@ -496,7 +476,7 @@ int main()
                     {
                         Barrier::from(Barrier::Image{
                             .texture = prefilteredEnvMap,
-                            .stateBefore = ResourceState::StorageCompute,
+                            .stateBefore = ResourceState::StorageComputeWrite,
                             .stateAfter = ResourceState::SampleSource,
                         }),
                     });
@@ -511,8 +491,8 @@ int main()
         .debugName = "brdfIntegral",
         .type = Texture::Type::t2D,
         .format = Texture::Format::r16_g16_float,
-        .allStates = ResourceState::SampleSource | ResourceState::Storage,
-        .initialState = ResourceState::Storage,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageComputeWrite,
+        .initialState = ResourceState::StorageComputeWrite,
         .size = {brdfIntegralSize, brdfIntegralSize},
         .mipLevels = 1,
     });
@@ -560,7 +540,7 @@ int main()
                     {
                         Barrier::from(Barrier::Image{
                             .texture = brdfIntegralMap,
-                            .stateBefore = ResourceState::StorageCompute,
+                            .stateBefore = ResourceState::StorageComputeWrite,
                             .stateAfter = ResourceState::SampleSource,
                         }),
                     });

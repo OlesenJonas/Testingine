@@ -84,8 +84,14 @@ constexpr VkImageLayout toVkImageLayout(ResourceState state)
     case ResourceState::TransferDst:
         return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     case ResourceState::Storage:
+    case ResourceState::StorageRead:
+    case ResourceState::StorageWrite:
     case ResourceState::StorageGraphics:
+    case ResourceState::StorageGraphicsRead:
+    case ResourceState::StorageGraphicsWrite:
     case ResourceState::StorageCompute:
+    case ResourceState::StorageComputeRead:
+    case ResourceState::StorageComputeWrite:
         return VK_IMAGE_LAYOUT_GENERAL;
     case ResourceState::SampleSource:
     case ResourceState::SampleSourceGraphics:

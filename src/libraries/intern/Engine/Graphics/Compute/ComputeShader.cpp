@@ -51,7 +51,7 @@ ResourceManager::createComputeShader(Shaders::StageCreateInfo&& createInfo, std:
     {
         assert(false);
     }
-    setDebugName(computeShader->shaderModule, (std::string{shaderName}).c_str());
+    setDebugName(computeShader->shaderModule, (std::string{shaderName} + "module").c_str());
 
     // Parse Shader Interface -------------
 
@@ -70,6 +70,7 @@ ResourceManager::createComputeShader(Shaders::StageCreateInfo&& createInfo, std:
     // nameToMaterialLUT.insert({std::string{matName}, newMaterialHandle});
 
     computeShader->createPipeline();
+    setDebugName(computeShader->pipeline, (std::string{shaderName}).c_str());
 
     return newComputeShaderHandle;
 }

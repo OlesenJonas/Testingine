@@ -13,38 +13,45 @@
             so its currently not possible to transitions something between vertex and fragment shader
             but im not even sure if ill need that. Worry about it when it happens
 */
+
+// clang-format off
 enum struct ResourceState : uint32_t
 {
     // Common states
     // doesnt map to API values, just here so uninitialized values can be caught more easily
-    None = nthBit(0u),
-    Undefined = nthBit(1u),
+    None        = nthBit(0u),
+    Undefined   = nthBit(1u),
     TransferSrc = nthBit(2u),
     TransferDst = nthBit(3u),
 
-    // TODO: Split storage into ReadOnly/WriteOnly/ReadWrite
-    //       Would allow for more specific access masks and its not an uncommon use-case
-    Storage = nthBit(4u),
-    StorageGraphics = nthBit(5u),
-    StorageCompute = nthBit(6u),
+    Storage              = nthBit(4u),
+    StorageRead          = nthBit(5u),
+    StorageWrite         = nthBit(6u),
+    StorageGraphics      = nthBit(7u),
+    StorageGraphicsRead  = nthBit(8u),
+    StorageGraphicsWrite = nthBit(9u),
+    StorageCompute       = nthBit(10u),
+    StorageComputeRead   = nthBit(11u),
+    StorageComputeWrite  = nthBit(12u),
 
     // Texture specific
-    SampleSource = nthBit(7u),
-    SampleSourceGraphics = nthBit(8u),
-    SampleSourceCompute = nthBit(9u),
+    SampleSource         = nthBit(13u),
+    SampleSourceGraphics = nthBit(14u),
+    SampleSourceCompute  = nthBit(15u),
 
-    Rendertarget = nthBit(10u),
-    DepthStencilTarget = nthBit(11u),
-    DepthStencilReadOnly = nthBit(12u),
+    Rendertarget         = nthBit(16u),
+    DepthStencilTarget   = nthBit(17u),
+    DepthStencilReadOnly = nthBit(18u),
 
     // Buffer specific
-    VertexBuffer = nthBit(13u),
-    IndexBuffer = nthBit(14u),
-    UniformBuffer = nthBit(15u),
-    UniformBufferGraphics = nthBit(16u),
-    UniformBufferCompute = nthBit(17u),
-    IndirectArgument = nthBit(18u),
+    VertexBuffer          = nthBit(19u),
+    IndexBuffer           = nthBit(20u),
+    UniformBuffer         = nthBit(21u),
+    UniformBufferGraphics = nthBit(22u),
+    UniformBufferCompute  = nthBit(23u),
+    IndirectArgument      = nthBit(24u),
 };
+// clang-format on
 
 struct ResourceStateMulti
 {
@@ -102,8 +109,14 @@ constexpr VkImageUsageFlags toVkImageUsageSingle(ResourceState state)
     case ResourceState::TransferDst:
         return VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     case ResourceState::Storage:
+    case ResourceState::StorageRead:
+    case ResourceState::StorageWrite:
     case ResourceState::StorageGraphics:
+    case ResourceState::StorageGraphicsRead:
+    case ResourceState::StorageGraphicsWrite:
     case ResourceState::StorageCompute:
+    case ResourceState::StorageComputeRead:
+    case ResourceState::StorageComputeWrite:
         return VK_IMAGE_USAGE_STORAGE_BIT;
     case ResourceState::SampleSource:
     case ResourceState::SampleSourceGraphics:
@@ -121,6 +134,7 @@ constexpr VkImageUsageFlags toVkImageUsageSingle(ResourceState state)
     case ResourceState::UniformBufferCompute:
     case ResourceState::IndirectArgument:
         assert(false);
+        break;
     }
     return 0;
 }
@@ -141,14 +155,20 @@ constexpr VkPipelineStageFlags2 toVkPipelineStage(ResourceState state)
         // TODO: could be more specific, instead of just transfer also have blit/copy_dst/src
         return VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
     case ResourceState::Storage:
+    case ResourceState::StorageRead:
+    case ResourceState::StorageWrite:
     case ResourceState::SampleSource:
     case ResourceState::UniformBuffer:
         return VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     case ResourceState::StorageGraphics:
+    case ResourceState::StorageGraphicsRead:
+    case ResourceState::StorageGraphicsWrite:
     case ResourceState::SampleSourceGraphics:
     case ResourceState::UniformBufferGraphics:
         return VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
     case ResourceState::StorageCompute:
+    case ResourceState::StorageComputeRead:
+    case ResourceState::StorageComputeWrite:
     case ResourceState::SampleSourceCompute:
     case ResourceState::UniformBufferCompute:
         return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
@@ -186,6 +206,14 @@ constexpr VkAccessFlags2 toVkAccessFlags(ResourceState state)
     case ResourceState::StorageGraphics:
     case ResourceState::StorageCompute:
         return VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
+    case ResourceState::StorageRead:
+    case ResourceState::StorageGraphicsRead:
+    case ResourceState::StorageComputeRead:
+        return VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+    case ResourceState::StorageWrite:
+    case ResourceState::StorageGraphicsWrite:
+    case ResourceState::StorageComputeWrite:
+        return VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
     case ResourceState::SampleSource:
     case ResourceState::SampleSourceGraphics:
     case ResourceState::SampleSourceCompute:

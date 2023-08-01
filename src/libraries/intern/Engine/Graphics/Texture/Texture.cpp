@@ -284,12 +284,19 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
         setDebugName(tex->_fullImageView, (std::string{name} + "_viewFull").c_str());
 
         VulkanRenderer& renderer = *VulkanRenderer::get();
+        // TODO: containsSamplingState()/...StorageState() functions!
         bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
                                (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
                                (createInfo.allStates & ResourceState::SampleSourceCompute);
         bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
+                              (createInfo.allStates & ResourceState::StorageRead) ||
+                              (createInfo.allStates & ResourceState::StorageWrite) ||
                               (createInfo.allStates & ResourceState::StorageGraphics) ||
-                              (createInfo.allStates & ResourceState::StorageCompute);
+                              (createInfo.allStates & ResourceState::StorageGraphicsRead) ||
+                              (createInfo.allStates & ResourceState::StorageGraphicsWrite) ||
+                              (createInfo.allStates & ResourceState::StorageCompute) ||
+                              (createInfo.allStates & ResourceState::StorageComputeRead) ||
+                              (createInfo.allStates & ResourceState::StorageComputeWrite);
 
         if(usedForSampling && usedForStorage)
         {
@@ -391,8 +398,14 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                                    (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
                                    (createInfo.allStates & ResourceState::SampleSourceCompute);
             bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
+                                  (createInfo.allStates & ResourceState::StorageRead) ||
+                                  (createInfo.allStates & ResourceState::StorageWrite) ||
                                   (createInfo.allStates & ResourceState::StorageGraphics) ||
-                                  (createInfo.allStates & ResourceState::StorageCompute);
+                                  (createInfo.allStates & ResourceState::StorageGraphicsRead) ||
+                                  (createInfo.allStates & ResourceState::StorageGraphicsWrite) ||
+                                  (createInfo.allStates & ResourceState::StorageCompute) ||
+                                  (createInfo.allStates & ResourceState::StorageComputeRead) ||
+                                  (createInfo.allStates & ResourceState::StorageComputeWrite);
 
             // if(usedForSampling && usedForStorage)
             // {

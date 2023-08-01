@@ -114,3 +114,7 @@ void setDebugName(VkDescriptorSetLayout setLayout, const char* name)
 {
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)setLayout, name);
 }
+void setDebugName(VkPipeline pipeline, const char* name)
+{
+    setDebugName(VK_OBJECT_TYPE_PIPELINE, (uint64_t)pipeline, name);
+}

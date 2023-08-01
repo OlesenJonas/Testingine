@@ -49,6 +49,7 @@ if(LIBRARY_HAS_TESTS)
 
         add_executable(${TEST_EXECUTABLE} ${test})
         set_target_properties(${TEST_EXECUTABLE} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/out/release_tests)
+        set_target_properties(${TEST_EXECUTABLE} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/out/releaseWithDebInfo_tests)
         set_target_properties(${TEST_EXECUTABLE} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/out/debug_tests)
         # link needed libraries
         target_link_libraries(${TEST_EXECUTABLE} PRIVATE ${LIB_TESTS})
