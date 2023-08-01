@@ -4,6 +4,8 @@
 #include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_glfw.h>
 #include <ImGui/imgui_impl_vulkan.h>
+#include <format>
+#include <fstream>
 
 Engine::Engine()
     : mainWindow(1200, 800, "Vulkan Test", {{GLFW_MAXIMIZED, GLFW_TRUE}}), sceneRoot(ecs.createEntity())
@@ -26,53 +28,64 @@ Engine::Engine()
 
     // Create default Samplers
 
-// WARNING when changing these, also change them in Shaders/Bindless/Sampler.hlsl
-#define DEFAULT_SAMPLER_LINEAR_REPEAT 0
-#define DEFAULT_SAMPLER_LINEAR_CLAMP 1
-#define DEFAULT_SAMPLER_NEAREST 2
-    constexpr Sampler::Info defaultInfos[] = {
-        {
-            .magFilter = Sampler::Filter::Linear,
-            .minFilter = Sampler::Filter::Linear,
-            .mipMapFilter = Sampler::Filter::Linear,
-            .addressModeU = Sampler::AddressMode::Repeat,
-            .addressModeV = Sampler::AddressMode::Repeat,
-            .addressModeW = Sampler::AddressMode::Repeat,
-        },
-        {
-            .magFilter = Sampler::Filter::Linear,
-            .minFilter = Sampler::Filter::Linear,
-            .mipMapFilter = Sampler::Filter::Linear,
-            .addressModeU = Sampler::AddressMode::ClampEdge,
-            .addressModeV = Sampler::AddressMode::ClampEdge,
-            .addressModeW = Sampler::AddressMode::ClampEdge,
-        },
-        {
-            .magFilter = Sampler::Filter::Nearest,
-            .minFilter = Sampler::Filter::Nearest,
-            .mipMapFilter = Sampler::Filter::Nearest,
-            .addressModeU = Sampler::AddressMode::Repeat,
-            .addressModeV = Sampler::AddressMode::Repeat,
-            .addressModeW = Sampler::AddressMode::Repeat,
-        },
+    struct DefaultSamplerInfo
+    {
+        int index;
+        std::string_view name;
+        Sampler::Info info;
     };
+
+    DefaultSamplerInfo defaultInfos[] = {
+        DefaultSamplerInfo{
+            .name = "DEFAULT_SAMPLER_LINEAR_REPEAT",
+            .info =
+                {
+                    .magFilter = Sampler::Filter::Linear,
+                    .minFilter = Sampler::Filter::Linear,
+                    .mipMapFilter = Sampler::Filter::Linear,
+                    .addressModeU = Sampler::AddressMode::Repeat,
+                    .addressModeV = Sampler::AddressMode::Repeat,
+                    .addressModeW = Sampler::AddressMode::Repeat,
+                }},
+        DefaultSamplerInfo{
+            .name = "DEFAULT_SAMPLER_LINEAR_CLAMP",
+            .info =
+                {
+                    .magFilter = Sampler::Filter::Linear,
+                    .minFilter = Sampler::Filter::Linear,
+                    .mipMapFilter = Sampler::Filter::Linear,
+                    .addressModeU = Sampler::AddressMode::ClampEdge,
+                    .addressModeV = Sampler::AddressMode::ClampEdge,
+                    .addressModeW = Sampler::AddressMode::ClampEdge,
+                }},
+        DefaultSamplerInfo{
+            .name = "DEFAULT_SAMPLER_NEAREST_CLAMP",
+            .info =
+                {
+                    .magFilter = Sampler::Filter::Nearest,
+                    .minFilter = Sampler::Filter::Nearest,
+                    .mipMapFilter = Sampler::Filter::Nearest,
+                    .addressModeU = Sampler::AddressMode::ClampEdge,
+                    .addressModeV = Sampler::AddressMode::ClampEdge,
+                    .addressModeW = Sampler::AddressMode::ClampEdge,
+                }},
+    };
+    for(auto& info : defaultInfos)
     {
-        auto linearSampler =
-            resourceManager.createSampler(Sampler::Info{defaultInfos[DEFAULT_SAMPLER_LINEAR_REPEAT]});
-        assert(resourceManager.get(linearSampler)->info == defaultInfos[DEFAULT_SAMPLER_LINEAR_REPEAT]);
-        assert(resourceManager.get(linearSampler)->resourceIndex == DEFAULT_SAMPLER_LINEAR_REPEAT);
+        auto samplerHandle = resourceManager.createSampler(Sampler::Info{info.info});
+        info.index = samplerHandle.getIndex();
     }
+
+    // TODO: this only really has to happen once post build, could make own executable that uses shared haeder or
+    //       smth!
+    //          also think about how this works once .spirvs are distributed (outside of source tree) etc...
+    std::ofstream defaultSamplerDefines(
+        SHADERS_PATH "/Bindless/DefaultSamplers.hlsl", std::ofstream::out | std::ofstream::trunc);
+    for(auto& info : defaultInfos)
     {
-        auto linearSampler =
-            resourceManager.createSampler(Sampler::Info{defaultInfos[DEFAULT_SAMPLER_LINEAR_CLAMP]});
-        assert(resourceManager.get(linearSampler)->info == defaultInfos[DEFAULT_SAMPLER_LINEAR_CLAMP]);
-        assert(resourceManager.get(linearSampler)->resourceIndex == DEFAULT_SAMPLER_LINEAR_CLAMP);
+        defaultSamplerDefines << std::format("#define {} {}\n", info.name, info.index);
     }
-    {
-        auto nearestSampler = resourceManager.createSampler(Sampler::Info{defaultInfos[DEFAULT_SAMPLER_NEAREST]});
-        assert(resourceManager.get(nearestSampler)->info == defaultInfos[DEFAULT_SAMPLER_NEAREST]);
-        assert(resourceManager.get(nearestSampler)->resourceIndex == DEFAULT_SAMPLER_NEAREST);
-    }
+    defaultSamplerDefines.close();
 
     resourceManager.createMaterial(
         {

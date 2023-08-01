@@ -51,6 +51,10 @@ class Handle
     {
         return (uint32_t(index) << 16u) + uint32_t(generation);
     }
+    [[nodiscard]] auto getIndex() const
+    {
+        return index;
+    }
 
   private:
     uint16_t index = 0;
