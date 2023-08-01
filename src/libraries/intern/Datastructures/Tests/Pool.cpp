@@ -22,9 +22,21 @@ int main()
     {
         A(int* p, uint32_t b) : counter(p), a(b){};
         A(int* p, Int c, uint16_t d) : counter(p), a(c.i + d){};
+        A(A& other)
+        {
+            a = other.a;
+            counter = other.counter;
+        }
+        A(A&& other)
+        {
+            a = other.a;
+            counter = other.counter;
+            other.counter = nullptr;
+        }
         ~A()
         {
-            (*counter)++;
+            if(counter != nullptr)
+                (*counter)++;
         };
         int a;
         int* counter;
@@ -35,7 +47,16 @@ int main()
     a.emplace_back(aInstance);
     count = 0;
 
-    // test with small pool, fill all, assert that newley added object is at index (oldSize + 1)
+    // this does not grow the pool
+    {
+        Pool<A> pool1{2};
+        pool1.insert(&count, uint32_t{13});
+        pool1.insert(&count, Int{13}, 13);
+    }
+    assert(count == 2);
+
+    count = 0;
+
     {
         Pool<A> pool1{2};
         pool1.insert(&count, uint32_t{13});
