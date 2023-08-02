@@ -1,7 +1,7 @@
 #include "ResourceManager.hpp"
 #include "Graphics/Buffer/Buffer.hpp"
 #include "Graphics/Renderer/VulkanRenderer.hpp"
-#include <Engine/Engine.hpp>
+#include <Engine/Application/Application.hpp>
 #include <TinyOBJ/tiny_obj_loader.h>
 #include <vulkan/vulkan_core.h>
 

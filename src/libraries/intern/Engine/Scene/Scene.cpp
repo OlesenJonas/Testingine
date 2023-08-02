@@ -4,7 +4,7 @@
 #include "glTF/glTFtoTI.hpp"
 
 #include <Datastructures/Pool.hpp>
-#include <Engine.hpp>
+#include <Engine/Application/Application.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <cstddef>
 #include <filesystem>
@@ -55,7 +55,7 @@ ECS::Entity parseNode(
     return nodeEntity;
 };
 
-void Scene::load(std::string path)
+void Scene::load(std::string path, ResourceManager* rm, ECS* ecs, ECS::Entity parent)
 {
     /*
         todo:
@@ -67,8 +67,6 @@ void Scene::load(std::string path)
 
     const glTF::Main gltf = glTF::Main::load(path);
     assert(gltf.asset.version == "2.0");
-
-    ResourceManager* rm = Engine::get()->getResourceManager();
 
     // create samplers
     std::vector<Handle<Sampler>> samplers;
@@ -349,15 +347,14 @@ void Scene::load(std::string path)
         materialInstances[i] = materialInstanceHandle;
     }
 
-    ECS& ecs = Engine::get()->ecs;
-    ECS::Entity sceneRoot = Engine::get()->sceneRoot;
+    ECS::Entity sceneRoot = parent;
     // Load scene(s)
     //  just the first one for now, not sure how to handle multiple
     //  (and if im even planning on using files with multiple)
     {
         for(uint32_t rootIndex : gltf.scenes[0].nodeIndices)
         {
-            ECS::Entity rootNode = parseNode(meshes, materialInstances, gltf, ecs, rootIndex, sceneRoot);
+            ECS::Entity rootNode = parseNode(meshes, materialInstances, gltf, *ecs, rootIndex, sceneRoot);
 
             updateTransformHierarchy(rootNode, glm::mat4{1.0f});
         }

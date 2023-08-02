@@ -19,6 +19,8 @@
 #include <string>
 #include <unordered_map>
 
+struct GLFWwindow;
+
 // todo: store somewhere else and keep synced with shader code version of struct
 struct RenderPassData
 {
@@ -39,7 +41,12 @@ class VulkanRenderer
   public:
     CREATE_STATIC_GETTER(VulkanRenderer);
 
-    void init();
+    void init(GLFWwindow* window);
+    // TODO: move into variable part on refactor
+    //       maybe reference application instead, and just get window from application
+    //       not sure if I want to cover scenario where window pointer can change in the future
+    GLFWwindow* mainWindow;
+
     void cleanup();
 
     void draw();

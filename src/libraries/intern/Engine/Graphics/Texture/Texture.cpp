@@ -2,7 +2,7 @@
 #include "Graphics/Renderer/VulkanRenderer.hpp"
 #include "Graphics/Texture/Texture.hpp"
 #include "TextureToVulkan.hpp"
-#include <Engine/Engine.hpp>
+#include <Engine/Application/Application.hpp>
 #include <Engine/Graphics/Barriers/Barrier.hpp>
 #include <Engine/Graphics/Renderer/VulkanDebug.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>

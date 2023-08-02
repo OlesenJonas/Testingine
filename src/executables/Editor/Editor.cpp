@@ -1,23 +1,24 @@
-#include "Engine.hpp"
+#include "Editor.hpp"
+#include <Engine/Graphics/Mesh/Cube.hpp>
 #include <Engine/Scene/DefaultComponents.hpp>
-#include <Graphics/Mesh/Cube.hpp>
 #include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_glfw.h>
 #include <ImGui/imgui_impl_vulkan.h>
 #include <format>
 #include <fstream>
 
-Engine::Engine()
-    : mainWindow(1200, 800, "Vulkan Test", {{GLFW_MAXIMIZED, GLFW_TRUE}}), sceneRoot(ecs.createEntity())
+Editor::Editor()
+    : Application(ApplicationCreateInfo{
+          .name = "Testingine Editor",
+          .windowHints = {{GLFW_MAXIMIZED, GLFW_TRUE}},
+      }),
+      sceneRoot(ecs.createEntity())
 {
+    // TODO: REMOVE
     ptr = this;
 
-    // This needs to come first here, otherwise these callbacks will override
-    // ImGuis callbacks set-up in renderer.init()
-    inputManager.init();
-
-    resourceManager.init();
-    renderer.init();
+    // TODO: FIX: THIS OVERRIDES IMGUIS CALLBACKS!
+    inputManager.init(mainWindow.glfwWindow);
 
     ecs.registerComponent<Transform>();
     ecs.registerComponent<Hierarchy>();
@@ -76,7 +77,7 @@ Engine::Engine()
         info.index = samplerHandle.getIndex();
     }
 
-    // TODO: this only really has to happen once post build, could make own executable that uses shared haeder or
+    // TODO: this only really has to happen once post build, could make own executable that uses shared header or
     //       smth!
     //          also think about how this works once .spirvs are distributed (outside of source tree) etc...
     std::ofstream defaultSamplerDefines(
@@ -101,25 +102,26 @@ Engine::Engine()
     mainCamera =
         Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
 
+    userData = {
+        .ecs = &ecs,
+        .cam = &mainCamera,
+    };
+    Application::userData = (void*)&userData;
+
     glfwSetTime(0.0);
-    Engine::get()->getInputManager()->resetTime();
+    inputManager.resetTime();
 }
 
-Engine::~Engine()
+Editor::~Editor()
 {
+    // TODO: need a fancy way of ensuring that this is always called in applications
+    //       Cant use base class destructor since that will only be called *after*wards
     renderer.waitForWorkFinished();
-    resourceManager.cleanup();
-    renderer.cleanup();
 }
 
-bool Engine::isRunning() const
+void Editor::update()
 {
-    return _isRunning;
-}
-
-void Engine::update()
-{
-    _isRunning &= !glfwWindowShouldClose(Engine::get()->getMainWindow()->glfwWindow);
+    _isRunning &= !glfwWindowShouldClose(mainWindow.glfwWindow);
     if(!_isRunning)
         return;
 
@@ -129,7 +131,7 @@ void Engine::update()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    inputManager.update();
+    inputManager.update(mainWindow.glfwWindow);
     if(!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
     {
         mainCamera.update();

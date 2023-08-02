@@ -1,6 +1,6 @@
 #include "Sampler.hpp"
 #include "SamplerToVulkan.hpp"
-#include <Engine/Engine.hpp>
+#include <Engine/Application/Application.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 
 Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)

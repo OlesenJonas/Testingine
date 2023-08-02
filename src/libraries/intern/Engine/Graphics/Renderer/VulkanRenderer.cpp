@@ -13,8 +13,9 @@
 #include "VulkanDebug.hpp"
 #include <Engine/Scene/DefaultComponents.hpp>
 
+#include <Engine/Application/Application.hpp>
+
 #include <Datastructures/Span.hpp>
-#include <Engine.hpp>
 #include <cstddef>
 
 #include <fstream>
@@ -33,10 +34,11 @@
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
-void VulkanRenderer::init()
+void VulkanRenderer::init(GLFWwindow* window)
 {
     ptr = this;
 
+    mainWindow = window;
     initVulkan();
     initSwapchain();
     initCommands();
@@ -67,8 +69,7 @@ void VulkanRenderer::initVulkan()
     if(enableValidationLayers)
         debugMessenger = setupDebugMessenger(instance);
 
-    if(glfwCreateWindowSurface(instance, Engine::get()->getMainWindow()->glfwWindow, nullptr, &surface) !=
-       VK_SUCCESS)
+    if(glfwCreateWindowSurface(instance, mainWindow, nullptr, &surface) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to create window surface!");
     }
@@ -111,8 +112,7 @@ void VulkanRenderer::initVulkan()
 
 void VulkanRenderer::initSwapchain()
 {
-    VulkanSwapchainSetup swapchainSetup(
-        physicalDevice, device, Engine::get()->getMainWindow()->glfwWindow, surface);
+    VulkanSwapchainSetup swapchainSetup(physicalDevice, device, mainWindow, surface);
     swapchainSetup.setup(queueFamilyIndices.graphicsFamily.value(), queueFamilyIndices.presentFamily.value());
 
     swapchain = swapchainSetup.getSwapchain();
@@ -122,7 +122,9 @@ void VulkanRenderer::initSwapchain()
 
     swapchainImageViews = swapchainSetup.createSwapchainImageViews();
 
-    ResourceManager& rsrcManager = *Engine::get()->getResourceManager();
+    // TODO: this shouldnt be part of vulkan renderer / device, this is user code !
+    //       once refactored, remove resource manager as parameter!
+    ResourceManager& rsrcManager = Application::ptr->resourceManager;
     depthTexture = rsrcManager.createTexture(Texture::CreateInfo{
         .debugName = "Depth Texture",
         .format = depthFormat,
@@ -334,7 +336,7 @@ void VulkanRenderer::initImGui()
     // 2: initialize the library
     ImGui::CreateContext();
     // init imgui for Glfw
-    ImGui_ImplGlfw_InitForVulkan(Engine::get()->getMainWindow()->glfwWindow, true);
+    ImGui_ImplGlfw_InitForVulkan(mainWindow, true);
     // init imgui for Vulkan
     ImGui_ImplVulkan_InitInfo initInfo = {
         .Instance = instance,
@@ -440,7 +442,8 @@ void VulkanRenderer::cleanup()
     }
     vkDestroyInstance(instance, nullptr);
 
-    glfwDestroyWindow(Engine::get()->getMainWindow()->glfwWindow);
+    // TODO: why does vulkan renderer call this, should be responsibility of class owning main window
+    glfwDestroyWindow(mainWindow);
     glfwTerminate();
 }
 
@@ -483,7 +486,7 @@ void VulkanRenderer::draw()
         0,
         nullptr);
 
-    auto& rsrcManager = *Engine::get()->getResourceManager();
+    auto& rsrcManager = Application::ptr->resourceManager;
     Texture* depthTexture = rsrcManager.get(this->depthTexture);
     assert(depthTexture);
 
@@ -606,7 +609,17 @@ void VulkanRenderer::draw()
     vkCmdSetScissor(curFrameData.mainCommandBuffer, 0, 1, &scissor);
 
     renderables.clear();
-    Engine::get()->ecs.forEach<RenderInfo, Transform>(
+
+    struct UserData
+    {
+        ECS* ecs;
+        Camera* cam;
+    };
+    auto* userData = (UserData*)Application::ptr->userData;
+    assert(userData != nullptr);
+
+    auto* ecs = userData->ecs;
+    ecs->forEach<RenderInfo, Transform>(
         [&](RenderInfo* renderinfos, Transform* transforms, uint32_t count)
         {
             for(int i = 0; i < count; i++)
@@ -728,7 +741,15 @@ void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int c
 {
     ResourceManager* rm = ResourceManager::get();
 
-    Camera* mainCamera = Engine::get()->getCamera();
+    struct UserData
+    {
+        ECS* ecs;
+        Camera* cam;
+    };
+    auto* userData = (UserData*)Application::ptr->userData;
+    assert(userData != nullptr);
+
+    Camera* mainCamera = userData->cam;
 
     RenderPassData renderPassData;
     renderPassData.proj = mainCamera->getProj();

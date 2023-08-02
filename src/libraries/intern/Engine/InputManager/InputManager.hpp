@@ -5,19 +5,22 @@
 #include <glm/glm.hpp>
 #include <iostream>
 
+// TODO: not sure I like "the same" window being passed to all these functions
+
 class InputManager
 {
   public:
     InputManager() = default;
 
-    void init();
+    void init(GLFWwindow* window);
 
-    void update();
+    void update(GLFWwindow* window);
 
     void resetTime(int64_t frameCount = 0, double simulationTime = 0.0);
     void disableFixedTimestep();
     void enableFixedTimestep(double timestep);
     void setupCallbacks(
+        GLFWwindow* window,
         GLFWkeyfun keyCallback = nullptr,
         GLFWmousebuttonfun mousebuttonCallback = nullptr,
         GLFWscrollfun scrollCallback = nullptr,
