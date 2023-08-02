@@ -118,3 +118,21 @@ void setDebugName(VkPipeline pipeline, const char* name)
 {
     setDebugName(VK_OBJECT_TYPE_PIPELINE, (uint64_t)pipeline, name);
 }
+
+PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
+PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
+
+void startDebugRegion(VkCommandBuffer cmd, const char* name)
+{
+    VkDebugUtilsLabelEXT info{
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pNext = nullptr,
+        .pLabelName = name,
+    };
+    pfnCmdBeginDebugUtilsLabelEXT(cmd, &info);
+}
+
+void endDebugRegion(VkCommandBuffer cmd)
+{
+    pfnCmdEndDebugUtilsLabelEXT(cmd);
+}

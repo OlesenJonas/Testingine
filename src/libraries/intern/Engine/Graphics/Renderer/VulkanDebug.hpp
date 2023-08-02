@@ -34,3 +34,9 @@ void setDebugName(VkShaderModule shader, const char* name);
 void setDebugName(VkDescriptorSet set, const char* name);
 void setDebugName(VkDescriptorSetLayout setLayout, const char* name);
 void setDebugName(VkPipeline pipeline, const char* name);
+
+extern PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
+extern PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
+
+void startDebugRegion(VkCommandBuffer cmd, const char* name);
+void endDebugRegion(VkCommandBuffer cmd);

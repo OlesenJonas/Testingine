@@ -58,6 +58,7 @@ void VulkanRenderer::initVulkan()
     };
     const std::vector<const char*> instanceExtensions = {
         // Need this for debug markers, not just for layers
+        // TODO: check if extensions are even support, save through some flag etc
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
     };
 
@@ -87,6 +88,12 @@ void VulkanRenderer::initVulkan()
     vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
 
     device = deviceFinder.createLogicalDevice();
+
+    // get device related function pointers
+    pfnCmdBeginDebugUtilsLabelEXT =
+        (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkCmdBeginDebugUtilsLabelEXT");
+    pfnCmdEndDebugUtilsLabelEXT =
+        (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkCmdEndDebugUtilsLabelEXT");
 
     queueFamilyIndices = deviceFinder.getQueueFamilyIndices();
     graphicsAndComputeQueueFamily = queueFamilyIndices.graphicsAndComputeFamily.value();

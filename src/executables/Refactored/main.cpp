@@ -1,5 +1,6 @@
 #include <Engine/Engine.hpp>
 #include <Engine/Graphics/Barriers/Barrier.hpp>
+#include <Engine/Graphics/Renderer/VulkanDebug.hpp>
 #include <Engine/Graphics/Texture/Sampler.hpp>
 #include <Engine/Graphics/Texture/TextureToVulkan.hpp>
 #include <Engine/Misc/Math.hpp>
@@ -151,6 +152,7 @@ int main()
         renderer->immediateSubmit(
             [=](VkCommandBuffer cmd)
             {
+                startDebugRegion(cmd, "Mip test tex filling");
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, debugMipFillShader->pipeline);
 
                 // Bind the bindless descriptor sets once per cmdbuffer
@@ -207,6 +209,7 @@ int main()
                             .stateAfter = ResourceState::SampleSource,
                         }),
                     });
+                endDebugRegion(cmd);
             });
     }
 
