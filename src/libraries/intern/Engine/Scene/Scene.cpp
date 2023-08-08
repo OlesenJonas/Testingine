@@ -55,12 +55,14 @@ ECS::Entity parseNode(
     return nodeEntity;
 };
 
-void Scene::load(std::string path, ResourceManager* rm, ECS* ecs, ECS::Entity parent)
+void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
 {
     /*
         todo:
             confirm its actually a gltf file
     */
+
+    auto* rm = ResourceManager::get();
 
     std::filesystem::path basePath{path};
     basePath = basePath.parent_path();

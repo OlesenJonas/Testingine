@@ -1,12 +1,15 @@
-#pragma once
-
 #include "Application.hpp"
 
-Application::Application(ApplicationCreateInfo&& info)
+Application::Application(CreateInfo&& info)
     : mainWindow(info.windowWidth, info.windowHeight, info.name.c_str(), info.windowHints)
 {
+    // ensure global services are initialized in correct order
+
+    renderer.init();
+    // want display output
+    renderer.setupSwapchain(mainWindow.glfwWindow);
+
     resourceManager.init();
-    renderer.init(mainWindow.glfwWindow);
 }
 
 Application::~Application()

@@ -8,19 +8,23 @@
 /*
     each "type implementation" is in the respective .cpp file
     ie: createBuffer in Buffer.cpp, createTexture in Texture.cpp ...
+    //TODO: change?
 */
 
 void ResourceManager::init()
 {
-    ptr = this;
+    INIT_STATIC_GETTER();
+    _initialized = true;
 }
 
 void ResourceManager::cleanup()
 {
+    auto* device = VulkanRenderer::get();
+
     for(int i = 0; i < freeSamplerIndex; i++)
     {
-        VulkanRenderer::get()->deleteQueue.pushBack(
-            [=]() { vkDestroySampler(VulkanRenderer::get()->device, samplerArray[i].sampler, nullptr); });
+        device->deleteQueue.pushBack([=]()
+                                     { vkDestroySampler(device->device, samplerArray[i].sampler, nullptr); });
     }
 
     auto clearPool = [&](auto&& pool)

@@ -2,7 +2,7 @@
 
 #include <cassert>
 
-Window::Window(int width, int height, const char* title, std::initializer_list<WindowHint> hints)
+Window::Window(int width, int height, const char* title, Span<const WindowHint> hints)
     : width(width), height(height)
 {
     assert(width > 0 && height > 0);

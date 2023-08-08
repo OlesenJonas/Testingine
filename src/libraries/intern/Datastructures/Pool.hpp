@@ -35,6 +35,10 @@ class Handle
     {
         return {0, 0};
     }
+    static Handle Null()
+    {
+        return Invalid();
+    }
     [[nodiscard]] bool isValid() const
     {
         return generation != 0u;

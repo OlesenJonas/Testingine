@@ -1,6 +1,6 @@
 #include "Camera.hpp"
-#include "../Engine/Engine.hpp"
-#include "../InputManager/InputManager.hpp"
+#include <Engine/InputManager/InputManager.hpp>
+#include <Engine/Misc/Macros.hpp>
 #include <Engine/Misc/Math.hpp>
 
 #include <GLFW/glfw3.h>
@@ -25,10 +25,9 @@ Camera::Camera(float aspect, float nearDistance, float farDistance)
     setInvProjView(glm::inverse(getProjView()));
 }
 
-void Camera::update()
+// TODO: this shouldnt need the window, inputmanager should supply all the values requested fomr GLFW
+void Camera::update(GLFWwindow* window, InputManager* inputManager)
 {
-    auto* window = Engine::get()->getMainWindow()->glfwWindow;
-    auto* inputManager = Engine::get()->getInputManager();
     const glm::vec2 mouseDelta = inputManager->getMouseDelta();
 
     // todo: how much should be part of this, and how much should be inside InputManager?

@@ -5,6 +5,8 @@
 
 Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)
 {
+    auto* device = VulkanRenderer::get();
+
     // Check if such a sampler already exists
 
     // since the sampler limit is quite low atm, and sampler creation should be a rare thing
@@ -26,8 +28,6 @@ Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)
     freeSamplerIndex++;
     Sampler* sampler = &samplerArray[samplerHandle.index];
     assert(sampler == get(samplerHandle));
-
-    auto* renderer = Engine::get()->getRenderer();
 
     VkSamplerCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -51,11 +51,10 @@ Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)
     };
     sampler->info = info;
 
-    vkCreateSampler(renderer->device, &createInfo, nullptr, &sampler->sampler);
+    vkCreateSampler(device->device, &createInfo, nullptr, &sampler->sampler);
 
-    // setDebugName(tex->imageView, (std::string{name} + "_mainView").c_str());
-
-    sampler->resourceIndex = renderer->bindlessManager.createSamplerBinding(sampler->sampler, samplerHandle.index);
+    // TODO: this should go directly through device! forget the ->bindlessManager.
+    sampler->resourceIndex = device->bindlessManager.createSamplerBinding(sampler->sampler, samplerHandle.index);
 
     return samplerHandle;
 }

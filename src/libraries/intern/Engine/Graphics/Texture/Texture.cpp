@@ -13,6 +13,8 @@
 
 Handle<Texture> ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
 {
+    auto* device = VulkanRenderer::get();
+
     auto lastDirSep = loadInfo.path.find_last_of("/\\");
     auto extensionStart = loadInfo.path.find_last_of('.');
     std::string_view texName = loadInfo.debugName.empty()
@@ -55,6 +57,8 @@ Handle<Texture> ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
 
 Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 {
+    auto* device = VulkanRenderer::get();
+
     // todo: handle naming collisions and also dont just use a random name...
     std::string name = createInfo.debugName;
     if(name.empty())
@@ -122,7 +126,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
         .usage = VMA_MEMORY_USAGE_AUTO,
         .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
     };
-    VmaAllocator& allocator = Engine::get()->getRenderer()->allocator;
+    VmaAllocator& allocator = device->allocator;
     VkResult res = vmaCreateImage(allocator, &imageCrInfo, &imgAllocInfo, &tex->image, &tex->allocation, nullptr);
     assert(res == VK_SUCCESS);
 
@@ -154,7 +158,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
         };
         AllocatedBuffer stagingBuffer;
         VkResult res = vmaCreateBuffer(
-            Engine::get()->getRenderer()->allocator,
+            device->allocator,
             &stagingBufferInfo,
             &vmaallocCrInfo,
             &stagingBuffer.buffer,
@@ -167,10 +171,10 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
         memcpy(data, createInfo.initialData.data(), createInfo.initialData.size());
         vmaUnmapMemory(allocator, stagingBuffer.allocation);
 
-        Engine::get()->getRenderer()->immediateSubmit(
+        device->immediateSubmit(
             [&](VkCommandBuffer cmd)
             {
-                submitBarriers(
+                device->submitBarriers(
                     cmd,
                     {
                         Barrier::from(Barrier::Image{
@@ -200,7 +204,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                 vkCmdCopyBufferToImage(
                     cmd, stagingBuffer.buffer, tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
-                submitBarriers(
+                device->submitBarriers(
                     cmd,
                     {
                         Barrier::from(Barrier::Image{
@@ -209,23 +213,23 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                             .stateAfter = createInfo.initialState,
                         }),
                     });
+
+                if(createInfo.fillMipLevels && createInfo.mipLevels > 1)
+                {
+                    device->fillMipLevels(cmd, newTextureHandle, createInfo.initialState);
+                }
             });
 
         // immediate submit also waits on device idle so staging buffer is not being used here anymore
         vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
-
-        if(createInfo.fillMipLevels && createInfo.mipLevels > 1)
-        {
-            Texture::fillMipLevels(newTextureHandle, createInfo.initialState);
-        }
     }
     else if(createInfo.initialState != ResourceState::Undefined)
     {
         // Dont upload anything, just transition
-        Engine::get()->getRenderer()->immediateSubmit(
+        device->immediateSubmit(
             [&](VkCommandBuffer cmd)
             {
-                submitBarriers(
+                device->submitBarriers(
                     cmd,
                     {
                         Barrier::from(Barrier::Image{
@@ -279,11 +283,10 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                 },
         };
 
-        vkCreateImageView(Engine::get()->getRenderer()->device, &imageViewCrInfo, nullptr, &tex->_fullImageView);
+        vkCreateImageView(device->device, &imageViewCrInfo, nullptr, &tex->_fullImageView);
         tex->_mipImageViews[0] = tex->_fullImageView;
         setDebugName(tex->_fullImageView, (std::string{name} + "_viewFull").c_str());
 
-        VulkanRenderer& renderer = *VulkanRenderer::get();
         // TODO: containsSamplingState()/...StorageState() functions!
         bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
                                (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
@@ -300,18 +303,18 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 
         if(usedForSampling && usedForStorage)
         {
-            tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
-                tex->_fullImageView, BindlessManager::ImageUsage::Both);
+            tex->_fullResourceIndex =
+                device->bindlessManager.createImageBinding(tex->_fullImageView, BindlessManager::ImageUsage::Both);
         }
         // else: not both but maybe one of the two
         else if(usedForSampling)
         {
-            tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+            tex->_fullResourceIndex = device->bindlessManager.createImageBinding(
                 tex->_fullImageView, BindlessManager::ImageUsage::Sampled);
         }
         else if(usedForStorage)
         {
-            tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+            tex->_fullResourceIndex = device->bindlessManager.createImageBinding(
                 tex->_fullImageView, BindlessManager::ImageUsage::Storage);
         }
         tex->_mipResourceIndices[0] = tex->_fullResourceIndex;
@@ -345,18 +348,16 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                     },
             };
 
-            vkCreateImageView(
-                Engine::get()->getRenderer()->device, &imageViewCrInfo, nullptr, &tex->_fullImageView);
+            vkCreateImageView(device->device, &imageViewCrInfo, nullptr, &tex->_fullImageView);
             setDebugName(tex->_fullImageView, (std::string{name} + "_viewFull").c_str());
 
-            VulkanRenderer& renderer = *VulkanRenderer::get();
             bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
                                    (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
                                    (createInfo.allStates & ResourceState::SampleSourceCompute);
 
             if(usedForSampling)
             {
-                tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+                tex->_fullResourceIndex = device->bindlessManager.createImageBinding(
                     tex->_fullImageView, BindlessManager::ImageUsage::Sampled);
             }
         }
@@ -389,8 +390,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                     },
             };
 
-            vkCreateImageView(
-                Engine::get()->getRenderer()->device, &imageViewCrInfo, nullptr, &tex->_mipImageViews[m]);
+            vkCreateImageView(device->device, &imageViewCrInfo, nullptr, &tex->_mipImageViews[m]);
             setDebugName(tex->_mipImageViews[m], (std::string{name} + "_viewMip" + std::to_string(m)).c_str());
 
             VulkanRenderer& renderer = *VulkanRenderer::get();
@@ -432,6 +432,8 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 
 void ResourceManager::free(Handle<Texture> handle)
 {
+    auto* device = VulkanRenderer::get();
+
     /*
         todo:
         Enqueue into a per frame queue
@@ -443,20 +445,20 @@ void ResourceManager::free(Handle<Texture> handle)
     {
         return;
     }
-    const VmaAllocator* allocator = &Engine::get()->getRenderer()->allocator;
+    const VmaAllocator* allocator = &device->allocator;
     VkImage image = texture->image;
     VmaAllocation vmaAllocation = texture->allocation;
-    VkDevice device = Engine::get()->getRenderer()->device;
-    auto& renderer = *Engine::get()->getRenderer();
+    VkDevice vkdevice = device->device;
+    auto& renderer = *device;
     renderer.deleteQueue.pushBack([=]() { vmaDestroyImage(renderer.allocator, image, vmaAllocation); });
 
     VkImageView imageView = texture->_fullImageView;
-    renderer.deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
+    renderer.deleteQueue.pushBack([=]() { vkDestroyImageView(vkdevice, imageView, nullptr); });
     if(texture->descriptor.mipLevels > 1)
         for(int i = 0; i < texture->descriptor.mipLevels; i++)
         {
             imageView = texture->_mipImageViews[i];
-            renderer.deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
+            renderer.deleteQueue.pushBack([=]() { vkDestroyImageView(vkdevice, imageView, nullptr); });
         }
 
     texturePool.remove(handle);
@@ -483,140 +485,4 @@ VkImageView Texture::fullResourceView() const
 VkImageView Texture::mipResourceView(uint32_t level) const
 {
     return _mipImageViews[level];
-}
-
-void Texture::fillMipLevels(Handle<Texture> texture, ResourceState state)
-{
-    /*
-        TODO: check that image was created with usage_transfer_src_bit !
-              Switch to compute shader based solution? Could get rid of needing to mark
-              *all* textures as transfer_src/dst, just because mips are needed.
-              But requires a lot more work to handle different texture types (3d, cube, array)
-    */
-
-    auto* rm = Engine::get()->getResourceManager();
-    auto* renderer = Engine::get()->getRenderer();
-
-    Texture* tex = rm->get(texture);
-
-    if(tex->descriptor.mipLevels == 1)
-        return;
-
-    uint32_t startWidth = tex->descriptor.size.width;
-    uint32_t startHeight = tex->descriptor.size.height;
-    uint32_t startDepth = tex->descriptor.size.depth;
-
-    renderer->immediateSubmit(
-        [=](VkCommandBuffer cmd)
-        {
-            // Transition mip 0 to transfer source
-            if(state != ResourceState::TransferSrc)
-            {
-                submitBarriers(
-                    cmd,
-                    {
-                        Barrier::from(Barrier::Image{
-                            .texture = texture,
-                            .stateBefore = state,
-                            .stateAfter = ResourceState::TransferSrc,
-                            .mipLevel = 0,
-                            .mipCount = 1,
-                            // TODO: also have a Texture::ArrayLayers::All value? And set that as default?
-                            .arrayLength = int32_t(tex->descriptor.arrayLength),
-                        }),
-                    });
-            }
-
-            // Generate mip chain
-            // Downscaling from each level successively, but could also downscale mip 0 -> mip N each time
-
-            for(int i = 1; i < tex->descriptor.mipLevels; i++)
-            {
-                // prepare current level to be transfer dst
-                if(state != ResourceState::TransferSrc)
-                {
-                    submitBarriers(
-                        cmd,
-                        {
-                            Barrier::from(Barrier::Image{
-                                .texture = texture,
-                                .stateBefore = state,
-                                .stateAfter = ResourceState::TransferDst,
-                                .mipLevel = i,
-                                .mipCount = 1,
-                                .arrayLength = int32_t(tex->descriptor.arrayLength),
-                            }),
-                        });
-                }
-
-                uint32_t lastWidth = std::max(startWidth >> (i - 1), 1u);
-                uint32_t lastHeight = std::max(startHeight >> (i - 1), 1u);
-                uint32_t lastDepth = std::max(startDepth >> (i - 1), 1u);
-
-                uint32_t curWidth = std::max(startWidth >> i, 1u);
-                uint32_t curHeight = std::max(startHeight >> i, 1u);
-                uint32_t curDepth = std::max(startDepth >> i, 1u);
-
-                VkImageBlit blit{
-                    .srcSubresource =
-                        {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .mipLevel = uint32_t(i - 1),
-                            .baseArrayLayer = 0,
-                            .layerCount = toVkArrayLayers(tex->descriptor),
-                        },
-                    .srcOffsets =
-                        {{.x = 0, .y = 0, .z = 0}, {int32_t(lastWidth), int32_t(lastHeight), int32_t(lastDepth)}},
-                    .dstSubresource =
-                        {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .mipLevel = uint32_t(i),
-                            .baseArrayLayer = 0,
-                            .layerCount = toVkArrayLayers(tex->descriptor),
-                        },
-                    .dstOffsets =
-                        {{.x = 0, .y = 0, .z = 0}, {int32_t(curWidth), int32_t(curHeight), int32_t(curDepth)}},
-                };
-
-                // do the blit
-                vkCmdBlitImage(
-                    cmd,
-                    tex->image,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    tex->image,
-                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    1,
-                    &blit,
-                    VK_FILTER_LINEAR);
-
-                // prepare current level to be transfer src for next mip
-                submitBarriers(
-                    cmd,
-                    {
-                        Barrier::from(Barrier::Image{
-                            .texture = texture,
-                            // TODO: need better way to determine initial state, pass as parameter?
-                            .stateBefore = ResourceState::TransferDst,
-                            .stateAfter = ResourceState::TransferSrc,
-                            .mipLevel = i,
-                            .mipCount = 1,
-                            .arrayLength = int32_t(tex->descriptor.arrayLength),
-                        }),
-                    });
-            }
-
-            // after the loop, transfer all mips to input state
-            submitBarriers(
-                cmd,
-                {
-                    Barrier::from(Barrier::Image{
-                        .texture = texture,
-                        .stateBefore = ResourceState::TransferSrc,
-                        .stateAfter = state,
-                        .mipLevel = 0,
-                        .mipCount = tex->descriptor.mipLevels,
-                        .arrayLength = int32_t(tex->descriptor.arrayLength),
-                    }),
-                });
-        });
 }

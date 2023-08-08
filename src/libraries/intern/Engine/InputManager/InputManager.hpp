@@ -53,11 +53,6 @@ class InputManager
         return frameCount;
     };
 
-    static void defaultMouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
-    static void defaultKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-    static void defaultScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
-    static void defaultResizeCallback(GLFWwindow* window, int width, int height);
-
   private:
     /* Track simulation and real time seperately so that input etc still function correctly */
     int64_t frameCount = -1;

@@ -1,7 +1,5 @@
 #include "VulkanRenderer.hpp"
 #include "../Barriers/Barrier.hpp"
-#include "../Mesh/Mesh.hpp"
-#include "../RenderObject/RenderObject.hpp"
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
 #include "Graphics/Renderer/VulkanDebug.hpp"
@@ -12,6 +10,7 @@
 #include "ResourceManager/ResourceManager.hpp"
 #include "VulkanDebug.hpp"
 #include <Engine/Scene/DefaultComponents.hpp>
+#include <Graphics/Texture/TextureToVulkan.hpp>
 
 #include <Engine/Application/Application.hpp>
 
@@ -34,23 +33,38 @@
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
-void VulkanRenderer::init(GLFWwindow* window)
+void VulkanRenderer::init()
 {
-    ptr = this;
-
-    mainWindow = window;
     initVulkan();
+    initPipelineCache();
+
+    // everything went fine
+    INIT_STATIC_GETTER();
+    _initialized = true;
+}
+
+void VulkanRenderer::setupSwapchain(GLFWwindow* window)
+{
+    mainWindow = window;
+
+    // per frame stuff
     initSwapchain();
     initCommands();
     initSyncStructures();
+
+    // TODO: where to put this?
     initBindless();
-    initPipelineCache();
 
     initImGui();
-    initGlobalBuffers();
+}
 
-    // everything went fine
-    isInitialized = true;
+uint32_t VulkanRenderer::getSwapchainWidth()
+{
+    return swapchainExtent.width;
+}
+uint32_t VulkanRenderer::getSwapchainHeight()
+{
+    return swapchainExtent.height;
 }
 
 void VulkanRenderer::initVulkan()
@@ -110,151 +124,6 @@ void VulkanRenderer::initVulkan()
     vmaCreateAllocator(&vmaAllocatorCrInfo, &allocator);
 }
 
-void VulkanRenderer::initSwapchain()
-{
-    VulkanSwapchainSetup swapchainSetup(physicalDevice, device, mainWindow, surface);
-    swapchainSetup.setup(queueFamilyIndices.graphicsFamily.value(), queueFamilyIndices.presentFamily.value());
-
-    swapchain = swapchainSetup.getSwapchain();
-    swapchainExtent = swapchainSetup.getSwapchainExtent();
-    swapchainImageFormat = swapchainSetup.getSwapchainImageFormat();
-    swapchainImages = swapchainSetup.getSwapchainImages();
-
-    swapchainImageViews = swapchainSetup.createSwapchainImageViews();
-
-    // TODO: this shouldnt be part of vulkan renderer / device, this is user code !
-    //       once refactored, remove resource manager as parameter!
-    ResourceManager& rsrcManager = Application::ptr->resourceManager;
-    depthTexture = rsrcManager.createTexture(Texture::CreateInfo{
-        .debugName = "Depth Texture",
-        .format = depthFormat,
-        .allStates = ResourceState::DepthStencilTarget,
-        .initialState = ResourceState::Undefined,
-        .size = {swapchainExtent.width, swapchainExtent.height, 1},
-    });
-
-    deleteQueue.pushBack([=]() { vkDestroySwapchainKHR(device, swapchain, nullptr); });
-    for(VkImageView view : swapchainImageViews)
-    {
-        deleteQueue.pushBack([=]() { vkDestroyImageView(device, view, nullptr); });
-    }
-}
-
-void VulkanRenderer::initCommands()
-{
-    VkCommandPoolCreateInfo commandPoolCrInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .pNext = nullptr,
-
-        .flags = 0,
-        .queueFamilyIndex = graphicsAndComputeQueueFamily,
-    };
-
-    for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
-    {
-        assertVkResult(vkCreateCommandPool(device, &commandPoolCrInfo, nullptr, &perFrameData[i].commandPool));
-
-        VkCommandBufferAllocateInfo cmdBuffAllocInfo{
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .pNext = nullptr,
-
-            .commandPool = perFrameData[i].commandPool,
-            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandBufferCount = 1,
-        };
-
-        assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &perFrameData[i].mainCommandBuffer));
-
-        deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, perFrameData[i].commandPool, nullptr); });
-    }
-
-    VkCommandPoolCreateInfo uploadCommandPoolCrInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .pNext = nullptr,
-
-        .flags = 0,
-        .queueFamilyIndex = graphicsAndComputeQueueFamily,
-    };
-    assertVkResult(vkCreateCommandPool(device, &uploadCommandPoolCrInfo, nullptr, &uploadContext.commandPool));
-    deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, uploadContext.commandPool, nullptr); });
-
-    VkCommandBufferAllocateInfo cmdBuffAllocInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .pNext = nullptr,
-
-        .commandPool = uploadContext.commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &uploadContext.commandBuffer));
-}
-
-void VulkanRenderer::initSyncStructures()
-{
-    VkFenceCreateInfo fenceCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .pNext = nullptr,
-
-        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-    };
-
-    VkSemaphoreCreateInfo semaphoreCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-    };
-
-    for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
-    {
-        assertVkResult(vkCreateFence(device, &fenceCreateInfo, nullptr, &perFrameData[i].renderFence));
-
-        deleteQueue.pushBack([=]() { vkDestroyFence(device, perFrameData[i].renderFence, nullptr); });
-
-        assertVkResult(
-            vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &perFrameData[i].imageAvailableSemaphore));
-        assertVkResult(
-            vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &perFrameData[i].renderFinishedSemaphore));
-
-        deleteQueue.pushBack(
-            [=]()
-            {
-                vkDestroySemaphore(device, perFrameData[i].imageAvailableSemaphore, nullptr);
-                vkDestroySemaphore(device, perFrameData[i].renderFinishedSemaphore, nullptr);
-            });
-    }
-
-    VkFenceCreateInfo uploadFenceCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .pNext = nullptr,
-    };
-    assertVkResult(vkCreateFence(device, &uploadFenceCreateInfo, nullptr, &uploadContext.uploadFence));
-    deleteQueue.pushBack([=]() { vkDestroyFence(device, uploadContext.uploadFence, nullptr); });
-}
-
-void VulkanRenderer::initBindless()
-{
-    bindlessManager.init();
-
-    VkPushConstantRange basicPushConstantRange{
-        .stageFlags = VK_SHADER_STAGE_ALL,
-        .offset = 0,
-        .size = sizeof(BindlessIndices),
-    };
-
-    VkPipelineLayoutCreateInfo pipelineLayoutCrInfo{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .setLayoutCount = bindlessManager.getDescriptorSetsCount(),
-        .pSetLayouts = bindlessManager.getDescriptorSetLayouts(),
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &basicPushConstantRange,
-    };
-    vkCreatePipelineLayout(device, &pipelineLayoutCrInfo, nullptr, &bindlessPipelineLayout);
-
-    deleteQueue.pushBack([=]() { vkDestroyPipelineLayout(device, bindlessPipelineLayout, nullptr); });
-}
-
 void VulkanRenderer::initPipelineCache()
 {
     VkPipelineCacheCreateInfo cacheCrInfo{
@@ -302,6 +171,138 @@ void VulkanRenderer::initPipelineCache()
     vkCreatePipelineCache(device, &cacheCrInfo, nullptr, &pipelineCache);
 
     deleteQueue.pushBack([=]() { vkDestroyPipelineCache(device, pipelineCache, nullptr); });
+}
+
+void VulkanRenderer::initSwapchain()
+{
+    VulkanSwapchainSetup swapchainSetup(physicalDevice, device, mainWindow, surface);
+    swapchainSetup.setup(queueFamilyIndices.graphicsFamily.value(), queueFamilyIndices.presentFamily.value());
+
+    swapchain = swapchainSetup.getSwapchain();
+    swapchainExtent = swapchainSetup.getSwapchainExtent();
+    swapchainImageFormat = swapchainSetup.getSwapchainImageFormat();
+    swapchainImages = swapchainSetup.getSwapchainImages();
+
+    swapchainImageViews = swapchainSetup.createSwapchainImageViews();
+
+    deleteQueue.pushBack([=]() { vkDestroySwapchainKHR(device, swapchain, nullptr); });
+    for(VkImageView view : swapchainImageViews)
+    {
+        deleteQueue.pushBack([=]() { vkDestroyImageView(device, view, nullptr); });
+    }
+}
+
+void VulkanRenderer::initCommands()
+{
+    VkCommandPoolCreateInfo commandPoolCrInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = nullptr,
+
+        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        .queueFamilyIndex = graphicsAndComputeQueueFamily,
+    };
+
+    for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
+    {
+        assertVkResult(vkCreateCommandPool(device, &commandPoolCrInfo, nullptr, &perFrameData[i].commandPool));
+
+        VkCommandBufferAllocateInfo cmdBuffAllocInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .pNext = nullptr,
+
+            .commandPool = perFrameData[i].commandPool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+        };
+
+        deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, perFrameData[i].commandPool, nullptr); });
+    }
+
+    VkCommandPoolCreateInfo uploadCommandPoolCrInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = nullptr,
+
+        .flags = 0,
+        .queueFamilyIndex = graphicsAndComputeQueueFamily,
+    };
+    assertVkResult(vkCreateCommandPool(device, &uploadCommandPoolCrInfo, nullptr, &uploadContext.commandPool));
+    deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, uploadContext.commandPool, nullptr); });
+
+    VkCommandBufferAllocateInfo cmdBuffAllocInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = nullptr,
+
+        .commandPool = uploadContext.commandPool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &uploadContext.commandBuffer));
+}
+
+void VulkanRenderer::initSyncStructures()
+{
+    VkFenceCreateInfo fenceCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+    };
+
+    VkSemaphoreCreateInfo semaphoreCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+    };
+
+    for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
+    {
+        assertVkResult(vkCreateFence(device, &fenceCreateInfo, nullptr, &perFrameData[i].commandsDone));
+
+        deleteQueue.pushBack([=]() { vkDestroyFence(device, perFrameData[i].commandsDone, nullptr); });
+
+        assertVkResult(
+            vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &perFrameData[i].swapchainImageAvailable));
+        assertVkResult(vkCreateSemaphore(
+            device, &semaphoreCreateInfo, nullptr, &perFrameData[i].swapchainImageRenderFinished));
+
+        deleteQueue.pushBack(
+            [=]()
+            {
+                vkDestroySemaphore(device, perFrameData[i].swapchainImageRenderFinished, nullptr);
+                vkDestroySemaphore(device, perFrameData[i].swapchainImageAvailable, nullptr);
+            });
+    }
+
+    VkFenceCreateInfo uploadFenceCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .pNext = nullptr,
+    };
+    assertVkResult(vkCreateFence(device, &uploadFenceCreateInfo, nullptr, &uploadContext.uploadFence));
+    deleteQueue.pushBack([=]() { vkDestroyFence(device, uploadContext.uploadFence, nullptr); });
+}
+
+void VulkanRenderer::initBindless()
+{
+    bindlessManager.init();
+
+    VkPushConstantRange basicPushConstantRange{
+        .stageFlags = VK_SHADER_STAGE_ALL,
+        .offset = 0,
+        .size = BindlessManager::maxBindlessPushConstantSize,
+    };
+
+    VkPipelineLayoutCreateInfo pipelineLayoutCrInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .setLayoutCount = bindlessManager.getDescriptorSetsCount(),
+        .pSetLayouts = bindlessManager.getDescriptorSetLayouts(),
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &basicPushConstantRange,
+    };
+    vkCreatePipelineLayout(device, &pipelineLayoutCrInfo, nullptr, &bindlessPipelineLayout);
+
+    deleteQueue.pushBack([=]() { vkDestroyPipelineLayout(device, bindlessPipelineLayout, nullptr); });
 }
 
 void VulkanRenderer::initImGui()
@@ -368,48 +369,6 @@ void VulkanRenderer::initImGui()
         });
 }
 
-void VulkanRenderer::initGlobalBuffers()
-{
-    ResourceManager* rm = ResourceManager::get();
-    assert(rm);
-
-    for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
-    {
-        perFrameData[i].cameraBuffer = rm->createBuffer(Buffer::CreateInfo{
-            .info =
-                {
-                    .size = sizeof(RenderPassData),
-                    .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                    .memoryAllocationInfo =
-                        {
-                            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                                     VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-                                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                        },
-                },
-        });
-
-        const int MAX_OBJECTS = 10000;
-        perFrameData[i].objectBuffer = rm->createBuffer(Buffer::CreateInfo{
-            .info =
-                {
-                    .size = sizeof(GPUObjectData) * MAX_OBJECTS,
-                    .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                    .memoryAllocationInfo =
-                        {
-                            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                                     VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-                                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                        },
-                },
-        });
-    }
-}
-
 void VulkanRenderer::savePipelineCache()
 {
     size_t cacheDataSize = 0;
@@ -425,7 +384,7 @@ void VulkanRenderer::savePipelineCache()
 
 void VulkanRenderer::cleanup()
 {
-    if(!isInitialized)
+    if(!_initialized)
         return;
 
     savePipelineCache();
@@ -452,18 +411,48 @@ void VulkanRenderer::waitForWorkFinished()
     vkDeviceWaitIdle(device);
 }
 
-void VulkanRenderer::draw()
+void VulkanRenderer::startNextFrame()
 {
-    const auto& curFrameData = getCurrentFrameData();
-    assertVkResult(vkWaitForFences(device, 1, &curFrameData.renderFence, true, UINT64_MAX));
-    assertVkResult(vkResetFences(device, 1, &curFrameData.renderFence));
+    frameNumber++;
 
-    uint32_t swapchainImageIndex;
+    auto& curFrameData = getCurrentFrameData();
+
+    assertVkResult(vkWaitForFences(device, 1, &curFrameData.commandsDone, true, UINT64_MAX));
+    assertVkResult(vkResetFences(device, 1, &curFrameData.commandsDone));
+
     assertVkResult(vkAcquireNextImageKHR(
-        device, swapchain, UINT64_MAX, curFrameData.imageAvailableSemaphore, nullptr, &swapchainImageIndex));
+        device,
+        swapchain,
+        UINT64_MAX,
+        curFrameData.swapchainImageAvailable,
+        nullptr,
+        &currentSwapchainImageIndex));
 
-    // Reset all command buffers for current frame
+    // Free command buffers that were used
+    vkFreeCommandBuffers(
+        device,
+        curFrameData.commandPool,
+        curFrameData.usedCommandBuffers.size(),
+        curFrameData.usedCommandBuffers.data());
+    curFrameData.usedCommandBuffers.clear();
+
     assertVkResult(vkResetCommandPool(device, curFrameData.commandPool, 0));
+}
+
+VkCommandBuffer VulkanRenderer::beginCommandBuffer()
+{
+    auto& curFrameData = getCurrentFrameData();
+
+    VkCommandBuffer cmdBuffer;
+    VkCommandBufferAllocateInfo cmdBuffAllocInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .commandPool = curFrameData.commandPool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &cmdBuffer);
+    curFrameData.usedCommandBuffers.push_back(cmdBuffer);
 
     VkCommandBufferBeginInfo cmdBeginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -473,11 +462,12 @@ void VulkanRenderer::draw()
         .pInheritanceInfo = nullptr,
     };
 
-    assertVkResult(vkBeginCommandBuffer(curFrameData.mainCommandBuffer, &cmdBeginInfo));
+    assertVkResult(vkBeginCommandBuffer(cmdBuffer, &cmdBeginInfo));
 
     // Bind the bindless descriptor sets once per cmdbuffer
+    // TODO: overkill always binding both, parameterize
     vkCmdBindDescriptorSets(
-        curFrameData.mainCommandBuffer,
+        cmdBuffer,
         VK_PIPELINE_BIND_POINT_GRAPHICS,
         bindlessPipelineLayout,
         0,
@@ -485,99 +475,125 @@ void VulkanRenderer::draw()
         bindlessManager.getDescriptorSets(),
         0,
         nullptr);
+    vkCmdBindDescriptorSets(
+        cmdBuffer,
+        VK_PIPELINE_BIND_POINT_COMPUTE,
+        bindlessPipelineLayout,
+        0,
+        bindlessManager.getDescriptorSetsCount(),
+        bindlessManager.getDescriptorSets(),
+        0,
+        nullptr);
 
-    auto& rsrcManager = Application::ptr->resourceManager;
-    Texture* depthTexture = rsrcManager.get(this->depthTexture);
-    assert(depthTexture);
+    return cmdBuffer;
+}
+void VulkanRenderer::endCommandBuffer(VkCommandBuffer cmd)
+{
+    vkEndCommandBuffer(cmd);
+}
 
+void VulkanRenderer::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
+{
+    const auto& curFrameData = getCurrentFrameData();
+
+    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submitInfo{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = nullptr,
+
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &curFrameData.swapchainImageAvailable,
+        .pWaitDstStageMask = &waitStage,
+
+        .commandBufferCount = static_cast<uint32_t>(cmdBuffers.size()),
+        .pCommandBuffers = cmdBuffers.data(),
+
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &curFrameData.swapchainImageRenderFinished,
+    };
+
+    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
+}
+
+void VulkanRenderer::insertSwapchainImageBarrier(
+    VkCommandBuffer cmd, ResourceState currentState, ResourceState targetState)
+{
+    VkImageMemoryBarrier2 imageBarrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .pNext = nullptr,
+        .srcStageMask = toVkPipelineStage(currentState),
+        .srcAccessMask = toVkAccessFlags(currentState),
+        .dstStageMask = toVkPipelineStage(targetState),
+        .dstAccessMask = toVkAccessFlags(targetState),
+        .oldLayout = toVkImageLayout(currentState),
+        .newLayout = toVkImageLayout(targetState),
+        .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
+        .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
+        .image = swapchainImages[currentSwapchainImageIndex],
+        .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+    };
+
+    const VkDependencyInfo dependencyInfo{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pNext = nullptr,
+        .memoryBarrierCount = 0,
+        .pMemoryBarriers = nullptr,
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers = nullptr,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &imageBarrier,
+    };
+
+    vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+}
+
+// TODO: overload to just not take a depth target, instead of having to pass null inside render target?
+void VulkanRenderer::beginRendering(
+    VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget)
+{
+    ResourceManager* rm = ResourceManager::get();
+
+    VkClearValue clearValue{.color = {0.0f, 0.0f, 0.0f, 1.0f}};
+    VkClearValue depthStencilClear{.depthStencil = {.depth = 1.0f, .stencil = 0u}};
+
+    std::vector<VkRenderingAttachmentInfo> colorAttachmentInfos;
+    colorAttachmentInfos.reserve(colorTargets.size());
+    for(const auto& target : colorTargets)
     {
-        VkImageMemoryBarrier2 imageBarriers[2]{
-            {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                .srcAccessMask = 0,
-                .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
-                .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
-                .image = swapchainImages[swapchainImageIndex],
-                .subresourceRange =
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask =
-                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-                .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                .dstStageMask =
-                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-                .dstAccessMask =
-                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
-                .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
-                .image = depthTexture->image,
-                .subresourceRange =
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-            },
-        };
-
-        const VkDependencyInfo dependencyInfo{
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        const VkImageView view = std::holds_alternative<Handle<Texture>>(target.texture)
+                                     ? rm->get(std::get<Handle<Texture>>(depthTarget.texture))->fullResourceView()
+                                     : swapchainImageViews[currentSwapchainImageIndex];
+        colorAttachmentInfos.emplace_back(VkRenderingAttachmentInfo{
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .memoryBarrierCount = 0,
-            .pMemoryBarriers = nullptr,
-            .bufferMemoryBarrierCount = 0,
-            .pBufferMemoryBarriers = nullptr,
-            .imageMemoryBarrierCount = (sizeof(imageBarriers) / sizeof(imageBarriers[0])),
-            .pImageMemoryBarriers = &imageBarriers[0],
-        };
-
-        vkCmdPipelineBarrier2(curFrameData.mainCommandBuffer, &dependencyInfo);
+            .imageView = view,
+            .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+            .loadOp = toVkLoadOp(target.loadOp),
+            .storeOp = toVkStoreOp(target.storeOp),
+            .clearValue = clearValue,
+        });
     }
 
-    float flash = abs(sin(frameNumber / 1200.0f));
-    VkClearValue clearValue{.color = {0.0f, 0.0f, flash, 1.0f}};
-    VkClearValue depthClear{.depthStencil = {.depth = 1.0f}};
+    VkRenderingAttachmentInfo depthAttachmentInfo;
 
-    VkClearValue clearValues[2] = {clearValue, depthClear};
-
-    VkRenderingAttachmentInfo colorAttachmentInfo{
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .pNext = nullptr,
-        .imageView = swapchainImageViews[swapchainImageIndex],
-        .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = clearValue,
-    };
-
-    VkRenderingAttachmentInfo depthAttachmentInfo{
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .pNext = nullptr,
-        .imageView = depthTexture->fullResourceView(),
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = depthClear,
-    };
+    bool hasDepthAttachment = std::get<Handle<Texture>>(depthTarget.texture).isValid();
+    if(hasDepthAttachment)
+        depthAttachmentInfo = {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .pNext = nullptr,
+            .imageView = rm->get(std::get<Handle<Texture>>(depthTarget.texture))->fullResourceView(),
+            .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            .loadOp = toVkLoadOp(depthTarget.loadOp),
+            .storeOp = toVkStoreOp(depthTarget.storeOp),
+            .clearValue = depthStencilClear,
+        };
 
     VkRenderingInfo renderingInfo{
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -588,12 +604,12 @@ void VulkanRenderer::draw()
                 .extent = swapchainExtent,
             },
         .layerCount = 1,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachmentInfo,
-        .pDepthAttachment = &depthAttachmentInfo,
+        .colorAttachmentCount = static_cast<uint32_t>(colorAttachmentInfos.size()),
+        .pColorAttachments = colorAttachmentInfos.data(),
+        .pDepthAttachment = hasDepthAttachment ? &depthAttachmentInfo : nullptr,
     };
 
-    vkCmdBeginRendering(curFrameData.mainCommandBuffer, &renderingInfo);
+    vkCmdBeginRendering(cmd, &renderingInfo);
 
     VkViewport viewport{
         .x = 0.0f,
@@ -603,236 +619,301 @@ void VulkanRenderer::draw()
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
-    vkCmdSetViewport(curFrameData.mainCommandBuffer, 0, 1, &viewport);
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
 
     VkRect2D scissor{.offset = {0, 0}, .extent = swapchainExtent};
-    vkCmdSetScissor(curFrameData.mainCommandBuffer, 0, 1, &scissor);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+}
 
-    renderables.clear();
+void VulkanRenderer::endRendering(VkCommandBuffer cmd)
+{
+    vkCmdEndRendering(cmd);
+}
 
-    struct UserData
+void VulkanRenderer::submitBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers)
+{
+    std::vector<VkImageMemoryBarrier2> imageBarriers;
+    std::vector<VkBufferMemoryBarrier2> bufferBarriers;
+
+    for(const auto& barrier : barriers)
     {
-        ECS* ecs;
-        Camera* cam;
-    };
-    auto* userData = (UserData*)Application::ptr->userData;
-    assert(userData != nullptr);
-
-    auto* ecs = userData->ecs;
-    ecs->forEach<RenderInfo, Transform>(
-        [&](RenderInfo* renderinfos, Transform* transforms, uint32_t count)
+        if(barrier.type == Barrier::Type::Buffer)
         {
-            for(int i = 0; i < count; i++)
+            assert(false);
+        }
+        else if(barrier.type == Barrier::Type::Image)
+        {
+            auto* rm = ResourceManager::get();
+
+            const Texture* tex = rm->get(barrier.image.texture);
+            if(tex == nullptr)
             {
-                const RenderInfo& rinfo = renderinfos[i];
-                const Transform& transform = transforms[i];
-                renderables.emplace_back(rinfo.mesh, rinfo.materialInstance, transform.localToWorld);
+                BREAKPOINT;
+                continue; // TODO: LOG warning
             }
-        });
-    // todo: sort before passing to drawObjects
-    drawObjects(curFrameData.mainCommandBuffer, renderables.data(), renderables.size());
+            assert(tex->descriptor.mipLevels > 0);
+            int32_t mipCount = barrier.image.mipCount == Texture::MipLevels::All
+                                   ? tex->descriptor.mipLevels - barrier.image.mipLevel
+                                   : barrier.image.mipCount;
 
-    vkCmdEndRendering(curFrameData.mainCommandBuffer);
+            VkImageMemoryBarrier2 vkBarrier{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
 
-    // UI Rendering
+                .srcStageMask = toVkPipelineStage(barrier.image.stateBefore),
+                .srcAccessMask = toVkAccessFlags(barrier.image.stateBefore),
 
-    VkRenderingAttachmentInfo uiColorAttachmentInfo{
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .pNext = nullptr,
-        .imageView = swapchainImageViews[swapchainImageIndex],
-        .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-    };
+                .dstStageMask = toVkPipelineStage(barrier.image.stateAfter),
+                .dstAccessMask = toVkAccessFlags(barrier.image.stateAfter),
 
-    VkRenderingInfo uiRenderingInfo{
-        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .pNext = nullptr,
-        .renderArea =
-            {
-                .offset = {.x = 0, .y = 0},
-                .extent = swapchainExtent,
-            },
-        .layerCount = 1,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &uiColorAttachmentInfo,
-    };
+                .oldLayout = barrier.image.allowDiscardOriginal ? VK_IMAGE_LAYOUT_UNDEFINED
+                                                                : toVkImageLayout(barrier.image.stateBefore),
+                .newLayout = toVkImageLayout(barrier.image.stateAfter),
 
-    vkCmdBeginRendering(curFrameData.mainCommandBuffer, &uiRenderingInfo);
+                .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
+                .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
 
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), curFrameData.mainCommandBuffer);
+                .image = tex->image,
+                .subresourceRange =
+                    {
+                        .aspectMask = toVkImageAspect(tex->descriptor.format),
+                        .baseMipLevel = static_cast<uint32_t>(barrier.image.mipLevel),
+                        .levelCount = static_cast<uint32_t>(mipCount),
+                        .baseArrayLayer = static_cast<uint32_t>(barrier.image.arrayLayer),
+                        .layerCount = static_cast<uint32_t>(
+                            tex->descriptor.type == Texture::Type::tCube ? 6 * barrier.image.arrayLength
+                                                                         : barrier.image.arrayLength),
+                    },
+            };
 
-    vkCmdEndRendering(curFrameData.mainCommandBuffer);
-
-    {
-        VkImageMemoryBarrier2 imageBarrier{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            .dstAccessMask = 0,
-            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            .image = swapchainImages[swapchainImageIndex],
-            .subresourceRange =
-                {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                },
-        };
-
-        const VkDependencyInfo dependencyInfo{
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .pNext = nullptr,
-            .memoryBarrierCount = 0,
-            .pMemoryBarriers = nullptr,
-            .bufferMemoryBarrierCount = 0,
-            .pBufferMemoryBarriers = nullptr,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &imageBarrier,
-        };
-
-        vkCmdPipelineBarrier2(curFrameData.mainCommandBuffer, &dependencyInfo);
+            imageBarriers.emplace_back(vkBarrier);
+        }
+        else
+        {
+            assert(false);
+        }
     }
 
-    assertVkResult(vkEndCommandBuffer(curFrameData.mainCommandBuffer));
+    if(imageBarriers.empty() && bufferBarriers.empty())
+        return;
 
-    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submitInfo{
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    const VkDependencyInfo dependencyInfo{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .pNext = nullptr,
-
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &curFrameData.imageAvailableSemaphore,
-        .pWaitDstStageMask = &waitStage,
-
-        .commandBufferCount = 1,
-        .pCommandBuffers = &curFrameData.mainCommandBuffer,
-
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &curFrameData.renderFinishedSemaphore,
+        .memoryBarrierCount = 0,
+        .pMemoryBarriers = nullptr,
+        .bufferMemoryBarrierCount = uint32_t(bufferBarriers.size()),
+        .pBufferMemoryBarriers = bufferBarriers.data(),
+        .imageMemoryBarrierCount = uint32_t(imageBarriers.size()),
+        .pImageMemoryBarriers = imageBarriers.data(),
     };
 
-    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.renderFence));
+    vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+
+    bufferBarriers.clear();
+    imageBarriers.clear();
+}
+
+void VulkanRenderer::setPipelineState(VkCommandBuffer cmd, Handle<Material> mat)
+{
+    auto* rm = ResourceManager::get();
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rm->get(mat)->pipeline);
+}
+
+void VulkanRenderer::pushConstants(VkCommandBuffer cmd, size_t size, void* data, size_t offset)
+{
+    vkCmdPushConstants(cmd, bindlessPipelineLayout, VK_SHADER_STAGE_ALL, offset, size, data);
+}
+
+void VulkanRenderer::bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset)
+{
+    auto* rm = ResourceManager::get();
+    vkCmdBindIndexBuffer(cmd, rm->get(buffer)->buffer, offset, VK_INDEX_TYPE_UINT32);
+}
+
+void VulkanRenderer::bindVertexBuffers(
+    VkCommandBuffer cmd,
+    uint32_t startBinding,
+    uint32_t count,
+    Span<const Handle<Buffer>> buffers,
+    Span<const uint64_t> offsets)
+{
+    auto* rm = ResourceManager::get();
+
+    assert(buffers.size() == offsets.size());
+    std::vector<VkBuffer> vkBuffers{buffers.size()};
+    for(int i = 0; i < buffers.size(); i++)
+    {
+        vkBuffers[i] = rm->get(buffers[i])->buffer;
+        assert(vkBuffers[i]);
+    }
+    vkCmdBindVertexBuffers(cmd, startBinding, count, &vkBuffers[0], offsets.data());
+}
+
+void VulkanRenderer::drawIndexed(
+    VkCommandBuffer cmd,
+    uint32_t indexCount,
+    uint32_t instanceCount,
+    uint32_t firstIndex,
+    uint32_t vertexOffset,
+    uint32_t firstInstance)
+{
+    vkCmdDrawIndexed(cmd, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+}
+
+void VulkanRenderer::drawImGui(VkCommandBuffer cmd)
+{
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+}
+
+void VulkanRenderer::presentSwapchain()
+{
+    const auto& curFrameData = getCurrentFrameData();
 
     VkPresentInfoKHR presentInfo{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .pNext = nullptr,
 
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &curFrameData.renderFinishedSemaphore,
+        .pWaitSemaphores = &curFrameData.swapchainImageRenderFinished,
 
         .swapchainCount = 1,
         .pSwapchains = &swapchain,
 
-        .pImageIndices = &swapchainImageIndex,
+        .pImageIndices = &currentSwapchainImageIndex,
     };
 
     assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
-
-    frameNumber++;
 }
 
-// TODO: take span
-void VulkanRenderer::drawObjects(VkCommandBuffer cmd, RenderObject* first, int count)
+void VulkanRenderer::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state)
 {
-    ResourceManager* rm = ResourceManager::get();
+    /*
+        TODO: check that image was created with usage_transfer_src_bit !
+              Switch to compute shader based solution? Could get rid of needing to mark
+              *all* textures as transfer_src/dst, just because mips are needed.
+              But requires a lot more work to handle different texture types (3d, cube, array)
+    */
 
-    struct UserData
+    auto* rm = ResourceManager::get();
+
+    Texture* tex = rm->get(texture);
+
+    if(tex->descriptor.mipLevels == 1)
+        return;
+
+    uint32_t startWidth = tex->descriptor.size.width;
+    uint32_t startHeight = tex->descriptor.size.height;
+    uint32_t startDepth = tex->descriptor.size.depth;
+
+    // Transition mip 0 to transfer source
+    if(state != ResourceState::TransferSrc)
     {
-        ECS* ecs;
-        Camera* cam;
-    };
-    auto* userData = (UserData*)Application::ptr->userData;
-    assert(userData != nullptr);
-
-    Camera* mainCamera = userData->cam;
-
-    RenderPassData renderPassData;
-    renderPassData.proj = mainCamera->getProj();
-    renderPassData.view = mainCamera->getView();
-    renderPassData.projView = mainCamera->getProjView();
-    renderPassData.cameraPositionWS = mainCamera->getPosition();
-
-    Buffer* cameraBuffer = rm->get(getCurrentFrameData().cameraBuffer);
-
-    void* data = cameraBuffer->allocInfo.pMappedData;
-    memcpy(data, &renderPassData, sizeof(renderPassData));
-
-    Buffer* transformBuffer = rm->get(getCurrentFrameData().objectBuffer);
-
-    void* objectData = transformBuffer->allocInfo.pMappedData;
-    // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
-    GPUObjectData* objectSSBO = (GPUObjectData*)objectData;
-    for(int i = 0; i < count; i++)
-    {
-        const RenderObject& object = first[i];
-        objectSSBO[i].modelMatrix = object.transformMatrix;
+        submitBarriers(
+            cmd,
+            {
+                Barrier::from(Barrier::Image{
+                    .texture = texture,
+                    .stateBefore = state,
+                    .stateAfter = ResourceState::TransferSrc,
+                    .mipLevel = 0,
+                    .mipCount = 1,
+                    // TODO: also have a Texture::ArrayLayers::All value? And set that as default?
+                    .arrayLength = int32_t(tex->descriptor.arrayLength),
+                }),
+            });
     }
 
-    //---
+    // Generate mip chain
+    // Downscaling from each level successively, but could also downscale mip 0 -> mip N each time
 
-    BindlessIndices pushConstants;
-    pushConstants.RenderInfoBuffer = cameraBuffer->resourceIndex;
-    pushConstants.transformBuffer = transformBuffer->resourceIndex;
-
-    Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
-    Handle<Material> lastMaterial = Handle<Material>::Invalid();
-    Handle<MaterialInstance> lastMaterialInstance = Handle<MaterialInstance>::Invalid();
-    uint32_t indexCount = 0;
-
-    for(int i = 0; i < count; i++)
+    for(int i = 1; i < tex->descriptor.mipLevels; i++)
     {
-        RenderObject& object = first[i];
-
-        Handle<Mesh> objectMesh = object.mesh;
-        Handle<MaterialInstance> objectMaterialInstance = object.materialInstance;
-
-        if(objectMaterialInstance != lastMaterialInstance)
+        // prepare current level to be transfer dst
+        if(state != ResourceState::TransferSrc)
         {
-            MaterialInstance* newMatInst = rm->get(objectMaterialInstance);
-            if(newMatInst->parentMaterial != lastMaterial)
-            {
-                Material* newMat = rm->get(newMatInst->parentMaterial);
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, newMat->pipeline);
-                Buffer* materialParamsBuffer = rm->get(newMat->parameters.getGPUBuffer());
-                if(materialParamsBuffer != nullptr)
+            submitBarriers(
+                cmd,
                 {
-                    pushConstants.materialParamsBuffer = materialParamsBuffer->resourceIndex;
-                }
-                lastMaterial = newMatInst->parentMaterial;
-            }
+                    Barrier::from(Barrier::Image{
+                        .texture = texture,
+                        .stateBefore = state,
+                        .stateAfter = ResourceState::TransferDst,
+                        .mipLevel = i,
+                        .mipCount = 1,
+                        .arrayLength = int32_t(tex->descriptor.arrayLength),
+                    }),
+                });
+        }
 
-            Buffer* materialInstanceParamsBuffer = rm->get(newMatInst->parameters.getGPUBuffer());
-            if(materialInstanceParamsBuffer != nullptr)
+        uint32_t lastWidth = std::max(startWidth >> (i - 1), 1u);
+        uint32_t lastHeight = std::max(startHeight >> (i - 1), 1u);
+        uint32_t lastDepth = std::max(startDepth >> (i - 1), 1u);
+
+        uint32_t curWidth = std::max(startWidth >> i, 1u);
+        uint32_t curHeight = std::max(startHeight >> i, 1u);
+        uint32_t curDepth = std::max(startDepth >> i, 1u);
+
+        VkImageBlit blit{
+            .srcSubresource =
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = uint32_t(i - 1),
+                    .baseArrayLayer = 0,
+                    .layerCount = toVkArrayLayers(tex->descriptor),
+                },
+            .srcOffsets =
+                {{.x = 0, .y = 0, .z = 0}, {int32_t(lastWidth), int32_t(lastHeight), int32_t(lastDepth)}},
+            .dstSubresource =
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = uint32_t(i),
+                    .baseArrayLayer = 0,
+                    .layerCount = toVkArrayLayers(tex->descriptor),
+                },
+            .dstOffsets = {{.x = 0, .y = 0, .z = 0}, {int32_t(curWidth), int32_t(curHeight), int32_t(curDepth)}},
+        };
+
+        // do the blit
+        vkCmdBlitImage(
+            cmd,
+            tex->image,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            tex->image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &blit,
+            VK_FILTER_LINEAR);
+
+        // prepare current level to be transfer src for next mip
+        submitBarriers(
+            cmd,
             {
-                pushConstants.materialInstanceParamsBuffer = materialInstanceParamsBuffer->resourceIndex;
-            }
-        }
-
-        pushConstants.transformIndex = i;
-        vkCmdPushConstants(
-            cmd, bindlessPipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(BindlessIndices), &pushConstants);
-
-        if(objectMesh != lastMesh)
-        {
-            Mesh* newMesh = rm->get(objectMesh);
-            indexCount = newMesh->indexCount;
-            Buffer* indexBuffer = rm->get(newMesh->indexBuffer);
-            Buffer* positionBuffer = rm->get(newMesh->positionBuffer);
-            Buffer* attributeBuffer = rm->get(newMesh->attributeBuffer);
-            const VkBuffer buffers[2] = {positionBuffer->buffer, attributeBuffer->buffer};
-            const VkDeviceSize offsets[2] = {0, 0};
-            vkCmdBindIndexBuffer(cmd, indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
-            vkCmdBindVertexBuffers(cmd, 0, 2, &buffers[0], &offsets[0]);
-            lastMesh = objectMesh;
-        }
-
-        vkCmdDrawIndexed(cmd, indexCount, 1, 0, 0, 0);
+                Barrier::from(Barrier::Image{
+                    .texture = texture,
+                    // TODO: need better way to determine initial state, pass as parameter?
+                    .stateBefore = ResourceState::TransferDst,
+                    .stateAfter = ResourceState::TransferSrc,
+                    .mipLevel = i,
+                    .mipCount = 1,
+                    .arrayLength = int32_t(tex->descriptor.arrayLength),
+                }),
+            });
     }
+
+    // after the loop, transfer all mips to input state
+    submitBarriers(
+        cmd,
+        {
+            Barrier::from(Barrier::Image{
+                .texture = texture,
+                .stateBefore = ResourceState::TransferSrc,
+                .stateAfter = state,
+                .mipLevel = 0,
+                .mipCount = tex->descriptor.mipLevels,
+                .arrayLength = int32_t(tex->descriptor.arrayLength),
+            }),
+        });
 }
 
 size_t VulkanRenderer::padUniformBufferSize(size_t originalSize)

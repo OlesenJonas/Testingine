@@ -24,9 +24,9 @@
 
 class ResourceManager
 {
-  public:
     CREATE_STATIC_GETTER(ResourceManager);
 
+  public:
     void init();
 
     Handle<Buffer> createBuffer(Buffer::CreateInfo info, std::string_view name = "");
@@ -104,6 +104,8 @@ class ResourceManager
     constexpr static uint32_t samplerLimit = 32;
 
   private:
+    bool _initialized = false;
+
     // just using standard unordered_map here, because I dont want to think about yet another datastructure atm
     std::unordered_map<std::string, Handle<Mesh>, StringHash, std::equal_to<>> nameToMeshLUT;
     std::unordered_map<std::string, Handle<Texture>, StringHash, std::equal_to<>> nameToTextureLUT;

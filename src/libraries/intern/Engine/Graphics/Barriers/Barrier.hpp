@@ -43,6 +43,7 @@ struct Barrier
         int32_t mipCount = Texture::MipLevels::All;
         int32_t arrayLayer = 0;
         int32_t arrayLength = 1;
+        bool allowDiscardOriginal = false;
     };
 
     struct Buffer
@@ -70,6 +71,3 @@ struct Barrier
         return Barrier{.type = Type::Buffer, .buffer = barrierInfo};
     }
 };
-
-// TODO: should probably be part of renderer
-void submitBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers);
