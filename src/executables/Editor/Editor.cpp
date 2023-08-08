@@ -19,10 +19,10 @@ Editor::Editor()
 {
     renderer.defaultDepthFormat = toVkFormat(depthFormat);
 
-    // TODO: FIX: THIS OVERRIDES IMGUIS CALLBACKS!
     inputManager.init(mainWindow.glfwWindow);
 
     glfwSetWindowUserPointer(mainWindow.glfwWindow, this);
+    // TODO: FIX: THIS OVERRIDES IMGUIS CALLBACKS!
     inputManager.setupCallbacks(
         mainWindow.glfwWindow, keyCallback, mouseButtonCallback, scrollCallback, resizeCallback);
 
@@ -159,14 +159,23 @@ Editor::Editor()
 
     // ------------------------------------------------------
 
-    // already start a frame, so device in correct state for rendering commands to be inserted between init() and
-    // update()
+    // single startup frame, so device is in correct state for rendering commands to be inserted between init() and
+    // run()
     frameNumber++;
     renderer.startNextFrame();
+
+    VkCommandBuffer mainCmdBuffer = renderer.beginCommandBuffer();
+    renderer.insertSwapchainImageBarrier(
+        mainCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::PresentSrc);
 
     // Scene and other test stuff loading -------------------------------------------
 
     // ------------------------------------------------------------------------------
+
+    renderer.endCommandBuffer(mainCmdBuffer);
+    renderer.submitCommandBuffers({mainCmdBuffer});
+    // Needed so swapchain "progresses" (see vulkan validation message) TODO: fix
+    renderer.presentSwapchain();
 
     // just to be safe, wait for all commands to be done here
     renderer.waitForWorkFinished();
@@ -355,6 +364,8 @@ void Editor::update()
     renderer.endCommandBuffer(mainCmdBuffer);
 
     renderer.submitCommandBuffers({mainCmdBuffer});
+
+    renderer.presentSwapchain();
 
     // ------------------------------
 }

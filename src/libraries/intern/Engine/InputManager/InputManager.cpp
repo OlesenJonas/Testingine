@@ -2,6 +2,7 @@
 
 #include <GLFW/glfw3.h>
 #include <ImGui/imgui.h>
+#include <ImGui/imgui_impl_glfw.h>
 #include <limits>
 
 void InputManager::init(GLFWwindow* window)
@@ -50,6 +51,13 @@ void InputManager::setupCallbacks(
     GLFWscrollfun scrollCallback,
     GLFWframebuffersizefun resizeCallback)
 {
+
+    if(ImGui::GetCurrentContext() != nullptr)
+    {
+        // Need to re-set ImGui callbacks if ImGui was already initialized
+        ImGui_ImplGlfw_RestoreCallbacks(window);
+    }
+
     if(keyCallback != nullptr)
         glfwSetKeyCallback(window, keyCallback);
 
@@ -61,4 +69,10 @@ void InputManager::setupCallbacks(
 
     if(resizeCallback != nullptr)
         glfwSetFramebufferSizeCallback(window, resizeCallback);
+
+    if(ImGui::GetCurrentContext() != nullptr)
+    {
+        // Need to re-set ImGui callbacks if ImGui was already initialized
+        ImGui_ImplGlfw_InstallCallbacks(window);
+    }
 }

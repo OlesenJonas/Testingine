@@ -29,9 +29,8 @@ class VulkanRenderer
     CREATE_STATIC_GETTER(VulkanRenderer);
 
   public:
-    void init();
+    void init(GLFWwindow* window);
 
-    void setupSwapchain(GLFWwindow* window);
     uint32_t getSwapchainWidth();
     uint32_t getSwapchainHeight();
 

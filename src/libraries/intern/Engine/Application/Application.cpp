@@ -5,9 +5,7 @@ Application::Application(CreateInfo&& info)
 {
     // ensure global services are initialized in correct order
 
-    renderer.init();
-    // want display output
-    renderer.setupSwapchain(mainWindow.glfwWindow);
+    renderer.init(mainWindow.glfwWindow);
 
     resourceManager.init();
 }

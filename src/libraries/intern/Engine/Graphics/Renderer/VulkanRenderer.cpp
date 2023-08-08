@@ -33,19 +33,15 @@
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
-void VulkanRenderer::init()
+void VulkanRenderer::init(GLFWwindow* window)
 {
+    INIT_STATIC_GETTER();
+    mainWindow = window;
+
     initVulkan();
     initPipelineCache();
 
     // everything went fine
-    INIT_STATIC_GETTER();
-    _initialized = true;
-}
-
-void VulkanRenderer::setupSwapchain(GLFWwindow* window)
-{
-    mainWindow = window;
 
     // per frame stuff
     initSwapchain();
@@ -56,6 +52,8 @@ void VulkanRenderer::setupSwapchain(GLFWwindow* window)
     initBindless();
 
     initImGui();
+
+    _initialized = true;
 }
 
 uint32_t VulkanRenderer::getSwapchainWidth()
@@ -428,13 +426,16 @@ void VulkanRenderer::startNextFrame()
         nullptr,
         &currentSwapchainImageIndex));
 
-    // Free command buffers that were used
-    vkFreeCommandBuffers(
-        device,
-        curFrameData.commandPool,
-        curFrameData.usedCommandBuffers.size(),
-        curFrameData.usedCommandBuffers.data());
-    curFrameData.usedCommandBuffers.clear();
+    if(!curFrameData.usedCommandBuffers.empty())
+    {
+        // Free command buffers that were used
+        vkFreeCommandBuffers(
+            device,
+            curFrameData.commandPool,
+            curFrameData.usedCommandBuffers.size(),
+            curFrameData.usedCommandBuffers.data());
+        curFrameData.usedCommandBuffers.clear();
+    }
 
     assertVkResult(vkResetCommandPool(device, curFrameData.commandPool, 0));
 }
