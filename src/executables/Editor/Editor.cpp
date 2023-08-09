@@ -189,62 +189,46 @@ Editor::Editor()
     {
         Texture* mipTestTex = resourceManager.get(mipTestTexH);
 
-        renderer.immediateSubmit(
-            [&](VkCommandBuffer cmd)
+        renderer.startDebugRegion(mainCmdBuffer, "Mip test tex filling");
+        renderer.setComputePipelineState(mainCmdBuffer, debugMipFillShaderH);
+
+        struct DebugMipFillPushConstants
+        {
+            uint32_t targetIndex;
+            uint32_t level;
+        };
+        DebugMipFillPushConstants constants{
+            .targetIndex = mipTestTex->mipResourceIndex(0),
+            .level = 0,
+        };
+
+        uint32_t mipCount = mipTestTex->descriptor.mipLevels;
+        for(uint32_t mip = 0; mip < mipCount; mip++)
+        {
+            uint32_t mipSize = glm::max(128u >> mip, 1u);
+
+            constants = {
+                .targetIndex = mipTestTex->mipResourceIndex(mip),
+                .level = mip,
+            };
+
+            renderer.pushConstants(mainCmdBuffer, sizeof(DebugMipFillPushConstants), &constants);
+
+            // TODO: dont hardcode sizes! retrieve programmatically (workrgoup size form spirv)
+            renderer.dispatchCompute(mainCmdBuffer, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
+        }
+
+        // transfer dst texture from general to shader read only layout
+        renderer.submitBarriers(
+            mainCmdBuffer,
             {
-                renderer.startDebugRegion(cmd, "Mip test tex filling");
-                renderer.setComputePipelineState(cmd, debugMipFillShaderH);
-
-                // Bind the bindless descriptor sets once per cmdbuffer
-                // TODO: THIS ISNT NECESSARY ANYMORE WHEN USING renderer->beingCommandBuffer()
-                vkCmdBindDescriptorSets(
-                    cmd,
-                    VK_PIPELINE_BIND_POINT_COMPUTE,
-                    renderer.bindlessPipelineLayout,
-                    0,
-                    renderer.bindlessManager.getDescriptorSetsCount(),
-                    renderer.bindlessManager.getDescriptorSets(),
-                    0,
-                    nullptr);
-
-                struct DebugMipFillPushConstants
-                {
-                    uint32_t targetIndex;
-                    uint32_t level;
-                };
-                DebugMipFillPushConstants constants{
-                    .targetIndex = mipTestTex->mipResourceIndex(0),
-                    .level = 0,
-                };
-
-                uint32_t mipCount = mipTestTex->descriptor.mipLevels;
-                for(uint32_t mip = 0; mip < mipCount; mip++)
-                {
-                    uint32_t mipSize = glm::max(128u >> mip, 1u);
-
-                    constants = {
-                        .targetIndex = mipTestTex->mipResourceIndex(mip),
-                        .level = mip,
-                    };
-
-                    renderer.pushConstants(cmd, sizeof(DebugMipFillPushConstants), &constants);
-
-                    // TODO: dont hardcode sizes! retrieve programmatically (workrgoup size form spirv)
-                    renderer.dispatchCompute(cmd, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
-                }
-
-                // transfer dst texture from general to shader read only layout
-                renderer.submitBarriers(
-                    cmd,
-                    {
-                        Barrier::from(Barrier::Image{
-                            .texture = mipTestTexH,
-                            .stateBefore = ResourceState::StorageComputeWrite,
-                            .stateAfter = ResourceState::SampleSource,
-                        }),
-                    });
-                renderer.endDebugRegion(cmd);
+                Barrier::from(Barrier::Image{
+                    .texture = mipTestTexH,
+                    .stateBefore = ResourceState::StorageComputeWrite,
+                    .stateAfter = ResourceState::SampleSource,
+                }),
             });
+        renderer.endDebugRegion(mainCmdBuffer);
     }
 
     Handle<Mesh> triangleMesh;
@@ -319,45 +303,31 @@ Editor::Editor()
     ComputeShader* conversionShader = resourceManager.get(conversionShaderHandle);
 
     {
-        renderer.immediateSubmit(
-            [&](VkCommandBuffer cmd)
+        renderer.setComputePipelineState(mainCmdBuffer, conversionShaderHandle);
+
+        struct ConversionPushConstants
+        {
+            uint32_t sourceIndex;
+            uint32_t targetIndex;
+        } constants = {
+            .sourceIndex = resourceManager.get(hdri)->fullResourceIndex(),
+            .targetIndex = resourceManager.get(hdriCube)->mipResourceIndex(0),
+        };
+        renderer.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
+
+        renderer.dispatchCompute(mainCmdBuffer, hdriCubeRes / 8, hdriCubeRes / 8, 6);
+
+        renderer.submitBarriers(
+            mainCmdBuffer,
             {
-                renderer.setComputePipelineState(cmd, conversionShaderHandle);
-                // Bind the bindless descriptor sets once per cmdbuffer
-                vkCmdBindDescriptorSets(
-                    cmd,
-                    VK_PIPELINE_BIND_POINT_COMPUTE,
-                    renderer.bindlessPipelineLayout,
-                    0,
-                    renderer.bindlessManager.getDescriptorSetsCount(),
-                    renderer.bindlessManager.getDescriptorSets(),
-                    0,
-                    nullptr);
-
-                struct ConversionPushConstants
-                {
-                    uint32_t sourceIndex;
-                    uint32_t targetIndex;
-                } constants = {
-                    .sourceIndex = resourceManager.get(hdri)->fullResourceIndex(),
-                    .targetIndex = resourceManager.get(hdriCube)->mipResourceIndex(0),
-                };
-                renderer.pushConstants(cmd, sizeof(ConversionPushConstants), &constants);
-
-                renderer.dispatchCompute(cmd, hdriCubeRes / 8, hdriCubeRes / 8, 6);
-
-                renderer.submitBarriers(
-                    cmd,
-                    {
-                        Barrier::from(Barrier::Image{
-                            .texture = hdriCube,
-                            .stateBefore = ResourceState::StorageComputeWrite,
-                            .stateAfter = ResourceState::SampleSource,
-                        }),
-                    });
-
-                renderer.fillMipLevels(cmd, hdriCube, ResourceState::SampleSource);
+                Barrier::from(Barrier::Image{
+                    .texture = hdriCube,
+                    .stateBefore = ResourceState::StorageComputeWrite,
+                    .stateAfter = ResourceState::SampleSource,
+                }),
             });
+
+        renderer.fillMipLevels(mainCmdBuffer, hdriCube, ResourceState::SampleSource);
     }
 
     Handle<ComputeShader> calcIrradianceComp = resourceManager.createComputeShader(
@@ -376,46 +346,31 @@ Editor::Editor()
     {
         Texture* irradianceTex = resourceManager.get(irradianceTexHandle);
 
-        renderer.immediateSubmit(
-            [&](VkCommandBuffer cmd)
+        renderer.setComputePipelineState(mainCmdBuffer, calcIrradianceComp);
+
+        struct ConversionPushConstants
+        {
+            uint32_t sourceIndex;
+            uint32_t targetIndex;
+        };
+        ConversionPushConstants constants{
+            .sourceIndex = resourceManager.get(hdriCube)->fullResourceIndex(),
+            .targetIndex = irradianceTex->mipResourceIndex(0),
+        };
+
+        renderer.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
+
+        renderer.dispatchCompute(mainCmdBuffer, irradianceRes / 8, irradianceRes / 8, 6);
+
+        // transfer dst texture from general to shader read only layout
+        renderer.submitBarriers(
+            mainCmdBuffer,
             {
-                renderer.setComputePipelineState(cmd, calcIrradianceComp);
-
-                // Bind the bindless descriptor sets once per cmdbuffer
-                vkCmdBindDescriptorSets(
-                    cmd,
-                    VK_PIPELINE_BIND_POINT_COMPUTE,
-                    renderer.bindlessPipelineLayout,
-                    0,
-                    renderer.bindlessManager.getDescriptorSetsCount(),
-                    renderer.bindlessManager.getDescriptorSets(),
-                    0,
-                    nullptr);
-
-                struct ConversionPushConstants
-                {
-                    uint32_t sourceIndex;
-                    uint32_t targetIndex;
-                };
-                ConversionPushConstants constants{
-                    .sourceIndex = resourceManager.get(hdriCube)->fullResourceIndex(),
-                    .targetIndex = irradianceTex->mipResourceIndex(0),
-                };
-
-                renderer.pushConstants(cmd, sizeof(ConversionPushConstants), &constants);
-
-                renderer.dispatchCompute(cmd, irradianceRes / 8, irradianceRes / 8, 6);
-
-                // transfer dst texture from general to shader read only layout
-                renderer.submitBarriers(
-                    cmd,
-                    {
-                        Barrier::from(Barrier::Image{
-                            .texture = irradianceTexHandle,
-                            .stateBefore = ResourceState::StorageComputeWrite,
-                            .stateAfter = ResourceState::SampleSource,
-                        }),
-                    });
+                Barrier::from(Barrier::Image{
+                    .texture = irradianceTexHandle,
+                    .stateBefore = ResourceState::StorageComputeWrite,
+                    .stateAfter = ResourceState::SampleSource,
+                }),
             });
     }
 
@@ -436,60 +391,45 @@ Editor::Editor()
     {
         Texture* prefilteredEnv = resourceManager.get(prefilteredEnvMap);
 
-        renderer.immediateSubmit(
-            [&](VkCommandBuffer cmd)
+        renderer.setComputePipelineState(mainCmdBuffer, prefilterEnvShaderHandle);
+
+        struct PrefilterPushConstants
+        {
+            uint32_t sourceIndex;
+            uint32_t targetIndex;
+            float roughness;
+        };
+        PrefilterPushConstants constants{
+            .sourceIndex = resourceManager.get(hdriCube)->fullResourceIndex(),
+            .targetIndex = prefilteredEnv->mipResourceIndex(0),
+            .roughness = 0.0,
+        };
+
+        uint32_t mipCount = prefilteredEnv->descriptor.mipLevels;
+        for(uint32_t mip = 0; mip < mipCount; mip++)
+        {
+            uint32_t mipSize = glm::max(prefilteredEnvMapBaseSize >> mip, 1u);
+
+            constants = {
+                .sourceIndex = resourceManager.get(hdriCube)->fullResourceIndex(),
+                .targetIndex = prefilteredEnv->mipResourceIndex(mip),
+                .roughness = float(mip) / float(mipCount - 1),
+            };
+
+            renderer.pushConstants(mainCmdBuffer, sizeof(PrefilterPushConstants), &constants);
+
+            renderer.dispatchCompute(mainCmdBuffer, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
+        }
+
+        // transfer dst texture from general to shader read only layout
+        renderer.submitBarriers(
+            mainCmdBuffer,
             {
-                renderer.setComputePipelineState(cmd, prefilterEnvShaderHandle);
-
-                // Bind the bindless descriptor sets once per cmdbuffer
-                vkCmdBindDescriptorSets(
-                    cmd,
-                    VK_PIPELINE_BIND_POINT_COMPUTE,
-                    renderer.bindlessPipelineLayout,
-                    0,
-                    renderer.bindlessManager.getDescriptorSetsCount(),
-                    renderer.bindlessManager.getDescriptorSets(),
-                    0,
-                    nullptr);
-
-                struct PrefilterPushConstants
-                {
-                    uint32_t sourceIndex;
-                    uint32_t targetIndex;
-                    float roughness;
-                };
-                PrefilterPushConstants constants{
-                    .sourceIndex = resourceManager.get(hdriCube)->fullResourceIndex(),
-                    .targetIndex = prefilteredEnv->mipResourceIndex(0),
-                    .roughness = 0.0,
-                };
-
-                uint32_t mipCount = prefilteredEnv->descriptor.mipLevels;
-                for(uint32_t mip = 0; mip < mipCount; mip++)
-                {
-                    uint32_t mipSize = glm::max(prefilteredEnvMapBaseSize >> mip, 1u);
-
-                    constants = {
-                        .sourceIndex = resourceManager.get(hdriCube)->fullResourceIndex(),
-                        .targetIndex = prefilteredEnv->mipResourceIndex(mip),
-                        .roughness = float(mip) / float(mipCount - 1),
-                    };
-
-                    renderer.pushConstants(cmd, sizeof(PrefilterPushConstants), &constants);
-
-                    renderer.dispatchCompute(cmd, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
-                }
-
-                // transfer dst texture from general to shader read only layout
-                renderer.submitBarriers(
-                    cmd,
-                    {
-                        Barrier::from(Barrier::Image{
-                            .texture = prefilteredEnvMap,
-                            .stateBefore = ResourceState::StorageComputeWrite,
-                            .stateAfter = ResourceState::SampleSource,
-                        }),
-                    });
+                Barrier::from(Barrier::Image{
+                    .texture = prefilteredEnvMap,
+                    .stateBefore = ResourceState::StorageComputeWrite,
+                    .stateAfter = ResourceState::SampleSource,
+                }),
             });
     }
 
@@ -509,43 +449,28 @@ Editor::Editor()
     {
         Texture* brdfIntegral = resourceManager.get(brdfIntegralMap);
 
-        renderer.immediateSubmit(
-            [&](VkCommandBuffer cmd)
+        renderer.setComputePipelineState(mainCmdBuffer, integrateBrdfShaderHandle);
+
+        struct IntegratePushConstants
+        {
+            uint32_t outTexture;
+        };
+        IntegratePushConstants constants{brdfIntegral->mipResourceIndex(0)};
+
+        renderer.pushConstants(mainCmdBuffer, sizeof(IntegratePushConstants), &constants);
+
+        renderer.dispatchCompute(
+            mainCmdBuffer, UintDivAndCeil(brdfIntegralSize, 8), UintDivAndCeil(brdfIntegralSize, 8), 6);
+
+        // transfer dst texture from general to shader read only layout
+        renderer.submitBarriers(
+            mainCmdBuffer,
             {
-                renderer.setComputePipelineState(cmd, integrateBrdfShaderHandle);
-
-                // Bind the bindless descriptor sets once per cmdbuffer
-                vkCmdBindDescriptorSets(
-                    cmd,
-                    VK_PIPELINE_BIND_POINT_COMPUTE,
-                    renderer.bindlessPipelineLayout,
-                    0,
-                    renderer.bindlessManager.getDescriptorSetsCount(),
-                    renderer.bindlessManager.getDescriptorSets(),
-                    0,
-                    nullptr);
-
-                struct IntegratePushConstants
-                {
-                    uint32_t outTexture;
-                };
-                IntegratePushConstants constants{brdfIntegral->mipResourceIndex(0)};
-
-                renderer.pushConstants(cmd, sizeof(IntegratePushConstants), &constants);
-
-                renderer.dispatchCompute(
-                    cmd, UintDivAndCeil(brdfIntegralSize, 8), UintDivAndCeil(brdfIntegralSize, 8), 6);
-
-                // transfer dst texture from general to shader read only layout
-                renderer.submitBarriers(
-                    cmd,
-                    {
-                        Barrier::from(Barrier::Image{
-                            .texture = brdfIntegralMap,
-                            .stateBefore = ResourceState::StorageComputeWrite,
-                            .stateAfter = ResourceState::SampleSource,
-                        }),
-                    });
+                Barrier::from(Barrier::Image{
+                    .texture = brdfIntegralMap,
+                    .stateBefore = ResourceState::StorageComputeWrite,
+                    .stateAfter = ResourceState::SampleSource,
+                }),
             });
     }
 
