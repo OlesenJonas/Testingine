@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../VulkanTypes.hpp"
+#include "../HelperTypes.hpp"
 
 #include <Datastructures/Span.hpp>
 #include <vector>

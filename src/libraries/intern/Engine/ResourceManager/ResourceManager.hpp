@@ -11,6 +11,7 @@
 #include <Engine/Graphics/Texture/Sampler.hpp>
 #include <Engine/Graphics/Texture/Texture.hpp>
 #include <Engine/Graphics/Texture/TextureView.hpp>
+#include <Engine/Misc/Macros.hpp>
 #include <Engine/Misc/StringHash.hpp>
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
+#include <Engine/Graphics/Device/VulkanDevice.hpp>
 #include <Engine/Misc/StringHash.hpp>
 
 struct ParameterInfo;
@@ -23,7 +23,7 @@ struct ParameterBuffer
     char* cpuBuffer = nullptr;
 
     uint8_t currentBufferIndex = 0;
-    Handle<Buffer> gpuBuffers[VulkanRenderer::FRAMES_IN_FLIGHT] = {Handle<Buffer>::Invalid()};
+    Handle<Buffer> gpuBuffers[VulkanDevice::FRAMES_IN_FLIGHT] = {Handle<Buffer>::Invalid()};
 
     friend MaterialInstance;
     friend ResourceManager;

@@ -1,6 +1,6 @@
 #include "ResourceManager.hpp"
 #include "Graphics/Buffer/Buffer.hpp"
-#include "Graphics/Renderer/VulkanRenderer.hpp"
+#include "Graphics/Device/VulkanDevice.hpp"
 #include <Engine/Application/Application.hpp>
 #include <TinyOBJ/tiny_obj_loader.h>
 #include <vulkan/vulkan_core.h>
@@ -19,7 +19,7 @@ void ResourceManager::init()
 
 void ResourceManager::cleanup()
 {
-    auto* device = VulkanRenderer::get();
+    auto* device = VulkanDevice::get();
 
     for(int i = 0; i < freeSamplerIndex; i++)
     {

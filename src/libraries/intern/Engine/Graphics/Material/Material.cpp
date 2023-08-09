@@ -1,10 +1,9 @@
 #include "Material.hpp"
 #include <Datastructures/ArrayHelpers.hpp>
-#include <Engine/Graphics/Renderer/VulkanDebug.hpp>
-#include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
+#include <Engine/Graphics/Device/VulkanConversions.hpp>
+#include <Engine/Graphics/Device/VulkanDevice.hpp>
 #include <Engine/Graphics/Shaders/GLSL.hpp>
 #include <Engine/Graphics/Shaders/HLSL.hpp>
-#include <Engine/Graphics/Texture/TextureToVulkan.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <Graphics/Shaders/Shaders.hpp>
 #include <SPIRV-Reflect/spirv_reflect.h>
@@ -29,7 +28,7 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
     Handle<Material> newMaterialHandle = materialPool.insert();
     Material* material = get(newMaterialHandle);
 
-    VulkanRenderer& renderer = *VulkanRenderer::get();
+    VulkanDevice& gfxDevice = *VulkanDevice::get();
 
     std::vector<uint32_t> vertexBinary;
     std::vector<uint32_t> fragmentBinary;
@@ -50,22 +49,22 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
         .codeSize = 4u * vertexBinary.size(), // size in bytes, but spirvBinary is uint32 vector!
         .pCode = vertexBinary.data(),
     };
-    if(vkCreateShaderModule(renderer.device, &vertSMcrInfo, nullptr, &material->vertexShader) != VK_SUCCESS)
+    if(vkCreateShaderModule(gfxDevice.device, &vertSMcrInfo, nullptr, &material->vertexShader) != VK_SUCCESS)
     {
         assert(false);
     }
-    setDebugName(material->vertexShader, (std::string{matName} + "_vertex").c_str());
+    gfxDevice.setDebugName(material->vertexShader, (std::string{matName} + "_vertex").c_str());
     VkShaderModuleCreateInfo fragmSMcrInfo{
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .pNext = nullptr,
         .codeSize = 4u * fragmentBinary.size(), // size in bytes, but spirvBinary is uint32 vector!
         .pCode = fragmentBinary.data(),
     };
-    if(vkCreateShaderModule(renderer.device, &fragmSMcrInfo, nullptr, &material->fragmentShader) != VK_SUCCESS)
+    if(vkCreateShaderModule(gfxDevice.device, &fragmSMcrInfo, nullptr, &material->fragmentShader) != VK_SUCCESS)
     {
         assert(false);
     }
-    setDebugName(material->fragmentShader, (std::string{matName} + "_fragment").c_str());
+    gfxDevice.setDebugName(material->fragmentShader, (std::string{matName} + "_fragment").c_str());
 
     // Parse Shader Interface -------------
 
@@ -133,7 +132,7 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
             assert(insertion.second); // assertion must have happened, otherwise something is srsly wrong
         }
 
-        for(int i = 0; i < VulkanRenderer::FRAMES_IN_FLIGHT; i++)
+        for(int i = 0; i < VulkanDevice::FRAMES_IN_FLIGHT; i++)
         {
             material->parameters.gpuBuffers[i] = createBuffer(Buffer::CreateInfo{
                 .info =
@@ -199,9 +198,9 @@ void ResourceManager::free(Handle<Material> handle)
         return;
     }
 
-    VulkanRenderer& renderer = *VulkanRenderer::get();
-    VkDevice device = renderer.device;
-    const VmaAllocator* allocator = &renderer.allocator;
+    VulkanDevice& gfxDevice = *VulkanDevice::get();
+    VkDevice device = gfxDevice.device;
+    const VmaAllocator* allocator = &gfxDevice.allocator;
 
     if(material->parameters.cpuBuffer != nullptr)
     {
@@ -218,7 +217,7 @@ void ResourceManager::free(Handle<Material> handle)
             }
             const VkBuffer vkBuffer = buffer->buffer;
             const VmaAllocation vmaAllocation = buffer->allocation;
-            renderer.deleteQueue.pushBack([=]() { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
+            gfxDevice.deleteQueue.pushBack([=]() { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
             bufferPool.remove(bufferHandle);
         }
     }
@@ -227,10 +226,10 @@ void ResourceManager::free(Handle<Material> handle)
 
     if(material->pipeline != VK_NULL_HANDLE)
     {
-        renderer.deleteQueue.pushBack([=]() { vkDestroyPipeline(device, material->pipeline, nullptr); });
+        gfxDevice.deleteQueue.pushBack([=]() { vkDestroyPipeline(device, material->pipeline, nullptr); });
     }
 
-    renderer.deleteQueue.pushBack(
+    gfxDevice.deleteQueue.pushBack(
         [=]()
         {
             vkDestroyShaderModule(device, material->vertexShader, nullptr);
@@ -245,7 +244,7 @@ void Material::createPipeline()
 {
     // todo: check if pipeline with given parameters already exists, and just return that in case it does!
 
-    VulkanRenderer& renderer = *VulkanRenderer::get();
+    VulkanDevice& gfxDevice = *VulkanDevice::get();
 
     // Creating the pipeline ---------------------------
 
@@ -367,8 +366,8 @@ void Material::createPipeline()
         .pDynamicStates = &dynamicStates[0],
     };
 
-    const VkFormat colorAttachmentFormats[1] = {renderer.swapchainImageFormat};
-    const VkFormat depthAttachmentFormat = renderer.defaultDepthFormat;
+    const VkFormat colorAttachmentFormats[1] = {gfxDevice.swapchainImageFormat};
+    const VkFormat depthAttachmentFormat = gfxDevice.defaultDepthFormat;
     const VkFormat stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
     const VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{
@@ -395,14 +394,14 @@ void Material::createPipeline()
         .pColorBlendState = &colorBlendStateCrInfo,
         .pDynamicState = &dynamicState,
 
-        .layout = renderer.bindlessPipelineLayout,
+        .layout = gfxDevice.bindlessPipelineLayout,
         .renderPass = VK_NULL_HANDLE,
         .subpass = 0,
         .basePipelineHandle = VK_NULL_HANDLE,
     };
 
     if(vkCreateGraphicsPipelines(
-           renderer.device, renderer.pipelineCache, 1, &pipelineCrInfo, nullptr, &pipeline) != VK_SUCCESS)
+           gfxDevice.device, gfxDevice.pipelineCache, 1, &pipelineCrInfo, nullptr, &pipeline) != VK_SUCCESS)
     {
         std::cout << "Failed to create pipeline!" << std::endl;
         assert(false);

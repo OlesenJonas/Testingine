@@ -1,5 +1,5 @@
 #include "VulkanDeviceFinder.hpp"
-#include "../../VulkanTypes.hpp"
+#include "../HelperTypes.hpp"
 
 #include <set>
 #include <stdexcept>

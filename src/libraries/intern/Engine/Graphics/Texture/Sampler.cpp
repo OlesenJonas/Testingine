@@ -1,11 +1,11 @@
 #include "Sampler.hpp"
-#include "SamplerToVulkan.hpp"
 #include <Engine/Application/Application.hpp>
+#include <Engine/Graphics/Device/VulkanConversions.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 
 Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)
 {
-    auto* device = VulkanRenderer::get();
+    auto* device = VulkanDevice::get();
 
     // Check if such a sampler already exists
 

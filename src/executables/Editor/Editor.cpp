@@ -1,7 +1,7 @@
 #include "Editor.hpp"
 #include <Datastructures/Span.hpp>
+#include <Engine/Graphics/Barrier/Barrier.hpp>
 #include <Engine/Graphics/Mesh/Cube.hpp>
-#include <Engine/Graphics/Texture/TextureToVulkan.hpp>
 #include <Engine/Misc/Math.hpp>
 #include <Engine/Scene/DefaultComponents.hpp>
 #include <Engine/Scene/Scene.hpp>
@@ -18,7 +18,7 @@ Editor::Editor()
       }),
       sceneRoot(ecs.createEntity())
 {
-    renderer.defaultDepthFormat = toVkFormat(depthFormat);
+    gfxDevice.defaultDepthFormat = toVkFormat(depthFormat);
 
     inputManager.init(mainWindow.glfwWindow);
 
@@ -77,7 +77,7 @@ Editor::Editor()
         .format = depthFormat,
         .allStates = ResourceState::DepthStencilTarget,
         .initialState = ResourceState::Undefined,
-        .size = {renderer.getSwapchainWidth(), renderer.getSwapchainHeight()},
+        .size = {gfxDevice.getSwapchainWidth(), gfxDevice.getSwapchainHeight()},
     });
 
     // Create default Samplers
@@ -163,10 +163,10 @@ Editor::Editor()
     // single startup frame, so device is in correct state for rendering commands to be inserted between init() and
     // run()
     frameNumber++;
-    renderer.startNextFrame();
+    gfxDevice.startNextFrame();
 
-    VkCommandBuffer mainCmdBuffer = renderer.beginCommandBuffer();
-    renderer.insertSwapchainImageBarrier(
+    VkCommandBuffer mainCmdBuffer = gfxDevice.beginCommandBuffer();
+    gfxDevice.insertSwapchainImageBarrier(
         mainCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::PresentSrc);
 
     // Scene and other test stuff loading -------------------------------------------
@@ -189,8 +189,8 @@ Editor::Editor()
     {
         Texture* mipTestTex = resourceManager.get(mipTestTexH);
 
-        renderer.startDebugRegion(mainCmdBuffer, "Mip test tex filling");
-        renderer.setComputePipelineState(mainCmdBuffer, debugMipFillShaderH);
+        gfxDevice.startDebugRegion(mainCmdBuffer, "Mip test tex filling");
+        gfxDevice.setComputePipelineState(mainCmdBuffer, debugMipFillShaderH);
 
         struct DebugMipFillPushConstants
         {
@@ -212,14 +212,14 @@ Editor::Editor()
                 .level = mip,
             };
 
-            renderer.pushConstants(mainCmdBuffer, sizeof(DebugMipFillPushConstants), &constants);
+            gfxDevice.pushConstants(mainCmdBuffer, sizeof(DebugMipFillPushConstants), &constants);
 
             // TODO: dont hardcode sizes! retrieve programmatically (workrgoup size form spirv)
-            renderer.dispatchCompute(mainCmdBuffer, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
+            gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
         }
 
         // transfer dst texture from general to shader read only layout
-        renderer.submitBarriers(
+        gfxDevice.insertBarriers(
             mainCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
@@ -228,7 +228,7 @@ Editor::Editor()
                     .stateAfter = ResourceState::SampleSource,
                 }),
             });
-        renderer.endDebugRegion(mainCmdBuffer);
+        gfxDevice.endDebugRegion(mainCmdBuffer);
     }
 
     Handle<Mesh> triangleMesh;
@@ -303,7 +303,7 @@ Editor::Editor()
     ComputeShader* conversionShader = resourceManager.get(conversionShaderHandle);
 
     {
-        renderer.setComputePipelineState(mainCmdBuffer, conversionShaderHandle);
+        gfxDevice.setComputePipelineState(mainCmdBuffer, conversionShaderHandle);
 
         struct ConversionPushConstants
         {
@@ -313,11 +313,11 @@ Editor::Editor()
             .sourceIndex = resourceManager.get(hdri)->fullResourceIndex(),
             .targetIndex = resourceManager.get(hdriCube)->mipResourceIndex(0),
         };
-        renderer.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
+        gfxDevice.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
 
-        renderer.dispatchCompute(mainCmdBuffer, hdriCubeRes / 8, hdriCubeRes / 8, 6);
+        gfxDevice.dispatchCompute(mainCmdBuffer, hdriCubeRes / 8, hdriCubeRes / 8, 6);
 
-        renderer.submitBarriers(
+        gfxDevice.insertBarriers(
             mainCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
@@ -327,7 +327,7 @@ Editor::Editor()
                 }),
             });
 
-        renderer.fillMipLevels(mainCmdBuffer, hdriCube, ResourceState::SampleSource);
+        gfxDevice.fillMipLevels(mainCmdBuffer, hdriCube, ResourceState::SampleSource);
     }
 
     Handle<ComputeShader> calcIrradianceComp = resourceManager.createComputeShader(
@@ -346,7 +346,7 @@ Editor::Editor()
     {
         Texture* irradianceTex = resourceManager.get(irradianceTexHandle);
 
-        renderer.setComputePipelineState(mainCmdBuffer, calcIrradianceComp);
+        gfxDevice.setComputePipelineState(mainCmdBuffer, calcIrradianceComp);
 
         struct ConversionPushConstants
         {
@@ -358,12 +358,12 @@ Editor::Editor()
             .targetIndex = irradianceTex->mipResourceIndex(0),
         };
 
-        renderer.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
+        gfxDevice.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
 
-        renderer.dispatchCompute(mainCmdBuffer, irradianceRes / 8, irradianceRes / 8, 6);
+        gfxDevice.dispatchCompute(mainCmdBuffer, irradianceRes / 8, irradianceRes / 8, 6);
 
         // transfer dst texture from general to shader read only layout
-        renderer.submitBarriers(
+        gfxDevice.insertBarriers(
             mainCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
@@ -391,7 +391,7 @@ Editor::Editor()
     {
         Texture* prefilteredEnv = resourceManager.get(prefilteredEnvMap);
 
-        renderer.setComputePipelineState(mainCmdBuffer, prefilterEnvShaderHandle);
+        gfxDevice.setComputePipelineState(mainCmdBuffer, prefilterEnvShaderHandle);
 
         struct PrefilterPushConstants
         {
@@ -416,13 +416,13 @@ Editor::Editor()
                 .roughness = float(mip) / float(mipCount - 1),
             };
 
-            renderer.pushConstants(mainCmdBuffer, sizeof(PrefilterPushConstants), &constants);
+            gfxDevice.pushConstants(mainCmdBuffer, sizeof(PrefilterPushConstants), &constants);
 
-            renderer.dispatchCompute(mainCmdBuffer, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
+            gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
         }
 
         // transfer dst texture from general to shader read only layout
-        renderer.submitBarriers(
+        gfxDevice.insertBarriers(
             mainCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
@@ -449,7 +449,7 @@ Editor::Editor()
     {
         Texture* brdfIntegral = resourceManager.get(brdfIntegralMap);
 
-        renderer.setComputePipelineState(mainCmdBuffer, integrateBrdfShaderHandle);
+        gfxDevice.setComputePipelineState(mainCmdBuffer, integrateBrdfShaderHandle);
 
         struct IntegratePushConstants
         {
@@ -457,13 +457,13 @@ Editor::Editor()
         };
         IntegratePushConstants constants{brdfIntegral->mipResourceIndex(0)};
 
-        renderer.pushConstants(mainCmdBuffer, sizeof(IntegratePushConstants), &constants);
+        gfxDevice.pushConstants(mainCmdBuffer, sizeof(IntegratePushConstants), &constants);
 
-        renderer.dispatchCompute(
+        gfxDevice.dispatchCompute(
             mainCmdBuffer, UintDivAndCeil(brdfIntegralSize, 8), UintDivAndCeil(brdfIntegralSize, 8), 6);
 
         // transfer dst texture from general to shader read only layout
-        renderer.submitBarriers(
+        gfxDevice.insertBarriers(
             mainCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
@@ -529,20 +529,20 @@ Editor::Editor()
 
     // ------------------------------------------------------------------------------
 
-    renderer.endCommandBuffer(mainCmdBuffer);
-    renderer.submitCommandBuffers({mainCmdBuffer});
+    gfxDevice.endCommandBuffer(mainCmdBuffer);
+    gfxDevice.submitCommandBuffers({mainCmdBuffer});
     // Needed so swapchain "progresses" (see vulkan validation message) TODO: fix
-    renderer.presentSwapchain();
+    gfxDevice.presentSwapchain();
 
     // just to be safe, wait for all commands to be done here
-    renderer.waitForWorkFinished();
+    gfxDevice.waitForWorkFinished();
 }
 
 Editor::~Editor()
 {
     // TODO: need a fancy way of ensuring that this is always called in applications
     //       Cant use base class destructor since that will only be called *after*wards
-    renderer.waitForWorkFinished();
+    gfxDevice.waitForWorkFinished();
 }
 
 void Editor::run()
@@ -581,11 +581,11 @@ void Editor::update()
 
     // TODO: ASSERTS AND/OR WARNINGS TO MAKE SURE ALL NECESSARY COMMANDS CALLED, AND IN CORRECT ORDER
     //          (ie error out when command buffer begun before next frame started)
-    renderer.startNextFrame();
+    gfxDevice.startNextFrame();
 
-    VkCommandBuffer mainCmdBuffer = renderer.beginCommandBuffer();
+    VkCommandBuffer mainCmdBuffer = gfxDevice.beginCommandBuffer();
 
-    renderer.submitBarriers(
+    gfxDevice.insertBarriers(
         mainCmdBuffer,
         {
             Barrier::from(Barrier::Image{
@@ -595,10 +595,10 @@ void Editor::update()
                 .allowDiscardOriginal = true,
             }),
         });
-    renderer.insertSwapchainImageBarrier(
+    gfxDevice.insertSwapchainImageBarrier(
         mainCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::Rendertarget);
 
-    renderer.beginRendering(
+    gfxDevice.beginRendering(
         mainCmdBuffer,
         {RenderTarget{.texture = RenderTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Clear}},
         RenderTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
@@ -670,7 +670,7 @@ void Editor::update()
             if(newMatInst->parentMaterial != lastMaterial)
             {
                 Material* newMat = resourceManager.get(newMatInst->parentMaterial);
-                renderer.setGraphicsPipelineState(mainCmdBuffer, newMatInst->parentMaterial);
+                gfxDevice.setGraphicsPipelineState(mainCmdBuffer, newMatInst->parentMaterial);
                 Buffer* materialParamsBuffer = resourceManager.get(newMat->parameters.getGPUBuffer());
                 if(materialParamsBuffer != nullptr)
                 {
@@ -687,7 +687,7 @@ void Editor::update()
         }
 
         pushConstants.transformIndex = i;
-        renderer.pushConstants(mainCmdBuffer, sizeof(BindlessIndices), &pushConstants);
+        gfxDevice.pushConstants(mainCmdBuffer, sizeof(BindlessIndices), &pushConstants);
 
         if(objectMesh != lastMesh)
         {
@@ -696,33 +696,33 @@ void Editor::update()
             Buffer* indexBuffer = resourceManager.get(newMesh->indexBuffer);
             Buffer* positionBuffer = resourceManager.get(newMesh->positionBuffer);
             Buffer* attributeBuffer = resourceManager.get(newMesh->attributeBuffer);
-            renderer.bindIndexBuffer(mainCmdBuffer, newMesh->indexBuffer);
-            renderer.bindVertexBuffers(
+            gfxDevice.bindIndexBuffer(mainCmdBuffer, newMesh->indexBuffer);
+            gfxDevice.bindVertexBuffers(
                 mainCmdBuffer, 0, 2, {newMesh->positionBuffer, newMesh->attributeBuffer}, {0, 0});
             lastMesh = objectMesh;
         }
 
-        renderer.drawIndexed(mainCmdBuffer, indexCount, 1, 0, 0, 0);
+        gfxDevice.drawIndexed(mainCmdBuffer, indexCount, 1, 0, 0, 0);
     }
 
-    renderer.endRendering(mainCmdBuffer);
+    gfxDevice.endRendering(mainCmdBuffer);
 
     // Draw UI ---------
 
-    renderer.beginRendering(
+    gfxDevice.beginRendering(
         mainCmdBuffer,
         {RenderTarget{.texture = RenderTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Load}},
         RenderTarget{.texture = Handle<Texture>::Null()});
-    renderer.drawImGui(mainCmdBuffer);
-    renderer.endRendering(mainCmdBuffer);
+    gfxDevice.drawImGui(mainCmdBuffer);
+    gfxDevice.endRendering(mainCmdBuffer);
 
-    renderer.insertSwapchainImageBarrier(mainCmdBuffer, ResourceState::Rendertarget, ResourceState::PresentSrc);
+    gfxDevice.insertSwapchainImageBarrier(mainCmdBuffer, ResourceState::Rendertarget, ResourceState::PresentSrc);
 
-    renderer.endCommandBuffer(mainCmdBuffer);
+    gfxDevice.endCommandBuffer(mainCmdBuffer);
 
-    renderer.submitCommandBuffers({mainCmdBuffer});
+    gfxDevice.submitCommandBuffers({mainCmdBuffer});
 
-    renderer.presentSwapchain();
+    gfxDevice.presentSwapchain();
 
     // ------------------------------
 }

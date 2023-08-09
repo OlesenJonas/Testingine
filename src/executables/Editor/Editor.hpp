@@ -3,6 +3,7 @@
 #include <ECS/ECS.hpp>
 #include <Engine/Application/Application.hpp>
 #include <Engine/Graphics/Buffer/Buffer.hpp>
+#include <Engine/Graphics/Device/VulkanDevice.hpp>
 
 class Editor final : public Application
 {
@@ -62,10 +63,10 @@ class Editor final : public Application
         Handle<Buffer> objectBuffer;
     };
 
-    PerFrameData perFrameData[VulkanRenderer::FRAMES_IN_FLIGHT];
+    PerFrameData perFrameData[VulkanDevice::FRAMES_IN_FLIGHT];
     inline PerFrameData& getCurrentFrameData()
     {
-        return perFrameData[frameNumber % VulkanRenderer::FRAMES_IN_FLIGHT];
+        return perFrameData[frameNumber % VulkanDevice::FRAMES_IN_FLIGHT];
     }
 
     static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);

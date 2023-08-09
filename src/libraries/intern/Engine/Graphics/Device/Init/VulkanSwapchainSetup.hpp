@@ -1,7 +1,6 @@
 #pragma once
 
-#include "../../VulkanTypes.hpp"
-#include <vulkan/vulkan.h>
+#include "../HelperTypes.hpp"
 
 #include <vector>
 #include <vulkan/vulkan_core.h>

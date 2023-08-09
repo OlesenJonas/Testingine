@@ -1,4 +1,5 @@
 #include "Graphics.hpp"
+#include <Engine/Graphics/Device/VulkanConversions.hpp>
 #include <bit>
 
 VkImageUsageFlags toVkImageUsage(ResourceStateMulti states)

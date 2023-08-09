@@ -1,39 +1,25 @@
-#include "VulkanRenderer.hpp"
-#include "../Barriers/Barrier.hpp"
-#include "../Texture/Texture.hpp"
-#include "../VulkanTypes.hpp"
-#include "Graphics/Renderer/VulkanDebug.hpp"
-#include "Graphics/Renderer/VulkanRenderer.hpp"
+#include "VulkanDevice.hpp"
+#include "VulkanDebug.hpp"
+
+#include "Graphics/Barrier/Barrier.hpp"
 #include "Init/VulkanDeviceFinder.hpp"
 #include "Init/VulkanInit.hpp"
 #include "Init/VulkanSwapchainSetup.hpp"
 #include "ResourceManager/ResourceManager.hpp"
-#include "VulkanDebug.hpp"
-#include <Engine/Scene/DefaultComponents.hpp>
-#include <Graphics/Texture/TextureToVulkan.hpp>
+#include <Engine/Graphics/Device/VulkanConversions.hpp>
 
-#include <Engine/Application/Application.hpp>
 
-#include <Datastructures/Span.hpp>
-#include <cstddef>
-
+#include <GLFW/glfw3.h>
+#include <ImGui/imgui.h>
+#include <ImGui/imgui_impl_glfw.h>
+#include <ImGui/imgui_impl_vulkan.h>
 #include <fstream>
-#include <iostream>
-#include <shaderc/shaderc.h>
 #include <stdexcept>
-#include <string>
 
-#include "ImGui/imgui.h"
-#include "ImGui/imgui_impl_glfw.h"
-#include "ImGui/imgui_impl_vulkan.h"
-#include <glm/gtc/matrix_access.hpp>
-#include <glm/gtx/string_cast.hpp>
-#include <glm/gtx/transform.hpp>
-#include <glm/trigonometric.hpp>
-#include <unordered_map>
-#include <vulkan/vulkan_core.h>
+PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
+PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
 
-void VulkanRenderer::init(GLFWwindow* window)
+void VulkanDevice::init(GLFWwindow* window)
 {
     INIT_STATIC_GETTER();
     mainWindow = window;
@@ -56,16 +42,16 @@ void VulkanRenderer::init(GLFWwindow* window)
     _initialized = true;
 }
 
-uint32_t VulkanRenderer::getSwapchainWidth()
+uint32_t VulkanDevice::getSwapchainWidth()
 {
     return swapchainExtent.width;
 }
-uint32_t VulkanRenderer::getSwapchainHeight()
+uint32_t VulkanDevice::getSwapchainHeight()
 {
     return swapchainExtent.height;
 }
 
-void VulkanRenderer::initVulkan()
+void VulkanDevice::initVulkan()
 {
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_KHRONOS_validation",
@@ -122,7 +108,7 @@ void VulkanRenderer::initVulkan()
     vmaCreateAllocator(&vmaAllocatorCrInfo, &allocator);
 }
 
-void VulkanRenderer::initPipelineCache()
+void VulkanDevice::initPipelineCache()
 {
     VkPipelineCacheCreateInfo cacheCrInfo{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
@@ -171,7 +157,7 @@ void VulkanRenderer::initPipelineCache()
     deleteQueue.pushBack([=]() { vkDestroyPipelineCache(device, pipelineCache, nullptr); });
 }
 
-void VulkanRenderer::initSwapchain()
+void VulkanDevice::initSwapchain()
 {
     VulkanSwapchainSetup swapchainSetup(physicalDevice, device, mainWindow, surface);
     swapchainSetup.setup(queueFamilyIndices.graphicsFamily.value(), queueFamilyIndices.presentFamily.value());
@@ -190,7 +176,7 @@ void VulkanRenderer::initSwapchain()
     }
 }
 
-void VulkanRenderer::initCommands()
+void VulkanDevice::initCommands()
 {
     VkCommandPoolCreateInfo commandPoolCrInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -237,7 +223,7 @@ void VulkanRenderer::initCommands()
     assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &uploadContext.commandBuffer));
 }
 
-void VulkanRenderer::initSyncStructures()
+void VulkanDevice::initSyncStructures()
 {
     VkFenceCreateInfo fenceCreateInfo{
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -279,7 +265,7 @@ void VulkanRenderer::initSyncStructures()
     deleteQueue.pushBack([=]() { vkDestroyFence(device, uploadContext.uploadFence, nullptr); });
 }
 
-void VulkanRenderer::initBindless()
+void VulkanDevice::initBindless()
 {
     bindlessManager.init();
 
@@ -303,7 +289,7 @@ void VulkanRenderer::initBindless()
     deleteQueue.pushBack([=]() { vkDestroyPipelineLayout(device, bindlessPipelineLayout, nullptr); });
 }
 
-void VulkanRenderer::initImGui()
+void VulkanDevice::initImGui()
 {
     // 1: create descriptor pool for IMGUI
     //  the size of the pool is very oversize, but it's copied from imgui demo itself.
@@ -367,7 +353,7 @@ void VulkanRenderer::initImGui()
         });
 }
 
-void VulkanRenderer::savePipelineCache()
+void VulkanDevice::savePipelineCache()
 {
     size_t cacheDataSize = 0;
     vkGetPipelineCacheData(device, pipelineCache, &cacheDataSize, nullptr);
@@ -380,7 +366,7 @@ void VulkanRenderer::savePipelineCache()
     outFile.close();
 }
 
-void VulkanRenderer::cleanup()
+void VulkanDevice::cleanup()
 {
     if(!_initialized)
         return;
@@ -404,12 +390,12 @@ void VulkanRenderer::cleanup()
     glfwTerminate();
 }
 
-void VulkanRenderer::waitForWorkFinished()
+void VulkanDevice::waitForWorkFinished()
 {
     vkDeviceWaitIdle(device);
 }
 
-void VulkanRenderer::startNextFrame()
+void VulkanDevice::startNextFrame()
 {
     frameNumber++;
 
@@ -440,7 +426,7 @@ void VulkanRenderer::startNextFrame()
     assertVkResult(vkResetCommandPool(device, curFrameData.commandPool, 0));
 }
 
-VkCommandBuffer VulkanRenderer::beginCommandBuffer()
+VkCommandBuffer VulkanDevice::beginCommandBuffer()
 {
     auto& curFrameData = getCurrentFrameData();
 
@@ -488,12 +474,12 @@ VkCommandBuffer VulkanRenderer::beginCommandBuffer()
 
     return cmdBuffer;
 }
-void VulkanRenderer::endCommandBuffer(VkCommandBuffer cmd)
+void VulkanDevice::endCommandBuffer(VkCommandBuffer cmd)
 {
     vkEndCommandBuffer(cmd);
 }
 
-void VulkanRenderer::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
+void VulkanDevice::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
 {
     const auto& curFrameData = getCurrentFrameData();
 
@@ -516,7 +502,7 @@ void VulkanRenderer::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers
     assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
 }
 
-void VulkanRenderer::insertSwapchainImageBarrier(
+void VulkanDevice::insertSwapchainImageBarrier(
     VkCommandBuffer cmd, ResourceState currentState, ResourceState targetState)
 {
     VkImageMemoryBarrier2 imageBarrier{
@@ -556,7 +542,7 @@ void VulkanRenderer::insertSwapchainImageBarrier(
 }
 
 // TODO: overload to just not take a depth target, instead of having to pass null inside render target?
-void VulkanRenderer::beginRendering(
+void VulkanDevice::beginRendering(
     VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget)
 {
     ResourceManager* rm = ResourceManager::get();
@@ -626,12 +612,12 @@ void VulkanRenderer::beginRendering(
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 }
 
-void VulkanRenderer::endRendering(VkCommandBuffer cmd)
+void VulkanDevice::endRendering(VkCommandBuffer cmd)
 {
     vkCmdEndRendering(cmd);
 }
 
-void VulkanRenderer::submitBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers)
+void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers)
 {
     std::vector<VkImageMemoryBarrier2> imageBarriers;
     std::vector<VkBufferMemoryBarrier2> bufferBarriers;
@@ -715,31 +701,31 @@ void VulkanRenderer::submitBarriers(VkCommandBuffer cmd, Span<const Barrier> bar
     imageBarriers.clear();
 }
 
-void VulkanRenderer::setGraphicsPipelineState(VkCommandBuffer cmd, Handle<Material> mat)
+void VulkanDevice::setGraphicsPipelineState(VkCommandBuffer cmd, Handle<Material> mat)
 {
     auto* rm = ResourceManager::get();
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rm->get(mat)->pipeline);
 }
 
-void VulkanRenderer::setComputePipelineState(VkCommandBuffer cmd, Handle<ComputeShader> shader)
+void VulkanDevice::setComputePipelineState(VkCommandBuffer cmd, Handle<ComputeShader> shader)
 {
     auto* rm = ResourceManager::get();
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rm->get(shader)->pipeline);
 }
 
 // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
-void VulkanRenderer::pushConstants(VkCommandBuffer cmd, size_t size, void* data, size_t offset)
+void VulkanDevice::pushConstants(VkCommandBuffer cmd, size_t size, void* data, size_t offset)
 {
     vkCmdPushConstants(cmd, bindlessPipelineLayout, VK_SHADER_STAGE_ALL, offset, size, data);
 }
 
-void VulkanRenderer::bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset)
+void VulkanDevice::bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset)
 {
     auto* rm = ResourceManager::get();
     vkCmdBindIndexBuffer(cmd, rm->get(buffer)->buffer, offset, VK_INDEX_TYPE_UINT32);
 }
 
-void VulkanRenderer::bindVertexBuffers(
+void VulkanDevice::bindVertexBuffers(
     VkCommandBuffer cmd,
     uint32_t startBinding,
     uint32_t count,
@@ -758,7 +744,7 @@ void VulkanRenderer::bindVertexBuffers(
     vkCmdBindVertexBuffers(cmd, startBinding, count, &vkBuffers[0], offsets.data());
 }
 
-void VulkanRenderer::drawIndexed(
+void VulkanDevice::drawIndexed(
     VkCommandBuffer cmd,
     uint32_t indexCount,
     uint32_t instanceCount,
@@ -769,17 +755,17 @@ void VulkanRenderer::drawIndexed(
     vkCmdDrawIndexed(cmd, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-void VulkanRenderer::drawImGui(VkCommandBuffer cmd)
+void VulkanDevice::drawImGui(VkCommandBuffer cmd)
 {
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 }
 
-void VulkanRenderer::dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
+void VulkanDevice::dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
 {
     vkCmdDispatch(cmd, groupsX, groupsY, groupsZ);
 }
 
-void VulkanRenderer::presentSwapchain()
+void VulkanDevice::presentSwapchain()
 {
     const auto& curFrameData = getCurrentFrameData();
 
@@ -799,7 +785,7 @@ void VulkanRenderer::presentSwapchain()
     assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
 }
 
-void VulkanRenderer::startDebugRegion(VkCommandBuffer cmd, const char* name)
+void VulkanDevice::startDebugRegion(VkCommandBuffer cmd, const char* name)
 {
     VkDebugUtilsLabelEXT info{
         .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
@@ -808,12 +794,30 @@ void VulkanRenderer::startDebugRegion(VkCommandBuffer cmd, const char* name)
     };
     pfnCmdBeginDebugUtilsLabelEXT(cmd, &info);
 }
-void VulkanRenderer::endDebugRegion(VkCommandBuffer cmd)
+void VulkanDevice::endDebugRegion(VkCommandBuffer cmd)
 {
     pfnCmdEndDebugUtilsLabelEXT(cmd);
 }
 
-void VulkanRenderer::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state)
+void VulkanDevice::setDebugName(VkObjectType type, uint64_t handle, const char* name)
+{
+    if(setObjectDebugName == nullptr)
+    {
+        setObjectDebugName =
+            (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(instance, "vkSetDebugUtilsObjectNameEXT");
+        assert(setObjectDebugName);
+    }
+    VkDebugUtilsObjectNameInfoEXT nameInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .pNext = nullptr,
+        .objectType = type,
+        .objectHandle = handle,
+        .pObjectName = name,
+    };
+    setObjectDebugName(device, &nameInfo);
+}
+
+void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state)
 {
     /*
         TODO: check that image was created with usage_transfer_src_bit !
@@ -836,7 +840,7 @@ void VulkanRenderer::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture,
     // Transition mip 0 to transfer source
     if(state != ResourceState::TransferSrc)
     {
-        submitBarriers(
+        insertBarriers(
             cmd,
             {
                 Barrier::from(Barrier::Image{
@@ -859,7 +863,7 @@ void VulkanRenderer::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture,
         // prepare current level to be transfer dst
         if(state != ResourceState::TransferSrc)
         {
-            submitBarriers(
+            insertBarriers(
                 cmd,
                 {
                     Barrier::from(Barrier::Image{
@@ -913,7 +917,7 @@ void VulkanRenderer::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture,
             VK_FILTER_LINEAR);
 
         // prepare current level to be transfer src for next mip
-        submitBarriers(
+        insertBarriers(
             cmd,
             {
                 Barrier::from(Barrier::Image{
@@ -929,7 +933,7 @@ void VulkanRenderer::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture,
     }
 
     // after the loop, transfer all mips to input state
-    submitBarriers(
+    insertBarriers(
         cmd,
         {
             Barrier::from(Barrier::Image{
@@ -943,7 +947,7 @@ void VulkanRenderer::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture,
         });
 }
 
-size_t VulkanRenderer::padUniformBufferSize(size_t originalSize)
+size_t VulkanDevice::padUniformBufferSize(size_t originalSize)
 {
     size_t minUBOAlignment = physicalDeviceProperties.limits.minUniformBufferOffsetAlignment;
     size_t alignedSize = originalSize;
@@ -955,7 +959,7 @@ size_t VulkanRenderer::padUniformBufferSize(size_t originalSize)
     return alignedSize;
 }
 
-void VulkanRenderer::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function)
+void VulkanDevice::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function)
 {
     VkCommandBuffer& cmd = uploadContext.commandBuffer;
 

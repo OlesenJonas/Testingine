@@ -1,10 +1,10 @@
-#include "Graphics/Renderer/BindlessManager.hpp"
+#include "BindlessManager.hpp"
 #include "VulkanDebug.hpp"
-#include "VulkanRenderer.hpp"
+#include "VulkanDevice.hpp"
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <vulkan/vulkan_core.h>
 
-BindlessManager::BindlessManager(VulkanRenderer& renderer) : renderer(renderer){};
+BindlessManager::BindlessManager(VulkanDevice& device) : gfxDevice(device){};
 
 void BindlessManager::init()
 {
@@ -42,7 +42,7 @@ void BindlessManager::init()
         .poolSizeCount = (uint32_t)descriptorSizes.size(),
         .pPoolSizes = descriptorSizes.data(),
     };
-    assertVkResult(vkCreateDescriptorPool(renderer.device, &poolCrInfo, nullptr, &bindlessDescriptorPool));
+    assertVkResult(vkCreateDescriptorPool(gfxDevice.device, &poolCrInfo, nullptr, &bindlessDescriptorPool));
 
     for(const auto& entry : descriptorTypeTable)
     {
@@ -94,8 +94,8 @@ void BindlessManager::init()
             .pBindings = setLayoutBindings.data(),
         };
         VkDescriptorSetLayout layout;
-        vkCreateDescriptorSetLayout(renderer.device, &descSetLayoutCrInfo, nullptr, &layout);
-        setDebugName(layout, (std::string{entry.second.debugName} + "_setLayout").c_str());
+        vkCreateDescriptorSetLayout(gfxDevice.device, &descSetLayoutCrInfo, nullptr, &layout);
+        gfxDevice.setDebugName(layout, (std::string{entry.second.debugName} + "_setLayout").c_str());
         bindlessSetLayouts[entry.second.setIndex] = layout;
 
         // todo: could allocate all at once
@@ -107,17 +107,17 @@ void BindlessManager::init()
             .descriptorSetCount = 1,
             .pSetLayouts = &layout,
         };
-        vkAllocateDescriptorSets(renderer.device, &setAllocInfo, &set);
-        setDebugName(set, (std::string{entry.second.debugName} + "_Set").c_str());
+        vkAllocateDescriptorSets(gfxDevice.device, &setAllocInfo, &set);
+        gfxDevice.setDebugName(set, (std::string{entry.second.debugName} + "_Set").c_str());
         bindlessDescriptorSets[entry.second.setIndex] = set;
     }
 
-    renderer.deleteQueue.pushBack([=]()
-                                  { vkDestroyDescriptorPool(renderer.device, bindlessDescriptorPool, nullptr); });
+    gfxDevice.deleteQueue.pushBack(
+        [=]() { vkDestroyDescriptorPool(gfxDevice.device, bindlessDescriptorPool, nullptr); });
     for(auto setLayout : bindlessSetLayouts)
     {
-        renderer.deleteQueue.pushBack([=]()
-                                      { vkDestroyDescriptorSetLayout(renderer.device, setLayout, nullptr); });
+        gfxDevice.deleteQueue.pushBack([=]()
+                                       { vkDestroyDescriptorSetLayout(gfxDevice.device, setLayout, nullptr); });
     }
 
     for(auto& entry : descriptorTypeTable)
@@ -175,7 +175,7 @@ uint32_t BindlessManager::createBufferBinding(VkBuffer buffer, BufferUsage possi
         .pTexelBufferView = nullptr,
     };
 
-    vkUpdateDescriptorSets(renderer.device, 1, &setWrite, 0, nullptr);
+    vkUpdateDescriptorSets(gfxDevice.device, 1, &setWrite, 0, nullptr);
 
     return freeIndex;
 }
@@ -236,7 +236,12 @@ uint32_t BindlessManager::createImageBinding(VkImageView view, ImageUsage possib
                                    : VK_IMAGE_LAYOUT_GENERAL;
 
         createImageDescriptor(
-            renderer.device, bindlessDescriptorSets[tableEntry.setIndex], freeIndex, view, descriptorType, layout);
+            gfxDevice.device,
+            bindlessDescriptorSets[tableEntry.setIndex],
+            freeIndex,
+            view,
+            descriptorType,
+            layout);
 
         return freeIndex;
     }
@@ -268,14 +273,14 @@ uint32_t BindlessManager::createImageBinding(VkImageView view, ImageUsage possib
     assert(!freeIndicesBitsetStorage.getBit(freeIndex));
 
     createImageDescriptor(
-        renderer.device,
+        gfxDevice.device,
         bindlessDescriptorSets[tableEntrySampled.setIndex],
         freeIndex,
         view,
         VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     createImageDescriptor(
-        renderer.device,
+        gfxDevice.device,
         bindlessDescriptorSets[tableEntryStorage.setIndex],
         freeIndex,
         view,
@@ -309,7 +314,7 @@ uint32_t BindlessManager::createSamplerBinding(VkSampler sampler, uint32_t index
         .pTexelBufferView = nullptr,
     };
 
-    vkUpdateDescriptorSets(renderer.device, 1, &setWrite, 0, nullptr);
+    vkUpdateDescriptorSets(gfxDevice.device, 1, &setWrite, 0, nullptr);
 
     return index;
 }

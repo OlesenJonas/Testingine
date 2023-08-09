@@ -17,7 +17,7 @@ Handle<MaterialInstance> ResourceManager::createMaterialInstance(Handle<Material
         matInst->parameters.cpuBuffer = (char*)malloc(parentMat->instanceParametersBufferSize);
         memset(matInst->parameters.cpuBuffer, 0, matInst->parameters.bufferSize);
 
-        for(int i = 0; i < VulkanRenderer::FRAMES_IN_FLIGHT; i++)
+        for(int i = 0; i < VulkanDevice::FRAMES_IN_FLIGHT; i++)
         {
             matInst->parameters.gpuBuffers[i] = createBuffer(Buffer::CreateInfo{
                 .info =
@@ -48,9 +48,9 @@ void ResourceManager::free(Handle<MaterialInstance> handle)
         return;
     }
 
-    VulkanRenderer& renderer = *VulkanRenderer::get();
-    VkDevice device = renderer.device;
-    const VmaAllocator* allocator = &renderer.allocator;
+    VulkanDevice& gfxDevice = *VulkanDevice::get();
+    VkDevice device = gfxDevice.device;
+    const VmaAllocator* allocator = &gfxDevice.allocator;
 
     if(matInst->parameters.cpuBuffer != nullptr)
     {
@@ -67,7 +67,7 @@ void ResourceManager::free(Handle<MaterialInstance> handle)
             }
             const VkBuffer vkBuffer = buffer->buffer;
             const VmaAllocation vmaAllocation = buffer->allocation;
-            renderer.deleteQueue.pushBack([=]() { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
+            gfxDevice.deleteQueue.pushBack([=]() { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
             bufferPool.remove(bufferHandle);
         }
     }

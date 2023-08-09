@@ -1,33 +1,24 @@
 #pragma once
 
-#include <VMA/VMA.hpp>
-#include <string_view>
-#include <vulkan/vulkan_core.h>
-
-#include <glm/glm.hpp>
-
-#include "../Barriers/Barrier.hpp"
-#include "../Buffer/Buffer.hpp"
-#include "../Compute/ComputeShader.hpp"
-#include "../Texture/Texture.hpp"
-#include "../VulkanTypes.hpp"
 #include "BindlessManager.hpp"
-
-#include <Datastructures/FunctionQueue.hpp>
+#include "HelperTypes.hpp"
+#include "VulkanConversions.hpp"
+#include <Engine/Graphics/Graphics.hpp>
 #include <Engine/Misc/Macros.hpp>
 
-#include <array>
-#include <string>
-#include <unordered_map>
+#include <Datastructures/FunctionQueue.hpp>
+#include <Datastructures/Span.hpp>
+#include <vulkan/vulkan_core.h>
 
 struct GLFWwindow;
 struct Material;
+struct Barrier;
+struct Buffer;
+struct ComputeShader;
 
-#include <variant>
-
-class VulkanRenderer
+class VulkanDevice
 {
-    CREATE_STATIC_GETTER(VulkanRenderer);
+    CREATE_STATIC_GETTER(VulkanDevice);
 
   public:
     void init(GLFWwindow* window);
@@ -52,7 +43,7 @@ class VulkanRenderer
     void beginRendering(VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget);
     void endRendering(VkCommandBuffer cmd);
     void insertSwapchainImageBarrier(VkCommandBuffer cmd, ResourceState currentState, ResourceState targetState);
-    void submitBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers);
+    void insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers);
 
     void setGraphicsPipelineState(VkCommandBuffer cmd, Handle<Material> mat);
     void setComputePipelineState(VkCommandBuffer cmd, Handle<ComputeShader> shader);
@@ -80,6 +71,11 @@ class VulkanRenderer
 
     void startDebugRegion(VkCommandBuffer cmd, const char* name);
     void endDebugRegion(VkCommandBuffer cmd);
+    template <VulkanConvertible T>
+    void setDebugName(T object, const char* name)
+    {
+        setDebugName(toVkObjectType<T>(), (uint64_t)object, name);
+    }
 
     // Waits until all currently submitted GPU commands are executed
     void waitForWorkFinished();
@@ -141,6 +137,7 @@ class VulkanRenderer
   private:
     // ---------
     VkDebugUtilsMessengerEXT debugMessenger;
+    PFN_vkSetDebugUtilsObjectNameEXT setObjectDebugName = nullptr;
 
     VkSurfaceKHR surface;
 
@@ -179,4 +176,9 @@ class VulkanRenderer
     void savePipelineCache();
 
     size_t padUniformBufferSize(size_t originalSize);
+
+    void setDebugName(VkObjectType type, uint64_t handle, const char* name);
 };
+
+extern PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
+extern PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;

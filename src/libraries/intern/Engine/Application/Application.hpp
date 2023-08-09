@@ -2,7 +2,7 @@
 
 #include <Datastructures/Span.hpp>
 #include <Engine/Camera/Camera.hpp>
-#include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
+#include <Engine/Graphics/Device/VulkanDevice.hpp>
 #include <Engine/InputManager/InputManager.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <Engine/Window/Window.hpp>
@@ -24,6 +24,6 @@ class Application
     bool _isRunning = true;
 
     Window mainWindow;
-    VulkanRenderer renderer;
+    VulkanDevice gfxDevice;
     ResourceManager resourceManager;
 };

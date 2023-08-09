@@ -1,16 +1,15 @@
 #pragma once
 
-#include <Datastructures/Pool.hpp>
-#include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
+#include "ParameterBuffer.hpp"
+
 #include <Engine/Graphics/Shaders/Shaders.hpp>
-#include <Engine/Misc/Concepts.hpp>
 #include <Engine/Misc/StringHash.hpp>
+
+#include <Datastructures/Pool.hpp>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
-
-#include "ParameterBuffer.hpp"
 
 class ResourceManager;
 

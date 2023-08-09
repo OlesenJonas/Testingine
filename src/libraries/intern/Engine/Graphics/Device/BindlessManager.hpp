@@ -8,12 +8,12 @@
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
-class VulkanRenderer;
+class VulkanDevice;
 
 class BindlessManager
 {
   public:
-    explicit BindlessManager(VulkanRenderer& renderer);
+    explicit BindlessManager(VulkanDevice& device);
     void init();
 
     uint32_t getDescriptorSetsCount() const;
@@ -70,5 +70,5 @@ class BindlessManager
     std::array<VkDescriptorSetLayout, 4> bindlessSetLayouts;
     std::array<VkDescriptorSet, 4> bindlessDescriptorSets;
 
-    VulkanRenderer& renderer;
+    VulkanDevice& gfxDevice;
 };

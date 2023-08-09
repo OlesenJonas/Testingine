@@ -1,19 +1,19 @@
 #include "Texture.hpp"
-#include "Graphics/Renderer/VulkanRenderer.hpp"
+#include "Graphics/Device/VulkanDevice.hpp"
 #include "Graphics/Texture/Texture.hpp"
-#include "TextureToVulkan.hpp"
 #include <Engine/Application/Application.hpp>
-#include <Engine/Graphics/Barriers/Barrier.hpp>
-#include <Engine/Graphics/Renderer/VulkanDebug.hpp>
+#include <Engine/Graphics/Barrier/Barrier.hpp>
+#include <Engine/Graphics/Device/VulkanConversions.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <format>
 #include <iostream>
 #include <stb/stb_image.h>
 #include <vulkan/vulkan_core.h>
 
+
 Handle<Texture> ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
 {
-    auto* device = VulkanRenderer::get();
+    auto* device = VulkanDevice::get();
 
     auto lastDirSep = loadInfo.path.find_last_of("/\\");
     auto extensionStart = loadInfo.path.find_last_of('.');
@@ -57,7 +57,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
 
 Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 {
-    auto* device = VulkanRenderer::get();
+    auto* device = VulkanDevice::get();
 
     // todo: handle naming collisions and also dont just use a random name...
     std::string name = createInfo.debugName;
@@ -174,7 +174,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
         device->immediateSubmit(
             [&](VkCommandBuffer cmd)
             {
-                device->submitBarriers(
+                device->insertBarriers(
                     cmd,
                     {
                         Barrier::from(Barrier::Image{
@@ -204,7 +204,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                 vkCmdCopyBufferToImage(
                     cmd, stagingBuffer.buffer, tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
-                device->submitBarriers(
+                device->insertBarriers(
                     cmd,
                     {
                         Barrier::from(Barrier::Image{
@@ -229,7 +229,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
         device->immediateSubmit(
             [&](VkCommandBuffer cmd)
             {
-                device->submitBarriers(
+                device->insertBarriers(
                     cmd,
                     {
                         Barrier::from(Barrier::Image{
@@ -243,7 +243,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 
     nameToTextureLUT.insert({std::string{name}, newTextureHandle});
 
-    setDebugName(tex->image, (std::string{name} + "_image").c_str());
+    device->setDebugName(tex->image, (std::string{name} + "_image").c_str());
 
     // Creating the resourceViews and descriptors for bindless
 
@@ -285,7 +285,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 
         vkCreateImageView(device->device, &imageViewCrInfo, nullptr, &tex->_fullImageView);
         tex->_mipImageViews[0] = tex->_fullImageView;
-        setDebugName(tex->_fullImageView, (std::string{name} + "_viewFull").c_str());
+        device->setDebugName(tex->_fullImageView, (std::string{name} + "_viewFull").c_str());
 
         // TODO: containsSamplingState()/...StorageState() functions!
         bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
@@ -349,7 +349,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
             };
 
             vkCreateImageView(device->device, &imageViewCrInfo, nullptr, &tex->_fullImageView);
-            setDebugName(tex->_fullImageView, (std::string{name} + "_viewFull").c_str());
+            device->setDebugName(tex->_fullImageView, (std::string{name} + "_viewFull").c_str());
 
             bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
                                    (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
@@ -391,9 +391,10 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
             };
 
             vkCreateImageView(device->device, &imageViewCrInfo, nullptr, &tex->_mipImageViews[m]);
-            setDebugName(tex->_mipImageViews[m], (std::string{name} + "_viewMip" + std::to_string(m)).c_str());
+            device->setDebugName(
+                tex->_mipImageViews[m], (std::string{name} + "_viewMip" + std::to_string(m)).c_str());
 
-            VulkanRenderer& renderer = *VulkanRenderer::get();
+            VulkanDevice& gfxDevice = *VulkanDevice::get();
             bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
                                    (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
                                    (createInfo.allStates & ResourceState::SampleSourceCompute);
@@ -409,19 +410,19 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 
             // if(usedForSampling && usedForStorage)
             // {
-            //     tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+            //     tex->_fullResourceIndex = gfxDevice.bindlessManager.createImageBinding(
             //         tex->_fullImageView, BindlessManager::ImageUsage::Both);
             // }
             // // else: not both but maybe one of the two
             // else if(usedForSampling)
             // {
-            //     tex->_fullResourceIndex = renderer.bindlessManager.createImageBinding(
+            //     tex->_fullResourceIndex = gfxDevice.bindlessManager.createImageBinding(
             //         tex->_fullImageView, BindlessManager::ImageUsage::Sampled);
             // }
             // else if(usedForStorage)
             if(usedForStorage)
             {
-                tex->_mipResourceIndices[m] = renderer.bindlessManager.createImageBinding(
+                tex->_mipResourceIndices[m] = gfxDevice.bindlessManager.createImageBinding(
                     tex->_mipImageViews[m], BindlessManager::ImageUsage::Storage);
             }
         }
@@ -432,7 +433,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 
 void ResourceManager::free(Handle<Texture> handle)
 {
-    auto* device = VulkanRenderer::get();
+    auto* gfxDevice = VulkanDevice::get();
 
     /*
         todo:
@@ -445,20 +446,19 @@ void ResourceManager::free(Handle<Texture> handle)
     {
         return;
     }
-    const VmaAllocator* allocator = &device->allocator;
+    const VmaAllocator* allocator = &gfxDevice->allocator;
     VkImage image = texture->image;
     VmaAllocation vmaAllocation = texture->allocation;
-    VkDevice vkdevice = device->device;
-    auto& renderer = *device;
-    renderer.deleteQueue.pushBack([=]() { vmaDestroyImage(renderer.allocator, image, vmaAllocation); });
+    VkDevice vkdevice = gfxDevice->device;
+    gfxDevice->deleteQueue.pushBack([=]() { vmaDestroyImage(gfxDevice->allocator, image, vmaAllocation); });
 
     VkImageView imageView = texture->_fullImageView;
-    renderer.deleteQueue.pushBack([=]() { vkDestroyImageView(vkdevice, imageView, nullptr); });
+    gfxDevice->deleteQueue.pushBack([=]() { vkDestroyImageView(vkdevice, imageView, nullptr); });
     if(texture->descriptor.mipLevels > 1)
         for(int i = 0; i < texture->descriptor.mipLevels; i++)
         {
             imageView = texture->_mipImageViews[i];
-            renderer.deleteQueue.pushBack([=]() { vkDestroyImageView(vkdevice, imageView, nullptr); });
+            gfxDevice->deleteQueue.pushBack([=]() { vkDestroyImageView(vkdevice, imageView, nullptr); });
         }
 
     texturePool.remove(handle);

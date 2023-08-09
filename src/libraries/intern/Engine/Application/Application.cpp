@@ -5,7 +5,7 @@ Application::Application(CreateInfo&& info)
 {
     // ensure global services are initialized in correct order
 
-    renderer.init(mainWindow.glfwWindow);
+    gfxDevice.init(mainWindow.glfwWindow);
 
     resourceManager.init();
 }
@@ -13,5 +13,5 @@ Application::Application(CreateInfo&& info)
 Application::~Application()
 {
     resourceManager.cleanup();
-    renderer.cleanup();
+    gfxDevice.cleanup();
 }

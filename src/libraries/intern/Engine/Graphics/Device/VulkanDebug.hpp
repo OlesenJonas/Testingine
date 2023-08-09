@@ -26,14 +26,3 @@ VkResult CreateDebugUtilsMessengerEXT(
 
 void DestroyDebugUtilsMessengerEXT(
     VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
-
-void setDebugName(VkBuffer buffer, const char* name);
-void setDebugName(VkImage image, const char* name);
-void setDebugName(VkImageView imageView, const char* name);
-void setDebugName(VkShaderModule shader, const char* name);
-void setDebugName(VkDescriptorSet set, const char* name);
-void setDebugName(VkDescriptorSetLayout setLayout, const char* name);
-void setDebugName(VkPipeline pipeline, const char* name);
-
-extern PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
-extern PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;

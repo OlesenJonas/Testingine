@@ -1,6 +1,5 @@
 #include "Buffer.hpp"
-#include <Engine/Graphics/Renderer/VulkanDebug.hpp>
-#include <Engine/Graphics/Renderer/VulkanRenderer.hpp>
+#include <Engine/Graphics/Device/VulkanDevice.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <VMA/VMA.hpp>
 #include <vulkan/vulkan_core.h>
@@ -21,7 +20,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
     // assume that the underlying pointer wont change until this function returns
     Buffer* buffer = bufferPool.get(newBufferHandle);
 
-    VulkanRenderer& renderer = *VulkanRenderer::get();
+    VulkanDevice& gfxDevice = *VulkanDevice::get();
 
     // TODO: dont error, just warn and automatically set transfer_dst_bit
     assert(
@@ -43,7 +42,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
         .requiredFlags = crInfo.info.memoryAllocationInfo.requiredMemoryPropertyFlags,
     };
 
-    VmaAllocator& allocator = renderer.allocator;
+    VmaAllocator& allocator = gfxDevice.allocator;
     VkResult res = vmaCreateBuffer(
         allocator, &bufferCrInfo, &vmaAllocCrInfo, &buffer->buffer, &buffer->allocation, &buffer->allocInfo);
 
@@ -74,7 +73,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
         };
         AllocatedBuffer stagingBuffer;
         VkResult res = vmaCreateBuffer(
-            renderer.allocator,
+            gfxDevice.allocator,
             &stagingBufferInfo,
             &vmaallocCrInfo,
             &stagingBuffer.buffer,
@@ -87,7 +86,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
         memcpy(data, crInfo.initialData, crInfo.info.size);
         vmaUnmapMemory(allocator, stagingBuffer.allocation);
 
-        renderer.immediateSubmit(
+        gfxDevice.immediateSubmit(
             [=](VkCommandBuffer cmd)
             {
                 VkBufferCopy copy{
@@ -106,18 +105,18 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
 
     if(!name.empty())
     {
-        setDebugName(buffer->buffer, name.data());
+        gfxDevice.setDebugName(buffer->buffer, name.data());
     }
 
     if(crInfo.info.usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
     {
         buffer->resourceIndex =
-            renderer.bindlessManager.createBufferBinding(buffer->buffer, BindlessManager::BufferUsage::Uniform);
+            gfxDevice.bindlessManager.createBufferBinding(buffer->buffer, BindlessManager::BufferUsage::Uniform);
     }
     else if(crInfo.info.usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
     {
         buffer->resourceIndex =
-            renderer.bindlessManager.createBufferBinding(buffer->buffer, BindlessManager::BufferUsage::Storage);
+            gfxDevice.bindlessManager.createBufferBinding(buffer->buffer, BindlessManager::BufferUsage::Storage);
     }
 
     return newBufferHandle;
@@ -128,7 +127,7 @@ void ResourceManager::free(Handle<Buffer> handle)
     /*
         todo:
         Enqueue into a per frame queue
-        also need to ensure renderer deletes !all! objects from per frame queue during shutdown, ignoring the
+        also need to ensure gfxDevice deletes !all! objects from per frame queue during shutdown, ignoring the
             current frame!
     */
     const Buffer* buffer = bufferPool.get(handle);
@@ -138,10 +137,10 @@ void ResourceManager::free(Handle<Buffer> handle)
     {
         return;
     }
-    VulkanRenderer& renderer = *VulkanRenderer::get();
-    const VmaAllocator* allocator = &renderer.allocator;
+    VulkanDevice& gfxDevice = *VulkanDevice::get();
+    const VmaAllocator* allocator = &gfxDevice.allocator;
     const VkBuffer vkBuffer = buffer->buffer;
     const VmaAllocation vmaAllocation = buffer->allocation;
-    renderer.deleteQueue.pushBack([=]() { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
+    gfxDevice.deleteQueue.pushBack([=]() { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
     bufferPool.remove(handle);
 }
