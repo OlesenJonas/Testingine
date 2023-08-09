@@ -111,9 +111,6 @@ struct Texture
     static LoadResult loadHDR(Texture::LoadInfo&& loadInfo);
     static LoadResult loadDefault(Texture::LoadInfo&& loadInfo);
 
-    // TODO: not sure I like this being here, maybe some renderer.utils ?
-    static void fillMipLevels(Handle<Texture> texture, ResourceState state);
-
     uint32_t fullResourceIndex() const;
     uint32_t mipResourceIndex(uint32_t level) const;
     // TODO: own textureView abstraction

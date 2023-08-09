@@ -6,8 +6,9 @@
 
 #include <glm/glm.hpp>
 
+#include "../Barriers/Barrier.hpp"
 #include "../Buffer/Buffer.hpp"
-#include "../RenderObject/RenderObject.hpp"
+#include "../Compute/ComputeShader.hpp"
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
 #include "BindlessManager.hpp"
@@ -19,86 +20,145 @@
 #include <string>
 #include <unordered_map>
 
-// todo: store somewhere else and keep synced with shader code version of struct
-struct RenderPassData
-{
-    glm::mat4 view;
-    glm::mat4 proj;
-    glm::mat4 projView;
-    glm::vec3 cameraPositionWS;
-    float pad;
-};
+struct GLFWwindow;
+struct Material;
 
-struct GPUObjectData
-{
-    glm::mat4 modelMatrix;
-};
+#include <variant>
 
 class VulkanRenderer
 {
-  public:
     CREATE_STATIC_GETTER(VulkanRenderer);
 
-    void init();
+  public:
+    void init(GLFWwindow* window);
+
+    uint32_t getSwapchainWidth();
+    uint32_t getSwapchainHeight();
+
     void cleanup();
 
-    void draw();
+    // Dont really like these functions, but have to do for now until a framegraph is implemented
+    void startNextFrame();
+    VkCommandBuffer beginCommandBuffer();
+    void endCommandBuffer(VkCommandBuffer cmd);
+
+    // TODO: this currently functions as the sole submit for a whole frame
+    //       but thats too conservative, not all command buffers may need to wait for
+    //       the swapchain image to be available or even be submitted at the same time in the first place
+    void submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers);
+
+    // TODO: turn the functions into member functions of the command buffer instead ?
+
+    void beginRendering(VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget);
+    void endRendering(VkCommandBuffer cmd);
+    void insertSwapchainImageBarrier(VkCommandBuffer cmd, ResourceState currentState, ResourceState targetState);
+    void submitBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers);
+
+    void setGraphicsPipelineState(VkCommandBuffer cmd, Handle<Material> mat);
+    void setComputePipelineState(VkCommandBuffer cmd, Handle<ComputeShader> shader);
+    // this explicitely uses the bindless layout, so just call this function setBindlessIndices ??
+    void pushConstants(VkCommandBuffer cmd, size_t size, void* data, size_t offset = 0);
+    void bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset = 0);
+    void bindVertexBuffers(
+        VkCommandBuffer cmd,
+        uint32_t startBinding,
+        uint32_t count,
+        Span<const Handle<Buffer>> buffers,
+        Span<const uint64_t> offsets);
+    void drawIndexed(
+        VkCommandBuffer cmd,
+        uint32_t indexCount,
+        uint32_t instanceCount,
+        uint32_t firstIndex,
+        uint32_t vertexOffset,
+        uint32_t firstInstance);
+    void drawImGui(VkCommandBuffer cmd);
+
+    void dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ);
+
+    void presentSwapchain();
+
+    void startDebugRegion(VkCommandBuffer cmd, const char* name);
+    void endDebugRegion(VkCommandBuffer cmd);
+
+    // Waits until all currently submitted GPU commands are executed
+    void waitForWorkFinished();
+
+    void fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state);
 
     static constexpr int FRAMES_IN_FLIGHT = 2;
 
-    bool isInitialized = false;
+  private:
+    struct PerFrameData
+    {
+        VkSemaphore swapchainImageAvailable = VK_NULL_HANDLE;
+        VkSemaphore swapchainImageRenderFinished = VK_NULL_HANDLE;
+        VkFence commandsDone = VK_NULL_HANDLE;
+        VkCommandPool commandPool = VK_NULL_HANDLE;
+        std::vector<VkCommandBuffer> usedCommandBuffers;
+    };
+    PerFrameData perFrameData[FRAMES_IN_FLIGHT];
+    inline PerFrameData& getCurrentFrameData()
+    {
+        return perFrameData[frameNumber % FRAMES_IN_FLIGHT];
+    }
+    uint32_t currentSwapchainImageIndex = 0xFFFFFFFF;
 
-    int frameNumber = 0;
+    // TODO: move into variable part on refactor
+    //       maybe reference application instead, and just get window from application
+    //       not sure if I want to cover scenario where window pointer can change in the future
+    GLFWwindow* mainWindow;
+
+    int frameNumber = -1;
+
+    bool _initialized = false;
 
 #ifdef ENABLE_VULKAN_VALIDATION
     bool enableValidationLayers = true;
 #else
     bool enableValidationLayers = false;
 #endif
-    VkInstance instance;
+
+    // TODO: remove need to access this from the outside!
+  public:
+    VkDevice device = VK_NULL_HANDLE;
+    VkInstance instance = VK_NULL_HANDLE;
+
+    VmaAllocator allocator;
+
+    BindlessManager bindlessManager{*this};
+    // this is here because it felt out of place inside the manager
+    VkPipelineLayout bindlessPipelineLayout;
+
+    // TODO: not sure yet what to do about this
+    void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
+    FunctionQueue<> deleteQueue;
+
+    VkPipelineCache pipelineCache;
+    VkFormat swapchainImageFormat;
+    VkFormat defaultDepthFormat;
+
+  private:
+    // ---------
     VkDebugUtilsMessengerEXT debugMessenger;
 
     VkSurfaceKHR surface;
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties physicalDeviceProperties;
-    VkDevice device = VK_NULL_HANDLE;
 
     QueueFamilyIndices queueFamilyIndices;
 
     VkSwapchainKHR swapchain;
     // On high-dpi monitors, swapChainExtent is not necessarily window extent!
     VkExtent2D swapchainExtent;
-    VkFormat swapchainImageFormat;
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;
-
-    Texture::Format depthFormat = Texture::Format::d32_float;
-    Handle<Texture> depthTexture;
 
     VkQueue graphicsAndComputeQueue;
     uint32_t graphicsAndComputeQueueFamily;
 
-    VkPipelineCache pipelineCache;
     const std::string_view pipelineCacheFile = "vkpipelinecache";
-
-    struct FrameData
-    {
-        VkSemaphore imageAvailableSemaphore;
-        VkSemaphore renderFinishedSemaphore;
-        VkFence renderFence;
-        VkCommandPool commandPool;
-        // todo: one command buffer for offscreen and one for present (at least)
-        VkCommandBuffer mainCommandBuffer;
-
-        Handle<Buffer> cameraBuffer;
-        Handle<Buffer> objectBuffer;
-    };
-    FrameData perFrameData[FRAMES_IN_FLIGHT];
-    inline FrameData& getCurrentFrameData()
-    {
-        return perFrameData[frameNumber % FRAMES_IN_FLIGHT];
-    }
 
     struct UploadContext
     {
@@ -108,34 +168,6 @@ class VulkanRenderer
     };
     UploadContext uploadContext;
 
-    FunctionQueue<> deleteQueue;
-
-    VmaAllocator allocator;
-
-    BindlessManager bindlessManager{*this};
-    // this is here because it felt out of place inside the manager
-    VkPipelineLayout bindlessPipelineLayout;
-    struct BindlessIndices
-    {
-        // Frame globals
-        uint32_t FrameDataBuffer;
-        // Resolution, matrices (differs in eg. shadow and default pass)
-        uint32_t RenderInfoBuffer;
-        // Buffer with object transforms and index into that buffer
-        uint32_t transformBuffer;
-        uint32_t transformIndex;
-        // Buffer with material/-instance parameters
-        uint32_t materialParamsBuffer;
-        uint32_t materialInstanceParamsBuffer;
-    };
-
-    void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
-    // Waits until all currently submitted GPU commands are executed
-    void waitForWorkFinished();
-
-    void drawObjects(VkCommandBuffer cmd, RenderObject* first, int count);
-
-  private:
     void initVulkan();
     void initSwapchain();
     void initCommands();
@@ -143,11 +175,8 @@ class VulkanRenderer
     void initBindless();
     void initPipelineCache();
     void initImGui();
-    void initGlobalBuffers();
 
     void savePipelineCache();
 
     size_t padUniformBufferSize(size_t originalSize);
-
-    std::vector<RenderObject> renderables;
 };

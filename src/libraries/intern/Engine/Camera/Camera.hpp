@@ -8,8 +8,8 @@
 #include <glm/ext.hpp>
 #include <glm/glm.hpp>
 
-class Context;
-
+struct GLFWwindow;
+class InputManager;
 /*
     TODO:
     look sensitivity, scroll sensitivity, pan sensitivity
@@ -27,7 +27,7 @@ class Camera
     Camera() = default;
     explicit Camera(float aspect, float near = 0.1f, float far = 100.0f);
 
-    void update();
+    void update(GLFWwindow* window, InputManager* inputManager);
     void updateViewMatrices();
     void updateMatrices();
 

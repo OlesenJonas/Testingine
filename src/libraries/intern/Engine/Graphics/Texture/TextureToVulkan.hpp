@@ -7,6 +7,7 @@
 
 /*
     Should this be here, or next to the vulkan renderer?
+    TODO:   I think this should be next to the other conversion functions!
 */
 
 constexpr uint32_t toVkArrayLayers(const Texture::Descriptor& desc)
@@ -111,5 +112,9 @@ constexpr VkImageLayout toVkImageLayout(ResourceState state)
     case ResourceState::IndirectArgument:
         assert(false && "Invalid resource state for texture!");
         return VK_IMAGE_LAYOUT_UNDEFINED;
+    case ResourceState::OldSwapchainImage:
+        return VK_IMAGE_LAYOUT_UNDEFINED;
+    case ResourceState::PresentSrc:
+        return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     }
 }

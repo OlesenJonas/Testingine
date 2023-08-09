@@ -35,6 +35,11 @@ class BindlessManager
     };
     uint32_t createBufferBinding(VkBuffer buffer, BufferUsage possibleBufferUsage);
 
+    // TODO: find a better way to determine / set this, but IDK yet
+    //        Maybe pass on construction?
+    //        At least seperate into compute and graphics?
+    static constexpr auto maxBindlessPushConstantSize = sizeof(uint32_t) * 8;
+
   private:
     // todo: check against limit from physicalDeviceProperties.limits
     static const uint32_t sampledImagesLimit = 128;

@@ -50,6 +50,10 @@ enum struct ResourceState : uint32_t
     UniformBufferGraphics = nthBit(22u),
     UniformBufferCompute  = nthBit(23u),
     IndirectArgument      = nthBit(24u),
+
+    // Swapchain specific
+    OldSwapchainImage     = nthBit(25u),
+    PresentSrc            = nthBit(26u),
 };
 // clang-format on
 
@@ -92,6 +96,35 @@ inline ResourceStateMulti operator|(ResourceState lhs, ResourceState rhs)
     return lhsM | rhs;
 }
 
+#include <Datastructures/Pool.hpp>
+#include <variant>
+struct Texture;
+struct RenderTarget
+{
+    // dont like this, but it works for now
+    struct SwapchainImage
+    {
+    };
+    std::variant<Handle<Texture>, SwapchainImage> texture;
+
+    enum struct LoadOp
+    {
+        Load,
+        Clear,
+        DontCare,
+    };
+    LoadOp loadOp = LoadOp::Load;
+
+    enum struct StoreOp
+    {
+        Store,
+        DontCare,
+    };
+    StoreOp storeOp = StoreOp::Store;
+};
+
+// ------------------------------------------------------------------------------------
+
 // TODO: move into vulkan specific folder!
 
 #include <cassert>
@@ -133,6 +166,8 @@ constexpr VkImageUsageFlags toVkImageUsageSingle(ResourceState state)
     case ResourceState::UniformBufferGraphics:
     case ResourceState::UniformBufferCompute:
     case ResourceState::IndirectArgument:
+    case ResourceState::OldSwapchainImage:
+    case ResourceState::PresentSrc:
         assert(false);
         break;
     }
@@ -183,9 +218,10 @@ constexpr VkPipelineStageFlags2 toVkPipelineStage(ResourceState state)
         return VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
     case ResourceState::IndirectArgument:
         return VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
-    default:
-        assert(false && "Unhandled state to convert");
-        return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    case ResourceState::OldSwapchainImage:
+        return VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    case ResourceState::PresentSrc:
+        return VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
     }
 }
 
@@ -219,6 +255,7 @@ constexpr VkAccessFlags2 toVkAccessFlags(ResourceState state)
     case ResourceState::SampleSourceCompute:
         return VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
     case ResourceState::Rendertarget:
+        // TODO: can remove ATTACHMENT_READ_BIT here?
         return VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     case ResourceState::DepthStencilTarget:
         return VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
@@ -234,6 +271,33 @@ constexpr VkAccessFlags2 toVkAccessFlags(ResourceState state)
         return VK_ACCESS_2_UNIFORM_READ_BIT;
     case ResourceState::IndirectArgument:
         return VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
-        break;
+    case ResourceState::OldSwapchainImage:
+        return 0;
+    case ResourceState::PresentSrc:
+        return 0;
+    }
+}
+
+constexpr VkAttachmentLoadOp toVkLoadOp(const RenderTarget::LoadOp op)
+{
+    switch(op)
+    {
+    case RenderTarget::LoadOp::Load:
+        return VK_ATTACHMENT_LOAD_OP_LOAD;
+    case RenderTarget::LoadOp::Clear:
+        return VK_ATTACHMENT_LOAD_OP_CLEAR;
+    case RenderTarget::LoadOp::DontCare:
+        return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    }
+}
+
+constexpr VkAttachmentStoreOp toVkStoreOp(const RenderTarget::StoreOp op)
+{
+    switch(op)
+    {
+    case RenderTarget::StoreOp::Store:
+        return VK_ATTACHMENT_STORE_OP_STORE;
+    case RenderTarget::StoreOp::DontCare:
+        return VK_ATTACHMENT_STORE_OP_DONT_CARE;
     }
 }

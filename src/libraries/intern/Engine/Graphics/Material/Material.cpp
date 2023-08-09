@@ -240,6 +240,7 @@ void ResourceManager::free(Handle<Material> handle)
     materialPool.remove(handle);
 }
 
+// TODO: not sure I like this function
 void Material::createPipeline()
 {
     // todo: check if pipeline with given parameters already exists, and just return that in case it does!
@@ -367,7 +368,7 @@ void Material::createPipeline()
     };
 
     const VkFormat colorAttachmentFormats[1] = {renderer.swapchainImageFormat};
-    const VkFormat depthAttachmentFormat = toVkFormat(renderer.depthFormat);
+    const VkFormat depthAttachmentFormat = renderer.defaultDepthFormat;
     const VkFormat stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
     const VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{

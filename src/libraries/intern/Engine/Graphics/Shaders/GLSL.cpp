@@ -1,6 +1,5 @@
 #include "GLSL.hpp"
 
-#include <Engine/Engine.hpp>
 #include <cassert>
 #include <cstring>
 #include <filesystem>

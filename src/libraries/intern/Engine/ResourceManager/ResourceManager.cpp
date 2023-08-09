@@ -1,26 +1,30 @@
 #include "ResourceManager.hpp"
 #include "Graphics/Buffer/Buffer.hpp"
 #include "Graphics/Renderer/VulkanRenderer.hpp"
-#include <Engine/Engine.hpp>
+#include <Engine/Application/Application.hpp>
 #include <TinyOBJ/tiny_obj_loader.h>
 #include <vulkan/vulkan_core.h>
 
 /*
     each "type implementation" is in the respective .cpp file
     ie: createBuffer in Buffer.cpp, createTexture in Texture.cpp ...
+    //TODO: change?
 */
 
 void ResourceManager::init()
 {
-    ptr = this;
+    INIT_STATIC_GETTER();
+    _initialized = true;
 }
 
 void ResourceManager::cleanup()
 {
+    auto* device = VulkanRenderer::get();
+
     for(int i = 0; i < freeSamplerIndex; i++)
     {
-        VulkanRenderer::get()->deleteQueue.pushBack(
-            [=]() { vkDestroySampler(VulkanRenderer::get()->device, samplerArray[i].sampler, nullptr); });
+        device->deleteQueue.pushBack([=]()
+                                     { vkDestroySampler(device->device, samplerArray[i].sampler, nullptr); });
     }
 
     auto clearPool = [&](auto&& pool)
