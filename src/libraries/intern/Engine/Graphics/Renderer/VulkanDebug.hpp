@@ -37,6 +37,3 @@ void setDebugName(VkPipeline pipeline, const char* name);
 
 extern PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
 extern PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
-
-void startDebugRegion(VkCommandBuffer cmd, const char* name);
-void endDebugRegion(VkCommandBuffer cmd);

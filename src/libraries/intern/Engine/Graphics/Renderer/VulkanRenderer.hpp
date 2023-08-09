@@ -8,6 +8,7 @@
 
 #include "../Barriers/Barrier.hpp"
 #include "../Buffer/Buffer.hpp"
+#include "../Compute/ComputeShader.hpp"
 #include "../Texture/Texture.hpp"
 #include "../VulkanTypes.hpp"
 #include "BindlessManager.hpp"
@@ -53,7 +54,8 @@ class VulkanRenderer
     void insertSwapchainImageBarrier(VkCommandBuffer cmd, ResourceState currentState, ResourceState targetState);
     void submitBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers);
 
-    void setPipelineState(VkCommandBuffer cmd, Handle<Material> mat);
+    void setGraphicsPipelineState(VkCommandBuffer cmd, Handle<Material> mat);
+    void setComputePipelineState(VkCommandBuffer cmd, Handle<ComputeShader> shader);
     // this explicitely uses the bindless layout, so just call this function setBindlessIndices ??
     void pushConstants(VkCommandBuffer cmd, size_t size, void* data, size_t offset = 0);
     void bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset = 0);
@@ -72,7 +74,12 @@ class VulkanRenderer
         uint32_t firstInstance);
     void drawImGui(VkCommandBuffer cmd);
 
+    void dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ);
+
     void presentSwapchain();
+
+    void startDebugRegion(VkCommandBuffer cmd, const char* name);
+    void endDebugRegion(VkCommandBuffer cmd);
 
     // Waits until all currently submitted GPU commands are executed
     void waitForWorkFinished();

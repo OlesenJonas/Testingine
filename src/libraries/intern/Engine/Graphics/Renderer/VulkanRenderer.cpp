@@ -715,12 +715,19 @@ void VulkanRenderer::submitBarriers(VkCommandBuffer cmd, Span<const Barrier> bar
     imageBarriers.clear();
 }
 
-void VulkanRenderer::setPipelineState(VkCommandBuffer cmd, Handle<Material> mat)
+void VulkanRenderer::setGraphicsPipelineState(VkCommandBuffer cmd, Handle<Material> mat)
 {
     auto* rm = ResourceManager::get();
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rm->get(mat)->pipeline);
 }
 
+void VulkanRenderer::setComputePipelineState(VkCommandBuffer cmd, Handle<ComputeShader> shader)
+{
+    auto* rm = ResourceManager::get();
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rm->get(shader)->pipeline);
+}
+
+// TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
 void VulkanRenderer::pushConstants(VkCommandBuffer cmd, size_t size, void* data, size_t offset)
 {
     vkCmdPushConstants(cmd, bindlessPipelineLayout, VK_SHADER_STAGE_ALL, offset, size, data);
@@ -767,6 +774,11 @@ void VulkanRenderer::drawImGui(VkCommandBuffer cmd)
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 }
 
+void VulkanRenderer::dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
+{
+    vkCmdDispatch(cmd, groupsX, groupsY, groupsZ);
+}
+
 void VulkanRenderer::presentSwapchain()
 {
     const auto& curFrameData = getCurrentFrameData();
@@ -785,6 +797,20 @@ void VulkanRenderer::presentSwapchain()
     };
 
     assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
+}
+
+void VulkanRenderer::startDebugRegion(VkCommandBuffer cmd, const char* name)
+{
+    VkDebugUtilsLabelEXT info{
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pNext = nullptr,
+        .pLabelName = name,
+    };
+    pfnCmdBeginDebugUtilsLabelEXT(cmd, &info);
+}
+void VulkanRenderer::endDebugRegion(VkCommandBuffer cmd)
+{
+    pfnCmdEndDebugUtilsLabelEXT(cmd);
 }
 
 void VulkanRenderer::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state)
