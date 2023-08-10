@@ -583,10 +583,10 @@ void Editor::update()
     //          (ie error out when command buffer begun before next frame started)
     gfxDevice.startNextFrame();
 
-    VkCommandBuffer mainCmdBuffer = gfxDevice.beginCommandBuffer();
+    VkCommandBuffer offscreenCmdBuffer = gfxDevice.beginCommandBuffer();
 
     gfxDevice.insertBarriers(
-        mainCmdBuffer,
+        offscreenCmdBuffer,
         {
             Barrier::from(Barrier::Image{
                 .texture = depthTexture,
@@ -596,10 +596,10 @@ void Editor::update()
             }),
         });
     gfxDevice.insertSwapchainImageBarrier(
-        mainCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::Rendertarget);
+        offscreenCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::Rendertarget);
 
     gfxDevice.beginRendering(
-        mainCmdBuffer,
+        offscreenCmdBuffer,
         {RenderTarget{.texture = RenderTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Clear}},
         RenderTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
 
@@ -670,7 +670,7 @@ void Editor::update()
             if(newMatInst->parentMaterial != lastMaterial)
             {
                 Material* newMat = resourceManager.get(newMatInst->parentMaterial);
-                gfxDevice.setGraphicsPipelineState(mainCmdBuffer, newMatInst->parentMaterial);
+                gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, newMatInst->parentMaterial);
                 Buffer* materialParamsBuffer = resourceManager.get(newMat->parameters.getGPUBuffer());
                 if(materialParamsBuffer != nullptr)
                 {
@@ -687,7 +687,7 @@ void Editor::update()
         }
 
         pushConstants.transformIndex = i;
-        gfxDevice.pushConstants(mainCmdBuffer, sizeof(BindlessIndices), &pushConstants);
+        gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
 
         if(objectMesh != lastMesh)
         {
@@ -696,31 +696,34 @@ void Editor::update()
             Buffer* indexBuffer = resourceManager.get(newMesh->indexBuffer);
             Buffer* positionBuffer = resourceManager.get(newMesh->positionBuffer);
             Buffer* attributeBuffer = resourceManager.get(newMesh->attributeBuffer);
-            gfxDevice.bindIndexBuffer(mainCmdBuffer, newMesh->indexBuffer);
+            gfxDevice.bindIndexBuffer(offscreenCmdBuffer, newMesh->indexBuffer);
             gfxDevice.bindVertexBuffers(
-                mainCmdBuffer, 0, 2, {newMesh->positionBuffer, newMesh->attributeBuffer}, {0, 0});
+                offscreenCmdBuffer, 0, 2, {newMesh->positionBuffer, newMesh->attributeBuffer}, {0, 0});
             lastMesh = objectMesh;
         }
 
-        gfxDevice.drawIndexed(mainCmdBuffer, indexCount, 1, 0, 0, 0);
+        gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, 0);
     }
 
-    gfxDevice.endRendering(mainCmdBuffer);
+    gfxDevice.endRendering(offscreenCmdBuffer);
+    gfxDevice.endCommandBuffer(offscreenCmdBuffer);
 
     // Draw UI ---------
 
+    VkCommandBuffer onscreenCmdBuffer = gfxDevice.beginCommandBuffer();
     gfxDevice.beginRendering(
-        mainCmdBuffer,
+        onscreenCmdBuffer,
         {RenderTarget{.texture = RenderTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Load}},
         RenderTarget{.texture = Handle<Texture>::Null()});
-    gfxDevice.drawImGui(mainCmdBuffer);
-    gfxDevice.endRendering(mainCmdBuffer);
+    gfxDevice.drawImGui(onscreenCmdBuffer);
+    gfxDevice.endRendering(onscreenCmdBuffer);
 
-    gfxDevice.insertSwapchainImageBarrier(mainCmdBuffer, ResourceState::Rendertarget, ResourceState::PresentSrc);
+    gfxDevice.insertSwapchainImageBarrier(
+        onscreenCmdBuffer, ResourceState::Rendertarget, ResourceState::PresentSrc);
 
-    gfxDevice.endCommandBuffer(mainCmdBuffer);
+    gfxDevice.endCommandBuffer(onscreenCmdBuffer);
 
-    gfxDevice.submitCommandBuffers({mainCmdBuffer});
+    gfxDevice.submitCommandBuffers({offscreenCmdBuffer, onscreenCmdBuffer});
 
     gfxDevice.presentSwapchain();
 
