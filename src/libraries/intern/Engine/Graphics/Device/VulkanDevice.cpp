@@ -65,7 +65,7 @@ void VulkanDevice::initVulkan()
     instance = createInstance(enableValidationLayers, validationLayers, instanceExtensions);
 
     if(enableValidationLayers)
-        debugMessenger = setupDebugMessenger(instance);
+        debugMessenger = setupDebugMessenger(instance, &breakOnValidationError);
 
     if(glfwCreateWindowSurface(instance, mainWindow, nullptr, &surface) != VK_SUCCESS)
     {
@@ -791,6 +791,15 @@ void VulkanDevice::presentSwapchain()
     };
 
     assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
+}
+
+void VulkanDevice::disableValidationErrorBreakpoint()
+{
+    breakOnValidationError = false;
+}
+void VulkanDevice::enableValidationErrorBreakpoint()
+{
+    breakOnValidationError = true;
 }
 
 void VulkanDevice::startDebugRegion(VkCommandBuffer cmd, const char* name)

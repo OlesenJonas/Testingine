@@ -16,4 +16,4 @@ bool checkValidationLayerSupport(Span<const char* const> validationLayers);
 
 std::vector<const char*> getRequiredSurfaceExtensions(bool enableValidationLayers);
 
-VkDebugUtilsMessengerEXT setupDebugMessenger(VkInstance instance);
+VkDebugUtilsMessengerEXT setupDebugMessenger(VkInstance instance, bool* breakOnError);

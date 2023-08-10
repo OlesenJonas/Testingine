@@ -172,6 +172,9 @@ Editor::Editor()
 
     // Scene and other test stuff loading -------------------------------------------
 
+    // Disable validation error breakpoints during init, synch errors arent correct
+    gfxDevice.disableValidationErrorBreakpoint();
+
     Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf", &ecs, sceneRoot);
 
     Handle<ComputeShader> debugMipFillShaderH = resourceManager.createComputeShader(
@@ -537,6 +540,8 @@ Editor::Editor()
 
     // just to be safe, wait for all commands to be done here
     gfxDevice.waitForWorkFinished();
+
+    gfxDevice.enableValidationErrorBreakpoint();
 }
 
 Editor::~Editor()

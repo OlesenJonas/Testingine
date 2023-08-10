@@ -30,8 +30,28 @@ VKAPI_ATTR VkBool32 VKAPI_CALL defaultDebugCallback(
     std::cerr << "validation layer: " << pCallbackData->pMessage << "\n" << std::endl;
     if(messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
     {
-        // BREAKPOINT;
-        int x = 13;
+        BREAKPOINT;
+    }
+    // if(messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT){
+    // if(messageType != VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT){
+    //}
+
+    return VK_FALSE;
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL toggleableDebugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT messageType,
+    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+    void* pUserData)
+{
+    (void)messageType;
+    (void)pCallbackData;
+    bool breakOnError = *static_cast<bool*>(pUserData);
+    std::cerr << "validation layer: " << pCallbackData->pMessage << "\n" << std::endl;
+    if(breakOnError && messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+    {
+        BREAKPOINT;
     }
     // if(messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT){
     // if(messageType != VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT){

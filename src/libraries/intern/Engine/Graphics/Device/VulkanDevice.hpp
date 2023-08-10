@@ -70,6 +70,8 @@ class VulkanDevice
 
     void presentSwapchain();
 
+    void disableValidationErrorBreakpoint();
+    void enableValidationErrorBreakpoint();
     void startDebugRegion(VkCommandBuffer cmd, const char* name);
     void endDebugRegion(VkCommandBuffer cmd);
     template <VulkanConvertible T>
@@ -115,6 +117,7 @@ class VulkanDevice
 #else
     bool enableValidationLayers = false;
 #endif
+    bool breakOnValidationError = true;
 
     // TODO: remove need to access this from the outside!
   public:

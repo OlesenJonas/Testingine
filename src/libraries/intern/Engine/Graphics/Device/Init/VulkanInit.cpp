@@ -115,11 +115,13 @@ std::vector<const char*> getRequiredSurfaceExtensions(bool enableValidationLayer
     return extensions;
 }
 
-VkDebugUtilsMessengerEXT setupDebugMessenger(VkInstance instance)
+VkDebugUtilsMessengerEXT setupDebugMessenger(VkInstance instance, bool* breakOnError)
 {
     VkDebugUtilsMessengerEXT debugMessenger;
 
     auto createInfo = createDefaultDebugUtilsMessengerCreateInfo();
+    createInfo.pUserData = breakOnError;
+    createInfo.pfnUserCallback = toggleableDebugCallback;
 
     if(CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS)
     {
