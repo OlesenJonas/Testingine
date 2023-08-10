@@ -30,7 +30,8 @@ class VulkanDevice
 
     // Dont really like these functions, but have to do for now until a framegraph is implemented
     void startNextFrame();
-    VkCommandBuffer beginCommandBuffer();
+
+    VkCommandBuffer beginCommandBuffer(uint32_t threadIndex = 0);
     void endCommandBuffer(VkCommandBuffer cmd);
 
     // TODO: this currently functions as the sole submit for a whole frame
@@ -90,8 +91,8 @@ class VulkanDevice
         VkSemaphore swapchainImageAvailable = VK_NULL_HANDLE;
         VkSemaphore swapchainImageRenderFinished = VK_NULL_HANDLE;
         VkFence commandsDone = VK_NULL_HANDLE;
-        VkCommandPool commandPool = VK_NULL_HANDLE;
-        std::vector<VkCommandBuffer> usedCommandBuffers;
+        std::vector<VkCommandPool> commandPools{};
+        std::vector<std::vector<VkCommandBuffer>> usedCommandBuffersPerPool{};
     };
     PerFrameData perFrameData[FRAMES_IN_FLIGHT];
     inline PerFrameData& getCurrentFrameData()

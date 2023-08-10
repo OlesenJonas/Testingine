@@ -8,13 +8,13 @@
 #include "ResourceManager/ResourceManager.hpp"
 #include <Engine/Graphics/Device/VulkanConversions.hpp>
 
-
 #include <GLFW/glfw3.h>
 #include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_glfw.h>
 #include <ImGui/imgui_impl_vulkan.h>
 #include <fstream>
 #include <stdexcept>
+#include <thread>
 
 PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
 PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
@@ -186,20 +186,21 @@ void VulkanDevice::initCommands()
         .queueFamilyIndex = graphicsAndComputeQueueFamily,
     };
 
+    uint32_t threadCount = std::thread::hardware_concurrency();
+    assert(threadCount > 0);
     for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
     {
-        assertVkResult(vkCreateCommandPool(device, &commandPoolCrInfo, nullptr, &perFrameData[i].commandPool));
+        PerFrameData& frameData = perFrameData[i];
+        frameData.commandPools.resize(threadCount);
+        frameData.usedCommandBuffersPerPool.resize(threadCount);
+        for(int t = 0; t < threadCount; t++)
+        {
+            assertVkResult(
+                vkCreateCommandPool(device, &commandPoolCrInfo, nullptr, &perFrameData[i].commandPools[t]));
 
-        VkCommandBufferAllocateInfo cmdBuffAllocInfo{
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .pNext = nullptr,
-
-            .commandPool = perFrameData[i].commandPool,
-            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandBufferCount = 1,
-        };
-
-        deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, perFrameData[i].commandPool, nullptr); });
+            deleteQueue.pushBack([=]()
+                                 { vkDestroyCommandPool(device, perFrameData[i].commandPools[t], nullptr); });
+        }
     }
 
     VkCommandPoolCreateInfo uploadCommandPoolCrInfo{
@@ -412,21 +413,28 @@ void VulkanDevice::startNextFrame()
         nullptr,
         &currentSwapchainImageIndex));
 
-    if(!curFrameData.usedCommandBuffers.empty())
+    // TODO: not sure if I really want to free them all, could keep them around
+    //       would then also not have to allocate new ones every frame!
+    for(int i = 0; i < curFrameData.usedCommandBuffersPerPool.size(); i++)
     {
-        // Free command buffers that were used
-        vkFreeCommandBuffers(
-            device,
-            curFrameData.commandPool,
-            curFrameData.usedCommandBuffers.size(),
-            curFrameData.usedCommandBuffers.data());
-        curFrameData.usedCommandBuffers.clear();
+        if(!curFrameData.usedCommandBuffersPerPool[i].empty())
+        {
+            // Free command buffers that were used
+            vkFreeCommandBuffers(
+                device,
+                curFrameData.commandPools[i],
+                curFrameData.usedCommandBuffersPerPool[i].size(),
+                curFrameData.usedCommandBuffersPerPool[i].data());
+            curFrameData.usedCommandBuffersPerPool[i].clear();
+        }
     }
-
-    assertVkResult(vkResetCommandPool(device, curFrameData.commandPool, 0));
+    for(VkCommandPool cmdPool : curFrameData.commandPools)
+    {
+        assertVkResult(vkResetCommandPool(device, cmdPool, 0));
+    }
 }
 
-VkCommandBuffer VulkanDevice::beginCommandBuffer()
+VkCommandBuffer VulkanDevice::beginCommandBuffer(uint32_t threadIndex)
 {
     auto& curFrameData = getCurrentFrameData();
 
@@ -434,12 +442,12 @@ VkCommandBuffer VulkanDevice::beginCommandBuffer()
     VkCommandBufferAllocateInfo cmdBuffAllocInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .pNext = nullptr,
-        .commandPool = curFrameData.commandPool,
+        .commandPool = curFrameData.commandPools[threadIndex],
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
     vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &cmdBuffer);
-    curFrameData.usedCommandBuffers.push_back(cmdBuffer);
+    curFrameData.usedCommandBuffersPerPool[threadIndex].push_back(cmdBuffer);
 
     VkCommandBufferBeginInfo cmdBeginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
