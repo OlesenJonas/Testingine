@@ -28,6 +28,8 @@ Editor::Editor()
     inputManager.setupCallbacks(
         mainWindow.glfwWindow, keyCallback, mouseButtonCallback, scrollCallback, resizeCallback);
 
+    threadPool.start(4);
+
     ecs.registerComponent<Transform>();
     ecs.registerComponent<Hierarchy>();
     ecs.registerComponent<RenderInfo>();
@@ -546,6 +548,10 @@ Editor::Editor()
 
 Editor::~Editor()
 {
+    while(threadPool.busy())
+        ;
+    threadPool.stop();
+
     // TODO: need a fancy way of ensuring that this is always called in applications
     //       Cant use base class destructor since that will only be called *after*wards
     gfxDevice.waitForWorkFinished();
@@ -592,159 +598,157 @@ void Editor::update()
     // TODO: Switch to ThreadPool
 
     // Draw Scene ------
-    std::future<VkCommandBuffer> offscreenFuture = std::async(
-        std::launch::async,
-        [&]
+    auto recordSceneDrawingCommands = [&](int threadIndex)
+    {
+        VkCommandBuffer offscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
+
+        gfxDevice.insertBarriers(
+            offscreenCmdBuffer,
+            {
+                Barrier::from(Barrier::Image{
+                    .texture = depthTexture,
+                    .stateBefore = ResourceState::DepthStencilTarget,
+                    .stateAfter = ResourceState::DepthStencilTarget,
+                    .allowDiscardOriginal = true,
+                }),
+            });
+        gfxDevice.insertSwapchainImageBarrier(
+            offscreenCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::Rendertarget);
+
+        gfxDevice.beginRendering(
+            offscreenCmdBuffer,
+            {RenderTarget{.texture = RenderTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Clear}},
+            RenderTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
+
+        // Render scene ------------------------------
+
+        struct RenderObject
         {
-            VkCommandBuffer offscreenCmdBuffer = gfxDevice.beginCommandBuffer(0);
+            Handle<Mesh> mesh;
+            Handle<MaterialInstance> materialInstance;
+            glm::mat4 transformMatrix;
+        };
+        std::vector<RenderObject> renderables;
 
-            gfxDevice.insertBarriers(
-                offscreenCmdBuffer,
-                {
-                    Barrier::from(Barrier::Image{
-                        .texture = depthTexture,
-                        .stateBefore = ResourceState::DepthStencilTarget,
-                        .stateAfter = ResourceState::DepthStencilTarget,
-                        .allowDiscardOriginal = true,
-                    }),
-                });
-            gfxDevice.insertSwapchainImageBarrier(
-                offscreenCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::Rendertarget);
-
-            gfxDevice.beginRendering(
-                offscreenCmdBuffer,
-                {RenderTarget{.texture = RenderTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Clear}},
-                RenderTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
-
-            // Render scene ------------------------------
-
-            struct RenderObject
+        ecs.forEach<RenderInfo, Transform>(
+            [&](RenderInfo* renderinfos, Transform* transforms, uint32_t count)
             {
-                Handle<Mesh> mesh;
-                Handle<MaterialInstance> materialInstance;
-                glm::mat4 transformMatrix;
-            };
-            std::vector<RenderObject> renderables;
-
-            ecs.forEach<RenderInfo, Transform>(
-                [&](RenderInfo* renderinfos, Transform* transforms, uint32_t count)
+                for(int i = 0; i < count; i++)
                 {
-                    for(int i = 0; i < count; i++)
-                    {
-                        const RenderInfo& rinfo = renderinfos[i];
-                        const Transform& transform = transforms[i];
-                        renderables.emplace_back(rinfo.mesh, rinfo.materialInstance, transform.localToWorld);
-                    }
-                });
+                    const RenderInfo& rinfo = renderinfos[i];
+                    const Transform& transform = transforms[i];
+                    renderables.emplace_back(rinfo.mesh, rinfo.materialInstance, transform.localToWorld);
+                }
+            });
 
-            RenderPassData renderPassData;
-            renderPassData.proj = mainCamera.getProj();
-            renderPassData.view = mainCamera.getView();
-            renderPassData.projView = mainCamera.getProjView();
-            renderPassData.cameraPositionWS = mainCamera.getPosition();
+        RenderPassData renderPassData;
+        renderPassData.proj = mainCamera.getProj();
+        renderPassData.view = mainCamera.getView();
+        renderPassData.projView = mainCamera.getProjView();
+        renderPassData.cameraPositionWS = mainCamera.getPosition();
 
-            Buffer* renderPassDataBuffer = resourceManager.get(getCurrentFrameData().renderPassDataBuffer);
+        Buffer* renderPassDataBuffer = resourceManager.get(getCurrentFrameData().renderPassDataBuffer);
 
-            void* data = renderPassDataBuffer->allocInfo.pMappedData;
-            memcpy(data, &renderPassData, sizeof(renderPassData));
+        void* data = renderPassDataBuffer->allocInfo.pMappedData;
+        memcpy(data, &renderPassData, sizeof(renderPassData));
 
-            Buffer* objectBuffer = resourceManager.get(getCurrentFrameData().objectBuffer);
+        Buffer* objectBuffer = resourceManager.get(getCurrentFrameData().objectBuffer);
 
-            void* objectData = objectBuffer->allocInfo.pMappedData;
-            // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
-            auto* objectSSBO = (GPUObjectData*)objectData;
-            for(int i = 0; i < renderables.size(); i++)
+        void* objectData = objectBuffer->allocInfo.pMappedData;
+        // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
+        auto* objectSSBO = (GPUObjectData*)objectData;
+        for(int i = 0; i < renderables.size(); i++)
+        {
+            const RenderObject& object = renderables[i];
+            objectSSBO[i].modelMatrix = object.transformMatrix;
+        }
+
+        //---
+
+        BindlessIndices pushConstants;
+        pushConstants.RenderInfoBuffer = renderPassDataBuffer->resourceIndex;
+        pushConstants.transformBuffer = objectBuffer->resourceIndex;
+
+        Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
+        Handle<Material> lastMaterial = Handle<Material>::Invalid();
+        Handle<MaterialInstance> lastMaterialInstance = Handle<MaterialInstance>::Invalid();
+        uint32_t indexCount = 0;
+
+        for(int i = 0; i < renderables.size(); i++)
+        {
+            RenderObject& object = renderables[i];
+
+            Handle<Mesh> objectMesh = object.mesh;
+            Handle<MaterialInstance> objectMaterialInstance = object.materialInstance;
+
+            if(objectMaterialInstance != lastMaterialInstance)
             {
-                const RenderObject& object = renderables[i];
-                objectSSBO[i].modelMatrix = object.transformMatrix;
-            }
-
-            //---
-
-            BindlessIndices pushConstants;
-            pushConstants.RenderInfoBuffer = renderPassDataBuffer->resourceIndex;
-            pushConstants.transformBuffer = objectBuffer->resourceIndex;
-
-            Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
-            Handle<Material> lastMaterial = Handle<Material>::Invalid();
-            Handle<MaterialInstance> lastMaterialInstance = Handle<MaterialInstance>::Invalid();
-            uint32_t indexCount = 0;
-
-            for(int i = 0; i < renderables.size(); i++)
-            {
-                RenderObject& object = renderables[i];
-
-                Handle<Mesh> objectMesh = object.mesh;
-                Handle<MaterialInstance> objectMaterialInstance = object.materialInstance;
-
-                if(objectMaterialInstance != lastMaterialInstance)
+                MaterialInstance* newMatInst = resourceManager.get(objectMaterialInstance);
+                if(newMatInst->parentMaterial != lastMaterial)
                 {
-                    MaterialInstance* newMatInst = resourceManager.get(objectMaterialInstance);
-                    if(newMatInst->parentMaterial != lastMaterial)
+                    Material* newMat = resourceManager.get(newMatInst->parentMaterial);
+                    gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, newMatInst->parentMaterial);
+                    Buffer* materialParamsBuffer = resourceManager.get(newMat->parameters.getGPUBuffer());
+                    if(materialParamsBuffer != nullptr)
                     {
-                        Material* newMat = resourceManager.get(newMatInst->parentMaterial);
-                        gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, newMatInst->parentMaterial);
-                        Buffer* materialParamsBuffer = resourceManager.get(newMat->parameters.getGPUBuffer());
-                        if(materialParamsBuffer != nullptr)
-                        {
-                            pushConstants.materialParamsBuffer = materialParamsBuffer->resourceIndex;
-                        }
-                        lastMaterial = newMatInst->parentMaterial;
+                        pushConstants.materialParamsBuffer = materialParamsBuffer->resourceIndex;
                     }
-
-                    Buffer* materialInstanceParamsBuffer =
-                        resourceManager.get(newMatInst->parameters.getGPUBuffer());
-                    if(materialInstanceParamsBuffer != nullptr)
-                    {
-                        pushConstants.materialInstanceParamsBuffer = materialInstanceParamsBuffer->resourceIndex;
-                    }
+                    lastMaterial = newMatInst->parentMaterial;
                 }
 
-                pushConstants.transformIndex = i;
-                gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
-
-                if(objectMesh != lastMesh)
+                Buffer* materialInstanceParamsBuffer = resourceManager.get(newMatInst->parameters.getGPUBuffer());
+                if(materialInstanceParamsBuffer != nullptr)
                 {
-                    Mesh* newMesh = resourceManager.get(objectMesh);
-                    indexCount = newMesh->indexCount;
-                    Buffer* indexBuffer = resourceManager.get(newMesh->indexBuffer);
-                    Buffer* positionBuffer = resourceManager.get(newMesh->positionBuffer);
-                    Buffer* attributeBuffer = resourceManager.get(newMesh->attributeBuffer);
-                    gfxDevice.bindIndexBuffer(offscreenCmdBuffer, newMesh->indexBuffer);
-                    gfxDevice.bindVertexBuffers(
-                        offscreenCmdBuffer, 0, 2, {newMesh->positionBuffer, newMesh->attributeBuffer}, {0, 0});
-                    lastMesh = objectMesh;
+                    pushConstants.materialInstanceParamsBuffer = materialInstanceParamsBuffer->resourceIndex;
                 }
-
-                gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, 0);
             }
 
-            gfxDevice.endRendering(offscreenCmdBuffer);
-            gfxDevice.endCommandBuffer(offscreenCmdBuffer);
+            pushConstants.transformIndex = i;
+            gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
 
-            return offscreenCmdBuffer;
-        });
+            if(objectMesh != lastMesh)
+            {
+                Mesh* newMesh = resourceManager.get(objectMesh);
+                indexCount = newMesh->indexCount;
+                Buffer* indexBuffer = resourceManager.get(newMesh->indexBuffer);
+                Buffer* positionBuffer = resourceManager.get(newMesh->positionBuffer);
+                Buffer* attributeBuffer = resourceManager.get(newMesh->attributeBuffer);
+                gfxDevice.bindIndexBuffer(offscreenCmdBuffer, newMesh->indexBuffer);
+                gfxDevice.bindVertexBuffers(
+                    offscreenCmdBuffer, 0, 2, {newMesh->positionBuffer, newMesh->attributeBuffer}, {0, 0});
+                lastMesh = objectMesh;
+            }
+
+            gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, 0);
+        }
+
+        gfxDevice.endRendering(offscreenCmdBuffer);
+        gfxDevice.endCommandBuffer(offscreenCmdBuffer);
+
+        return offscreenCmdBuffer;
+    };
 
     // Draw UI ---------
-    std::future<VkCommandBuffer> onscreenFuture = std::async(
-        std::launch::async,
-        [&]
-        {
-            VkCommandBuffer onscreenCmdBuffer = gfxDevice.beginCommandBuffer(1);
-            gfxDevice.beginRendering(
-                onscreenCmdBuffer,
-                {RenderTarget{.texture = RenderTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Load}},
-                RenderTarget{.texture = Handle<Texture>::Null()});
-            gfxDevice.drawImGui(onscreenCmdBuffer);
-            gfxDevice.endRendering(onscreenCmdBuffer);
+    auto recordUIdrawingCommands = [&](int threadIndex)
+    {
+        VkCommandBuffer onscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
+        gfxDevice.beginRendering(
+            onscreenCmdBuffer,
+            {RenderTarget{.texture = RenderTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Load}},
+            RenderTarget{.texture = Handle<Texture>::Null()});
+        gfxDevice.drawImGui(onscreenCmdBuffer);
+        gfxDevice.endRendering(onscreenCmdBuffer);
 
-            gfxDevice.insertSwapchainImageBarrier(
-                onscreenCmdBuffer, ResourceState::Rendertarget, ResourceState::PresentSrc);
+        gfxDevice.insertSwapchainImageBarrier(
+            onscreenCmdBuffer, ResourceState::Rendertarget, ResourceState::PresentSrc);
 
-            gfxDevice.endCommandBuffer(onscreenCmdBuffer);
+        gfxDevice.endCommandBuffer(onscreenCmdBuffer);
 
-            return onscreenCmdBuffer;
-        });
+        return onscreenCmdBuffer;
+    };
+
+    auto offscreenFuture = threadPool.queueJob(recordSceneDrawingCommands);
+    auto onscreenFuture = threadPool.queueJob(recordUIdrawingCommands);
 
     VkCommandBuffer offscreenCmdBuffer = offscreenFuture.get();
     VkCommandBuffer onscreenCmdBuffer = onscreenFuture.get();

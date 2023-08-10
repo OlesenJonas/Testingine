@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Datastructures/ThreadPool.hpp>
 #include <ECS/ECS.hpp>
 #include <Engine/Application/Application.hpp>
 #include <Engine/Graphics/Buffer/Buffer.hpp>
@@ -19,6 +20,8 @@ class Editor final : public Application
     uint32_t frameNumber = 0xFFFFFFFF;
 
     InputManager inputManager;
+
+    ThreadPool threadPool;
 
     ECS ecs;
     ECS::Entity sceneRoot;

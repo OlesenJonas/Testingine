@@ -26,7 +26,7 @@ class ThreadPool
         // wrap in smart pointer to ensure lifetime outside of this function
         auto task = std::make_shared<std::packaged_task<returnType(int)>>(
             std::bind(std::forward<F>(func), std::placeholders::_1, std::forward<Args>(args)...));
-        // placeholder is so first argument (threadIndex) does not get bound
+        // placeholder is here so first argument (threadIndex) does not get bound
 
         std::future<returnType> future = task->get_future();
 
@@ -47,10 +47,10 @@ class ThreadPool
         return threads.size();
     }
 
-    int getThreadPoolThreadIndex();
-
   private:
     void threadLoop();
+
+    int getThreadPoolThreadIndex();
 
     bool shouldTerminate = false;           // If set threads will stop looking for job
     std::mutex queueMutex;                  // Prevent race condition when accessing job queue
