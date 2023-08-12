@@ -135,20 +135,13 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo crInfo, st
         for(int i = 0; i < VulkanDevice::FRAMES_IN_FLIGHT; i++)
         {
             material->parameters.gpuBuffers[i] = createBuffer(Buffer::CreateInfo{
-                .info =
-                    {
-                        .size = material->parameters.bufferSize,
-                        .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                        .memoryAllocationInfo =
-                            {
-                                .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                                         VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                                .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-                                                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                               VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                            },
-                    },
-                .initialData = material->parameters.cpuBuffer});
+                .debugName = (std::string{matName} + "Params" + std::to_string(i)),
+                .size = material->parameters.bufferSize,
+                .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
+                .allStates = ResourceState::UniformBuffer | ResourceState::TransferDst,
+                .initialState = ResourceState::UniformBuffer,
+                .initialData = {(uint8_t*)material->parameters.cpuBuffer, material->parametersBufferSize},
+            });
         }
     }
 

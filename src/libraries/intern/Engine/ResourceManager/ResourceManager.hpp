@@ -30,7 +30,7 @@ class ResourceManager
   public:
     void init();
 
-    Handle<Buffer> createBuffer(Buffer::CreateInfo info, std::string_view name = "");
+    Handle<Buffer> createBuffer(Buffer::CreateInfo&& createInfo);
 
     Handle<Mesh> createMesh(const char* file, std::string_view name = "");
     // indices can be {}, but then a trivial index list will still be used!

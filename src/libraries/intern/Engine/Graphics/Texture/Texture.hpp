@@ -97,6 +97,15 @@ struct Texture
         uint32_t arrayLength = 1;
     };
 
+    static LoadResult loadHDR(Texture::LoadInfo&& loadInfo);
+    static LoadResult loadDefault(Texture::LoadInfo&& loadInfo);
+
+    uint32_t fullResourceIndex() const;
+    uint32_t mipResourceIndex(uint32_t level) const;
+    // TODO: own textureView abstraction
+    VkImageView fullResourceView() const;
+    VkImageView mipResourceView(uint32_t level) const;
+
     /*
         todo:
             have a global string buffer and store debug name there, then store string_view here
@@ -107,15 +116,6 @@ struct Texture
 
     VkImage image = VK_NULL_HANDLE;
     VmaAllocation allocation = VK_NULL_HANDLE;
-
-    static LoadResult loadHDR(Texture::LoadInfo&& loadInfo);
-    static LoadResult loadDefault(Texture::LoadInfo&& loadInfo);
-
-    uint32_t fullResourceIndex() const;
-    uint32_t mipResourceIndex(uint32_t level) const;
-    // TODO: own textureView abstraction
-    VkImageView fullResourceView() const;
-    VkImageView mipResourceView(uint32_t level) const;
 
     // TODO: could make this private with getter and setter, but would also need resource manager as friend
     uint32_t _fullResourceIndex = 0xFFFFFFFF;

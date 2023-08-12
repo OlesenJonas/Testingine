@@ -159,50 +159,32 @@ Handle<Mesh> ResourceManager::createMesh(
         indices = trivialIndices;
     }
 
-    Handle<Buffer> positionBufferHandle = createBuffer(
-        {
-            .info =
-                {
-                    .size = vertexPositions.size() * sizeof(glm::vec3),
-                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                    .memoryAllocationInfo =
-                        {
-                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                        },
-                },
-            .initialData = vertexPositions.data(),
-        },
-        std::string{name} + "_positionsBuffer");
+    Handle<Buffer> positionBufferHandle = createBuffer(Buffer::CreateInfo{
+        .debugName = (std::string{name} + "_positionsBuffer"),
+        .size = vertexPositions.size() * sizeof(glm::vec3),
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::VertexBuffer | ResourceState::TransferDst,
+        .initialState = ResourceState::VertexBuffer,
+        .initialData = {(uint8_t*)vertexPositions.data(), vertexPositions.size() * sizeof(vertexPositions[0])},
+    });
 
-    Handle<Buffer> attributesBufferHandle = createBuffer(
-        {
-            .info =
-                {
-                    .size = vertexAttributes.size() * sizeof(vertexAttributes[0]),
-                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                    .memoryAllocationInfo =
-                        {
-                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                        },
-                },
-            .initialData = vertexAttributes.data(),
-        },
-        std::string{name} + "_attributesBuffer");
+    Handle<Buffer> attributesBufferHandle = createBuffer(Buffer::CreateInfo{
+        .debugName = (std::string{name} + "_attributesBuffer"),
+        .size = vertexAttributes.size() * sizeof(vertexAttributes[0]),
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::VertexBuffer | ResourceState::TransferDst,
+        .initialState = ResourceState::VertexBuffer,
+        .initialData = {(uint8_t*)vertexAttributes.data(), vertexAttributes.size() * sizeof(vertexAttributes[0])},
+    });
 
-    Handle<Buffer> indexBufferHandle = createBuffer(
-        {
-            .info =
-                {
-                    .size = indices.size() * sizeof(indices[0]),
-                    .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                    .memoryAllocationInfo =
-                        {
-                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                        },
-                },
-            .initialData = indices.data(),
-        },
-        std::string{name} + "_indexBuffer");
+    Handle<Buffer> indexBufferHandle = createBuffer(Buffer::CreateInfo{
+        .debugName = (std::string{name} + "_indexBuffer"),
+        .size = indices.size() * sizeof(indices[0]),
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::IndexBuffer | ResourceState::TransferDst,
+        .initialState = ResourceState::IndexBuffer,
+        .initialData = {(uint8_t*)indices.data(), indices.size() * sizeof(indices[0])},
+    });
 
     Handle<Mesh> newMeshHandle = meshPool.insert(Mesh{
         .name{name},

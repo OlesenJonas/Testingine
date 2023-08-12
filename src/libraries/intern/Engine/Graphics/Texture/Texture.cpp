@@ -10,7 +10,6 @@
 #include <stb/stb_image.h>
 #include <vulkan/vulkan_core.h>
 
-
 Handle<Texture> ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
 {
     auto* device = VulkanDevice::get();
@@ -292,14 +291,8 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                                (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
                                (createInfo.allStates & ResourceState::SampleSourceCompute);
         bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
-                              (createInfo.allStates & ResourceState::StorageRead) ||
-                              (createInfo.allStates & ResourceState::StorageWrite) ||
                               (createInfo.allStates & ResourceState::StorageGraphics) ||
-                              (createInfo.allStates & ResourceState::StorageGraphicsRead) ||
-                              (createInfo.allStates & ResourceState::StorageGraphicsWrite) ||
-                              (createInfo.allStates & ResourceState::StorageCompute) ||
-                              (createInfo.allStates & ResourceState::StorageComputeRead) ||
-                              (createInfo.allStates & ResourceState::StorageComputeWrite);
+                              (createInfo.allStates & ResourceState::StorageCompute);
 
         if(usedForSampling && usedForStorage)
         {
@@ -399,14 +392,8 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
                                    (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
                                    (createInfo.allStates & ResourceState::SampleSourceCompute);
             bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
-                                  (createInfo.allStates & ResourceState::StorageRead) ||
-                                  (createInfo.allStates & ResourceState::StorageWrite) ||
                                   (createInfo.allStates & ResourceState::StorageGraphics) ||
-                                  (createInfo.allStates & ResourceState::StorageGraphicsRead) ||
-                                  (createInfo.allStates & ResourceState::StorageGraphicsWrite) ||
-                                  (createInfo.allStates & ResourceState::StorageCompute) ||
-                                  (createInfo.allStates & ResourceState::StorageComputeRead) ||
-                                  (createInfo.allStates & ResourceState::StorageComputeWrite);
+                                  (createInfo.allStates & ResourceState::StorageCompute);
 
             // if(usedForSampling && usedForStorage)
             // {

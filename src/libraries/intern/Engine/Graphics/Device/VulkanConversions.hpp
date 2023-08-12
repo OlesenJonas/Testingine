@@ -41,14 +41,8 @@ constexpr VkImageUsageFlags toVkImageUsageSingle(ResourceState state)
     case ResourceState::TransferDst:
         return VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     case ResourceState::Storage:
-    case ResourceState::StorageRead:
-    case ResourceState::StorageWrite:
     case ResourceState::StorageGraphics:
-    case ResourceState::StorageGraphicsRead:
-    case ResourceState::StorageGraphicsWrite:
     case ResourceState::StorageCompute:
-    case ResourceState::StorageComputeRead:
-    case ResourceState::StorageComputeWrite:
         return VK_IMAGE_USAGE_STORAGE_BIT;
     case ResourceState::SampleSource:
     case ResourceState::SampleSourceGraphics:
@@ -75,6 +69,45 @@ constexpr VkImageUsageFlags toVkImageUsageSingle(ResourceState state)
 
 VkImageUsageFlags toVkImageUsage(ResourceStateMulti states);
 
+constexpr VkBufferUsageFlags toVkBufferUsageSingle(ResourceState state)
+{
+    switch(state)
+    {
+    case ResourceState::None:
+    case ResourceState::Undefined:
+    case ResourceState::SampleSource:
+    case ResourceState::SampleSourceGraphics:
+    case ResourceState::SampleSourceCompute:
+    case ResourceState::Rendertarget:
+    case ResourceState::DepthStencilTarget:
+    case ResourceState::DepthStencilReadOnly:
+    case ResourceState::OldSwapchainImage:
+    case ResourceState::PresentSrc:
+        assert(false);
+    case ResourceState::TransferSrc:
+        return VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    case ResourceState::TransferDst:
+        return VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    case ResourceState::VertexBuffer:
+        return VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    case ResourceState::IndexBuffer:
+        return VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    case ResourceState::UniformBuffer:
+    case ResourceState::UniformBufferGraphics:
+    case ResourceState::UniformBufferCompute:
+        return VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    case ResourceState::Storage:
+    case ResourceState::StorageGraphics:
+    case ResourceState::StorageCompute:
+        return VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    case ResourceState::IndirectArgument:
+        return VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    }
+    return 0;
+}
+
+VkBufferUsageFlags toVkBufferUsage(ResourceStateMulti states);
+
 constexpr VkPipelineStageFlags2 toVkPipelineStage(ResourceState state)
 {
     switch(state)
@@ -89,20 +122,14 @@ constexpr VkPipelineStageFlags2 toVkPipelineStage(ResourceState state)
         // TODO: could be more specific, instead of just transfer also have blit/copy_dst/src
         return VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
     case ResourceState::Storage:
-    case ResourceState::StorageRead:
-    case ResourceState::StorageWrite:
     case ResourceState::SampleSource:
     case ResourceState::UniformBuffer:
         return VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     case ResourceState::StorageGraphics:
-    case ResourceState::StorageGraphicsRead:
-    case ResourceState::StorageGraphicsWrite:
     case ResourceState::SampleSourceGraphics:
     case ResourceState::UniformBufferGraphics:
         return VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
     case ResourceState::StorageCompute:
-    case ResourceState::StorageComputeRead:
-    case ResourceState::StorageComputeWrite:
     case ResourceState::SampleSourceCompute:
     case ResourceState::UniformBufferCompute:
         return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
@@ -141,14 +168,6 @@ constexpr VkAccessFlags2 toVkAccessFlags(ResourceState state)
     case ResourceState::StorageGraphics:
     case ResourceState::StorageCompute:
         return VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
-    case ResourceState::StorageRead:
-    case ResourceState::StorageGraphicsRead:
-    case ResourceState::StorageComputeRead:
-        return VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
-    case ResourceState::StorageWrite:
-    case ResourceState::StorageGraphicsWrite:
-    case ResourceState::StorageComputeWrite:
-        return VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT;
     case ResourceState::SampleSource:
     case ResourceState::SampleSourceGraphics:
     case ResourceState::SampleSourceCompute:
@@ -278,14 +297,8 @@ constexpr VkImageLayout toVkImageLayout(ResourceState state)
     case ResourceState::TransferDst:
         return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     case ResourceState::Storage:
-    case ResourceState::StorageRead:
-    case ResourceState::StorageWrite:
     case ResourceState::StorageGraphics:
-    case ResourceState::StorageGraphicsRead:
-    case ResourceState::StorageGraphicsWrite:
     case ResourceState::StorageCompute:
-    case ResourceState::StorageComputeRead:
-    case ResourceState::StorageComputeWrite:
         return VK_IMAGE_LAYOUT_GENERAL;
     case ResourceState::SampleSource:
     case ResourceState::SampleSourceGraphics:

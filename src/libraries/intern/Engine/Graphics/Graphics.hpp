@@ -20,40 +20,35 @@ enum struct ResourceState : uint32_t
     // Common states
     // doesnt map to API values, just here so uninitialized values can be caught more easily
     None        = nthBit(0u),
+
     Undefined   = nthBit(1u),
     TransferSrc = nthBit(2u),
     TransferDst = nthBit(3u),
 
     Storage              = nthBit(4u),
-    StorageRead          = nthBit(5u),
-    StorageWrite         = nthBit(6u),
-    StorageGraphics      = nthBit(7u),
-    StorageGraphicsRead  = nthBit(8u),
-    StorageGraphicsWrite = nthBit(9u),
-    StorageCompute       = nthBit(10u),
-    StorageComputeRead   = nthBit(11u),
-    StorageComputeWrite  = nthBit(12u),
+    StorageGraphics      = nthBit(5u),
+    StorageCompute       = nthBit(6u),
 
     // Texture specific
-    SampleSource         = nthBit(13u),
-    SampleSourceGraphics = nthBit(14u),
-    SampleSourceCompute  = nthBit(15u),
+    SampleSource         = nthBit(7u),
+    SampleSourceGraphics = nthBit(8u),
+    SampleSourceCompute  = nthBit(9u),
 
-    Rendertarget         = nthBit(16u),
-    DepthStencilTarget   = nthBit(17u),
-    DepthStencilReadOnly = nthBit(18u),
+    Rendertarget         = nthBit(10u),
+    DepthStencilTarget   = nthBit(11u),
+    DepthStencilReadOnly = nthBit(12u),
 
     // Buffer specific
-    VertexBuffer          = nthBit(19u),
-    IndexBuffer           = nthBit(20u),
-    UniformBuffer         = nthBit(21u),
-    UniformBufferGraphics = nthBit(22u),
-    UniformBufferCompute  = nthBit(23u),
-    IndirectArgument      = nthBit(24u),
+    VertexBuffer          = nthBit(13u),
+    IndexBuffer           = nthBit(14u),
+    UniformBuffer         = nthBit(15u),
+    UniformBufferGraphics = nthBit(16u),
+    UniformBufferCompute  = nthBit(17u),
+    IndirectArgument      = nthBit(18u),
 
     // Swapchain specific
-    OldSwapchainImage     = nthBit(25u),
-    PresentSrc            = nthBit(26u),
+    OldSwapchainImage     = nthBit(19u),
+    PresentSrc            = nthBit(20u),
 };
 // clang-format on
 
@@ -76,6 +71,10 @@ struct ResourceStateMulti
     {
         return value != 0u;
     }
+
+    void unset(const ResourceStateMulti& rhs);
+    bool containsUniformBufferUsage();
+    bool containsStorageBufferUsage();
 };
 
 inline ResourceStateMulti operator|(ResourceStateMulti lhs, ResourceState rhs)

@@ -22,9 +22,7 @@ Editor::Editor()
     gfxDevice.defaultDepthFormat = toVkFormat(depthFormat);
 
     inputManager.init(mainWindow.glfwWindow);
-
     glfwSetWindowUserPointer(mainWindow.glfwWindow, this);
-    // TODO: FIX: THIS OVERRIDES IMGUIS CALLBACKS!
     inputManager.setupCallbacks(
         mainWindow.glfwWindow, keyCallback, mouseButtonCallback, scrollCallback, resizeCallback);
 
@@ -42,36 +40,20 @@ Editor::Editor()
     for(int i = 0; i < ArraySize(perFrameData); i++)
     {
         perFrameData[i].renderPassDataBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
-            .info =
-                {
-                    .size = sizeof(RenderPassData),
-                    .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                    .memoryAllocationInfo =
-                        {
-                            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                                     VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-                                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                        },
-                },
+            .debugName = ("RenderPassDataBuffer" + std::to_string(i)),
+            .size = sizeof(RenderPassData),
+            .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
+            .allStates = ResourceState::UniformBuffer,
+            .initialState = ResourceState::UniformBuffer,
         });
 
         const int MAX_OBJECTS = 10000;
         perFrameData[i].objectBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
-            .info =
-                {
-                    .size = sizeof(GPUObjectData) * MAX_OBJECTS,
-                    .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                    .memoryAllocationInfo =
-                        {
-                            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                                     VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                            .requiredMemoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-                                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                        },
-                },
+            .debugName = ("ObjectBuffer" + std::to_string(i)),
+            .size = sizeof(GPUObjectData) * MAX_OBJECTS,
+            .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
+            .allStates = ResourceState::Storage,
+            .initialState = ResourceState::Storage,
         });
     }
 
@@ -187,8 +169,8 @@ Editor::Editor()
         .debugName = "mipTest",
         .type = Texture::Type::t2D,
         .format = Texture::Format::r8g8b8a8_unorm,
-        .allStates = ResourceState::SampleSource | ResourceState::StorageComputeWrite,
-        .initialState = ResourceState::StorageComputeWrite,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
+        .initialState = ResourceState::StorageCompute,
         .size = {128, 128},
         .mipLevels = Texture::MipLevels::All,
     });
@@ -230,7 +212,7 @@ Editor::Editor()
             {
                 Barrier::from(Barrier::Image{
                     .texture = mipTestTexH,
-                    .stateBefore = ResourceState::StorageComputeWrite,
+                    .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 }),
             });
@@ -299,8 +281,8 @@ Editor::Editor()
         .debugName = "HdriCubemap",
         .type = Texture::Type::tCube,
         .format = resourceManager.get(hdri)->descriptor.format,
-        .allStates = ResourceState::SampleSource | ResourceState::StorageComputeWrite,
-        .initialState = ResourceState::StorageComputeWrite,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
+        .initialState = ResourceState::StorageCompute,
         .size = {.width = hdriCubeRes, .height = hdriCubeRes},
         .mipLevels = Texture::MipLevels::All,
     });
@@ -328,7 +310,7 @@ Editor::Editor()
             {
                 Barrier::from(Barrier::Image{
                     .texture = hdriCube,
-                    .stateBefore = ResourceState::StorageComputeWrite,
+                    .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 }),
             });
@@ -345,8 +327,8 @@ Editor::Editor()
         .debugName = "hdriIrradiance",
         .type = Texture::Type::tCube,
         .format = Texture::Format::r16g16b16a16_float,
-        .allStates = ResourceState::SampleSource | ResourceState::StorageComputeWrite,
-        .initialState = ResourceState::StorageComputeWrite,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
+        .initialState = ResourceState::StorageCompute,
         .size = {irradianceRes, irradianceRes, 1},
     });
     {
@@ -374,7 +356,7 @@ Editor::Editor()
             {
                 Barrier::from(Barrier::Image{
                     .texture = irradianceTexHandle,
-                    .stateBefore = ResourceState::StorageComputeWrite,
+                    .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 }),
             });
@@ -389,8 +371,8 @@ Editor::Editor()
         .debugName = "prefilteredEnvMap",
         .type = Texture::Type::tCube,
         .format = Texture::Format::r16g16b16a16_float,
-        .allStates = ResourceState::SampleSource | ResourceState::StorageComputeWrite,
-        .initialState = ResourceState::StorageComputeWrite,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
+        .initialState = ResourceState::StorageCompute,
         .size = {prefilteredEnvMapBaseSize, prefilteredEnvMapBaseSize},
         .mipLevels = 5,
     });
@@ -433,7 +415,7 @@ Editor::Editor()
             {
                 Barrier::from(Barrier::Image{
                     .texture = prefilteredEnvMap,
-                    .stateBefore = ResourceState::StorageComputeWrite,
+                    .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 }),
             });
@@ -447,8 +429,8 @@ Editor::Editor()
         .debugName = "brdfIntegral",
         .type = Texture::Type::t2D,
         .format = Texture::Format::r16_g16_float,
-        .allStates = ResourceState::SampleSource | ResourceState::StorageComputeWrite,
-        .initialState = ResourceState::StorageComputeWrite,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
+        .initialState = ResourceState::StorageCompute,
         .size = {brdfIntegralSize, brdfIntegralSize},
         .mipLevels = 1,
     });
@@ -474,7 +456,7 @@ Editor::Editor()
             {
                 Barrier::from(Barrier::Image{
                     .texture = brdfIntegralMap,
-                    .stateBefore = ResourceState::StorageComputeWrite,
+                    .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 }),
             });

@@ -4,17 +4,23 @@
 #include <VMA/VMA.hpp>
 #include <vulkan/vulkan_core.h>
 
-Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::string_view name)
+Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo&& createInfo)
 {
-    if((crInfo.info.usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) &&
-       (crInfo.info.usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT))
+    if(createInfo.allStates.containsStorageBufferUsage() && createInfo.allStates.containsUniformBufferUsage())
     {
         // TODO: LOGGER: Cant use both, using just storage
-        crInfo.info.usage &= ~VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        assert(!(crInfo.info.usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT));
+        createInfo.allStates.unset(
+            ResourceState::UniformBuffer | ResourceState::UniformBufferGraphics |
+            ResourceState::UniformBufferCompute);
+        assert(!createInfo.allStates.containsUniformBufferUsage());
     }
 
-    Handle<Buffer> newBufferHandle = bufferPool.insert(Buffer{.info = crInfo.info});
+    Handle<Buffer> newBufferHandle = bufferPool.insert(Buffer{
+        .descriptor = {
+            .size = createInfo.size,
+            .memoryType = createInfo.memoryType,
+            .allStates = createInfo.allStates,
+        }});
 
     // if we can guarantee that no two threads access the pools at the same time we can
     // assume that the underlying pointer wont change until this function returns
@@ -24,31 +30,30 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
 
     // TODO: dont error, just warn and automatically set transfer_dst_bit
     assert(
-        crInfo.initialData == nullptr ||
-        (crInfo.info.usage & VK_BUFFER_USAGE_TRANSFER_DST_BIT) > 0 &&
-            "Attempting to create a buffer with inital content that does not have transfer destination bit set!");
+        createInfo.initialData.empty() ||
+        (createInfo.allStates & ResourceState::TransferDst &&
+         "Attempting to create a buffer with inital content that does not have transfer destination bit set!"));
 
     VkBufferCreateInfo bufferCrInfo{
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
 
-        .size = crInfo.info.size,
-        .usage = crInfo.info.usage,
+        .size = createInfo.size,
+        .usage = toVkBufferUsage(createInfo.allStates),
     };
 
-    VmaAllocationCreateInfo vmaAllocCrInfo{
-        .flags = crInfo.info.memoryAllocationInfo.flags,
-        .usage = VMA_MEMORY_USAGE_AUTO,
-        .requiredFlags = crInfo.info.memoryAllocationInfo.requiredMemoryPropertyFlags,
-    };
-
+    VmaAllocationCreateInfo vmaAllocCrInfo = toVMAAllocCrInfo(createInfo.memoryType);
     VmaAllocator& allocator = gfxDevice.allocator;
     VkResult res = vmaCreateBuffer(
         allocator, &bufferCrInfo, &vmaAllocCrInfo, &buffer->buffer, &buffer->allocation, &buffer->allocInfo);
 
     assert(res == VK_SUCCESS);
 
-    if(crInfo.initialData != nullptr)
+    if(createInfo.memoryType == Buffer::MemoryType::CPU ||
+       createInfo.memoryType == Buffer::MemoryType::GPU_BUT_CPU_VISIBLE)
+        buffer->ptr = buffer->allocInfo.pMappedData;
+
+    if(!createInfo.initialData.empty())
     {
         /*
             todo:
@@ -63,11 +68,11 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
         VkBufferCreateInfo stagingBufferInfo = {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             .pNext = nullptr,
-            .size = crInfo.info.size,
+            .size = createInfo.size,
             .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         };
         VmaAllocationCreateInfo vmaallocCrInfo = {
-            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
             .usage = VMA_MEMORY_USAGE_AUTO,
             .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         };
@@ -81,10 +86,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
             &stagingBuffer.allocInfo);
         assert(res == VK_SUCCESS);
 
-        void* data = nullptr;
-        vmaMapMemory(allocator, stagingBuffer.allocation, &data);
-        memcpy(data, crInfo.initialData, crInfo.info.size);
-        vmaUnmapMemory(allocator, stagingBuffer.allocation);
+        memcpy(stagingBuffer.allocInfo.pMappedData, createInfo.initialData.data(), createInfo.initialData.size());
 
         gfxDevice.immediateSubmit(
             [=](VkCommandBuffer cmd)
@@ -92,7 +94,7 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
                 VkBufferCopy copy{
                     .srcOffset = 0,
                     .dstOffset = 0,
-                    .size = crInfo.info.size,
+                    .size = createInfo.size,
                 };
                 vkCmdCopyBuffer(cmd, stagingBuffer.buffer, buffer->buffer, 1, &copy);
             });
@@ -103,17 +105,22 @@ Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo crInfo, std::str
         vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
     }
 
-    if(!name.empty())
+    if(!createInfo.debugName.empty())
     {
-        gfxDevice.setDebugName(buffer->buffer, name.data());
+        gfxDevice.setDebugName(buffer->buffer, createInfo.debugName.data());
     }
 
-    if(crInfo.info.usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
+    if((createInfo.allStates & ResourceState::UniformBuffer) ||
+       (createInfo.allStates & ResourceState::UniformBufferGraphics) ||
+       (createInfo.allStates & ResourceState::UniformBufferCompute))
     {
         buffer->resourceIndex =
             gfxDevice.bindlessManager.createBufferBinding(buffer->buffer, BindlessManager::BufferUsage::Uniform);
     }
-    else if(crInfo.info.usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+    else if(
+        (createInfo.allStates & ResourceState::Storage) ||
+        (createInfo.allStates & ResourceState::StorageGraphics) ||
+        (createInfo.allStates & ResourceState::StorageCompute))
     {
         buffer->resourceIndex =
             gfxDevice.bindlessManager.createBufferBinding(buffer->buffer, BindlessManager::BufferUsage::Storage);
@@ -132,7 +139,8 @@ void ResourceManager::free(Handle<Buffer> handle)
     */
     const Buffer* buffer = bufferPool.get(handle);
     // its possible that this handle is outdated
-    //   eg: if this buffer belonged to a mesh which has already been deleted (and during that deleted its buffers)
+    //   eg: if this buffer belonged to a mesh which has already been deleted (and during that deleted its
+    //   buffers)
     if(buffer == nullptr)
     {
         return;

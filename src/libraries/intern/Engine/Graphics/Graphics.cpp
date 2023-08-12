@@ -23,3 +23,44 @@ VkImageUsageFlags toVkImageUsage(ResourceStateMulti states)
 
     return vkUsage;
 }
+
+VkBufferUsageFlags toVkBufferUsage(ResourceStateMulti states)
+{
+    using UnderlyingType = decltype(states)::U;
+    static_assert(std::is_unsigned_v<UnderlyingType>);
+
+    auto statesAsUnderlying = static_cast<UnderlyingType>(states.value);
+    VkBufferUsageFlags vkUsage = 0;
+
+    while(statesAsUnderlying > 0)
+    {
+        auto setBitIndex = std::countr_zero(statesAsUnderlying);
+        UnderlyingType setBitField = 1u << setBitIndex;
+        auto asEnum = static_cast<ResourceState>(1u << setBitIndex);
+
+        vkUsage |= toVkBufferUsageSingle(asEnum);
+
+        statesAsUnderlying &= ~setBitField;
+    }
+
+    return vkUsage;
+}
+
+void ResourceStateMulti::unset(const ResourceStateMulti& rhs)
+{
+    value &= ~static_cast<U>(rhs.value);
+}
+
+bool ResourceStateMulti::containsUniformBufferUsage()
+{
+    return ((*this) & ResourceState::UniformBuffer)            //
+           || ((*this) & ResourceState::UniformBufferGraphics) //
+           || ((*this) & ResourceState::UniformBufferCompute);
+}
+
+bool ResourceStateMulti::containsStorageBufferUsage()
+{
+    return ((*this) & ResourceState::Storage)           //
+           || ((*this) & ResourceState::StorageCompute) //
+           || ((*this) & ResourceState::StorageGraphics);
+}
