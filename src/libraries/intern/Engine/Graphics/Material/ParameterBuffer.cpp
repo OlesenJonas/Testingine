@@ -27,7 +27,7 @@ void ParameterBuffer::pushChanges()
     // Copy changes over to next vulkan buffer and set it as active
     uint8_t newIndex = (currentBufferIndex + 1) % VulkanDevice::FRAMES_IN_FLIGHT;
     Buffer* paramsBuffer = ResourceManager::get()->get(gpuBuffers[newIndex]);
-    memcpy(paramsBuffer->allocInfo.pMappedData, cpuBuffer, bufferSize);
+    memcpy(paramsBuffer->gpuBuffer.ptr, cpuBuffer, bufferSize);
     currentBufferIndex = newIndex;
 }
 

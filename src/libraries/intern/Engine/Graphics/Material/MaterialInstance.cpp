@@ -52,14 +52,12 @@ void ResourceManager::free(Handle<MaterialInstance> handle)
         for(int i = 0; i < bufferCount; i++)
         {
             Handle<Buffer> bufferHandle = matInst->parameters.gpuBuffers[i];
-            const Buffer* buffer = get(bufferHandle);
+            Buffer* buffer = get(bufferHandle);
             if(buffer == nullptr)
             {
                 return;
             }
-            const VkBuffer vkBuffer = buffer->buffer;
-            const VmaAllocation vmaAllocation = buffer->allocation;
-            gfxDevice.deleteQueue.pushBack([=]() { vmaDestroyBuffer(*allocator, vkBuffer, vmaAllocation); });
+            gfxDevice.deleteBuffer(buffer);
             bufferPool.remove(bufferHandle);
         }
     }

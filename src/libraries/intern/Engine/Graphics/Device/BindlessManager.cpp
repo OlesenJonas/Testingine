@@ -13,7 +13,7 @@ void BindlessManager::init()
     std::vector<VkDescriptorPoolSize> descriptorSizes = {
         {
             .type = VK_DESCRIPTOR_TYPE_SAMPLER,
-            .descriptorCount = ResourceManager::samplerLimit,
+            .descriptorCount = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLER).limit,
         },
         {
             .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
@@ -46,6 +46,9 @@ void BindlessManager::init()
 
     for(const auto& entry : descriptorTypeTable)
     {
+        if(entry.first == VK_DESCRIPTOR_TYPE_SAMPLER)
+            continue;
+
         // constexpr VkDescriptorBindingFlags defaultDescBindingFlag =
         //     VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
         //     VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
@@ -68,12 +71,12 @@ void BindlessManager::init()
         {
             descBindingFlags.push_back(defaultDescBindingFlag);
 
-            setLayoutBindings[0].binding = ResourceManager::samplerLimit;
+            setLayoutBindings[0].binding = samplerLimit;
 
             setLayoutBindings.push_back(VkDescriptorSetLayoutBinding{
                 .binding = 0,
                 .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-                .descriptorCount = ResourceManager::samplerLimit,
+                .descriptorCount = samplerLimit,
                 .stageFlags = VK_SHADER_STAGE_ALL,
                 .pImmutableSamplers = nullptr,
             });
@@ -290,9 +293,17 @@ uint32_t BindlessManager::createImageBinding(VkImageView view, ImageUsage possib
     return freeIndex;
 }
 
-uint32_t BindlessManager::createSamplerBinding(VkSampler sampler, uint32_t index)
+uint32_t BindlessManager::createSamplerBinding(VkSampler sampler)
 {
-    auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
+    auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLER);
+
+    DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+
+    uint32_t freeIndex = freeIndicesBitset.getFirstBitSet();
+    assert(freeIndex != 0xFFFFFFFF && "NO MORE FREE SLOTS LEFT IN DESCRIPTOR ARRAY!");
+    assert(freeIndicesBitset.getBit(freeIndex));
+    freeIndicesBitset.clearBit(freeIndex);
+    assert(!freeIndicesBitset.getBit(freeIndex));
 
     VkDescriptorImageInfo imageInfo{
         .sampler = sampler,
@@ -306,7 +317,7 @@ uint32_t BindlessManager::createSamplerBinding(VkSampler sampler, uint32_t index
 
         .dstSet = bindlessDescriptorSets[tableEntry.setIndex],
         .dstBinding = 0,
-        .dstArrayElement = index,
+        .dstArrayElement = freeIndex,
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
         .pImageInfo = &imageInfo,
@@ -316,5 +327,5 @@ uint32_t BindlessManager::createSamplerBinding(VkSampler sampler, uint32_t index
 
     vkUpdateDescriptorSets(gfxDevice.device, 1, &setWrite, 0, nullptr);
 
-    return index;
+    return freeIndex;
 }

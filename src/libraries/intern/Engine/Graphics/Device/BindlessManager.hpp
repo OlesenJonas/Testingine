@@ -20,7 +20,7 @@ class BindlessManager
     const VkDescriptorSet* getDescriptorSets();
     const VkDescriptorSetLayout* getDescriptorSetLayouts();
 
-    uint32_t createSamplerBinding(VkSampler sampler, uint32_t index);
+    uint32_t createSamplerBinding(VkSampler sampler);
     enum class ImageUsage
     {
         Sampled,
@@ -42,6 +42,7 @@ class BindlessManager
 
   private:
     // todo: check against limit from physicalDeviceProperties.limits
+    static const uint32_t samplerLimit = 32;
     static const uint32_t sampledImagesLimit = 128;
     static const uint32_t storageImagesLimit = 128;
     static const uint32_t uniformBuffersLimit = 128;
@@ -56,6 +57,8 @@ class BindlessManager
     };
 
     std::unordered_map<VkDescriptorType, BindlessSet> descriptorTypeTable = {
+        {VK_DESCRIPTOR_TYPE_SAMPLER, //
+         {0, samplerLimit, "Samplers", DynamicBitset{samplerLimit}}},
         {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
          {0, sampledImagesLimit, "SampledImages", DynamicBitset{sampledImagesLimit}}},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,

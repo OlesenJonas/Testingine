@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Engine/Graphics/Device/HelperTypes.hpp>
 #include <vulkan/vulkan_core.h>
 
 struct Sampler
@@ -33,6 +34,5 @@ struct Sampler
         bool operator==(const Info& rhs) const;
     };
     Info info;
-    VkSampler sampler = VK_NULL_HANDLE;
-    uint32_t resourceIndex = 0xFFFFFFFF;
+    VulkanSampler sampler;
 };

@@ -5,7 +5,7 @@
 
 Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)
 {
-    auto* device = VulkanDevice::get();
+    auto* gfxDevice = VulkanDevice::get();
 
     // Check if such a sampler already exists
 
@@ -27,34 +27,9 @@ Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)
     Handle<Sampler> samplerHandle{freeSamplerIndex, 1};
     freeSamplerIndex++;
     Sampler* sampler = &samplerArray[samplerHandle.index];
-    assert(sampler == get(samplerHandle));
-
-    VkSamplerCreateInfo createInfo{
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .magFilter = toVkFilter(info.magFilter),
-        .minFilter = toVkFilter(info.minFilter),
-        .mipmapMode = toVkMipmapMode(info.mipMapFilter),
-        .addressModeU = toVkAddressMode(info.addressModeU),
-        .addressModeV = toVkAddressMode(info.addressModeV),
-        .addressModeW = toVkAddressMode(info.addressModeW),
-        .mipLodBias = 0.0f,
-        .anisotropyEnable = info.enableAnisotropy,
-        .maxAnisotropy = 16.0f, // TODO: retrieve from hardware capabilities
-        .compareEnable = VK_FALSE,
-        .compareOp = VK_COMPARE_OP_LESS,
-        .minLod = info.minLod,
-        .maxLod = info.maxLod,
-        .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
-        .unnormalizedCoordinates = VK_FALSE,
-    };
+    sampler->sampler = gfxDevice->createSampler(info);
     sampler->info = info;
-
-    vkCreateSampler(device->device, &createInfo, nullptr, &sampler->sampler);
-
-    // TODO: this should go directly through device! forget the ->bindlessManager.
-    sampler->resourceIndex = device->bindlessManager.createSamplerBinding(sampler->sampler, samplerHandle.index);
+    assert(sampler == get(samplerHandle));
 
     return samplerHandle;
 }

@@ -28,16 +28,11 @@ struct Material
         Shaders::StageCreateInfo fragmentShader;
     };
 
-    VkShaderModule vertexShader = VK_NULL_HANDLE;
-    VkShaderModule fragmentShader = VK_NULL_HANDLE;
-
     VkPipeline pipeline = VK_NULL_HANDLE;
 
     ParameterBuffer parameters;
 
   private:
-    void createPipeline();
-
     using ParameterMap = std::unordered_map<std::string, ParameterInfo, StringHash, std::equal_to<>>;
     // not sure I like this being a pointer, but for now it makes stuff easier
     ParameterMap* parametersLUT = nullptr;

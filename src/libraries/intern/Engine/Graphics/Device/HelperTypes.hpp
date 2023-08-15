@@ -29,15 +29,30 @@ struct QueueFamilyIndices
     }
 };
 
-struct AllocatedImage
+#include <memory>
+
+struct VulkanTexture
 {
-    VkImage image;
-    VmaAllocation allocation;
+    VkImage image = VK_NULL_HANDLE;
+    VmaAllocation allocation = VK_NULL_HANDLE;
+    VkImageView fullImageView = VK_NULL_HANDLE;
+    uint32_t resourceIndex = 0xFFFFFFFF;
+
+    std::unique_ptr<VkImageView[]> _mipImageViews = VK_NULL_HANDLE;
+    std::unique_ptr<uint32_t[]> _mipResourceIndices;
 };
 
-struct AllocatedBuffer
+struct VulkanBuffer
 {
-    VkBuffer buffer;
-    VmaAllocation allocation;
-    VmaAllocationInfo allocInfo;
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VmaAllocation allocation = VK_NULL_HANDLE;
+    VmaAllocationInfo allocInfo{};
+    uint32_t resourceIndex = 0xFFFFFFFF;
+    void* ptr = nullptr;
+};
+
+struct VulkanSampler
+{
+    VkSampler sampler = VK_NULL_HANDLE;
+    uint32_t resourceIndex = 0xFFFFFFFF;
 };

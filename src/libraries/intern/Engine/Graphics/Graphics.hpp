@@ -59,37 +59,40 @@ struct ResourceStateMulti
     U value = U{0};
 
     // explicitely want implicit conversion
-    inline ResourceStateMulti(ResourceState state) : value(static_cast<U>(state)){}; // NOLINT
+    constexpr inline ResourceStateMulti(ResourceState state) : value(static_cast<U>(state)){}; // NOLINT
 
-    inline ResourceStateMulti& operator|=(ResourceState state)
+    constexpr inline ResourceStateMulti& operator|=(ResourceState state)
     {
         value |= static_cast<U>(state);
         return *this;
     }
 
-    inline operator bool() const // NOLINT
+    constexpr inline operator bool() const // NOLINT
     {
         return value != 0u;
     }
 
-    void unset(const ResourceStateMulti& rhs);
+    constexpr void unset(const ResourceStateMulti& rhs)
+    {
+        value &= ~static_cast<U>(rhs.value);
+    }
     bool containsUniformBufferUsage();
     bool containsStorageBufferUsage();
 };
 
-inline ResourceStateMulti operator|(ResourceStateMulti lhs, ResourceState rhs)
+constexpr inline ResourceStateMulti operator|(ResourceStateMulti lhs, ResourceState rhs)
 {
     lhs |= rhs;
     return lhs;
 }
 
-inline ResourceStateMulti operator&(ResourceStateMulti lhs, ResourceState rhs)
+constexpr inline ResourceStateMulti operator&(ResourceStateMulti lhs, ResourceState rhs)
 {
     lhs.value &= static_cast<ResourceStateMulti::U>(rhs);
     return lhs;
 }
 
-inline ResourceStateMulti operator|(ResourceState lhs, ResourceState rhs)
+constexpr inline ResourceStateMulti operator|(ResourceState lhs, ResourceState rhs)
 {
     ResourceStateMulti lhsM = lhs;
     return lhsM | rhs;

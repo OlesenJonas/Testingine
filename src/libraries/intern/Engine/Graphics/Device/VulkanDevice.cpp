@@ -6,12 +6,14 @@
 #include "Init/VulkanInit.hpp"
 #include "Init/VulkanSwapchainSetup.hpp"
 #include "ResourceManager/ResourceManager.hpp"
+#include <Datastructures/ArrayHelpers.hpp>
 #include <Engine/Graphics/Device/VulkanConversions.hpp>
 
 #include <GLFW/glfw3.h>
 #include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_glfw.h>
 #include <ImGui/imgui_impl_vulkan.h>
+#include <VMA/VMA.hpp>
 #include <fstream>
 #include <stdexcept>
 #include <thread>
@@ -396,6 +398,744 @@ void VulkanDevice::waitForWorkFinished()
     vkDeviceWaitIdle(device);
 }
 
+VulkanBuffer VulkanDevice::createBuffer(const Buffer::CreateInfo& createInfo)
+{
+    VulkanBuffer ret;
+
+    VkBufferCreateInfo bufferCrInfo{
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .pNext = nullptr,
+
+        .size = createInfo.size,
+        .usage = toVkBufferUsage(createInfo.allStates),
+    };
+
+    VmaAllocationCreateInfo vmaAllocCrInfo = toVMAAllocCrInfo(createInfo.memoryType);
+    VkResult res =
+        vmaCreateBuffer(allocator, &bufferCrInfo, &vmaAllocCrInfo, &ret.buffer, &ret.allocation, &ret.allocInfo);
+
+    if(createInfo.memoryType == Buffer::MemoryType::CPU ||
+       createInfo.memoryType == Buffer::MemoryType::GPU_BUT_CPU_VISIBLE)
+        ret.ptr = ret.allocInfo.pMappedData;
+
+    assert(res == VK_SUCCESS);
+
+    if(!createInfo.initialData.empty())
+    {
+        /*
+            todo:
+                - Currently waits for GPU Idle after upload
+                - try asynchronous transfer queue
+                - dont re-create staging buffers all the time!
+                    keep a few large ones around?
+                    or at least keep the last created ones around for a few frames in case theyre needed again?
+        */
+
+        // allocate staging buffer
+        VkBufferCreateInfo stagingBufferInfo = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = nullptr,
+            .size = createInfo.size,
+            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        };
+        VmaAllocationCreateInfo vmaallocCrInfo = {
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .usage = VMA_MEMORY_USAGE_AUTO,
+            .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        };
+        VulkanBuffer stagingBuffer;
+        VkResult res = vmaCreateBuffer(
+            allocator,
+            &stagingBufferInfo,
+            &vmaallocCrInfo,
+            &stagingBuffer.buffer,
+            &stagingBuffer.allocation,
+            &stagingBuffer.allocInfo);
+        assert(res == VK_SUCCESS);
+
+        memcpy(stagingBuffer.allocInfo.pMappedData, createInfo.initialData.data(), createInfo.initialData.size());
+
+        immediateSubmit(
+            [=](VkCommandBuffer cmd)
+            {
+                VkBufferCopy copy{
+                    .srcOffset = 0,
+                    .dstOffset = 0,
+                    .size = createInfo.size,
+                };
+                vkCmdCopyBuffer(cmd, stagingBuffer.buffer, ret.buffer, 1, &copy);
+            });
+
+        // since immediateSubmit also waits until the commands have executed, we can safely delete the staging
+        // buffer immediately here
+        //  todo: again, dont like the wait here. So once I fix that this call also has to be changed
+        vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+    }
+
+    if(!createInfo.debugName.empty())
+    {
+        setDebugName(ret.buffer, createInfo.debugName.data());
+    }
+
+    if((createInfo.allStates & ResourceState::UniformBuffer) ||
+       (createInfo.allStates & ResourceState::UniformBufferGraphics) ||
+       (createInfo.allStates & ResourceState::UniformBufferCompute))
+    {
+        ret.resourceIndex = bindlessManager.createBufferBinding(ret.buffer, BindlessManager::BufferUsage::Uniform);
+    }
+    else if(
+        (createInfo.allStates & ResourceState::Storage) ||
+        (createInfo.allStates & ResourceState::StorageGraphics) ||
+        (createInfo.allStates & ResourceState::StorageCompute))
+    {
+        ret.resourceIndex = bindlessManager.createBufferBinding(ret.buffer, BindlessManager::BufferUsage::Storage);
+    }
+
+    return ret;
+}
+
+void VulkanDevice::deleteBuffer(Buffer* buffer)
+{
+    deleteQueue.pushBack([=]()
+                         { vmaDestroyBuffer(allocator, buffer->gpuBuffer.buffer, buffer->gpuBuffer.allocation); });
+}
+
+VulkanSampler VulkanDevice::createSampler(const Sampler::Info& info)
+{
+    VkSamplerCreateInfo createInfo{
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = toVkFilter(info.magFilter),
+        .minFilter = toVkFilter(info.minFilter),
+        .mipmapMode = toVkMipmapMode(info.mipMapFilter),
+        .addressModeU = toVkAddressMode(info.addressModeU),
+        .addressModeV = toVkAddressMode(info.addressModeV),
+        .addressModeW = toVkAddressMode(info.addressModeW),
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = info.enableAnisotropy,
+        .maxAnisotropy = 16.0f, // TODO: retrieve from hardware capabilities
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_LESS,
+        .minLod = info.minLod,
+        .maxLod = info.maxLod,
+        .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+        .unnormalizedCoordinates = VK_FALSE,
+    };
+
+    VulkanSampler sampler;
+    vkCreateSampler(device, &createInfo, nullptr, &sampler.sampler);
+    sampler.resourceIndex = bindlessManager.createSamplerBinding(sampler.sampler);
+
+    return sampler;
+}
+
+void VulkanDevice::deleteSampler(Sampler* sampler)
+{
+    deleteQueue.pushBack([=]() { vkDestroySampler(device, sampler->sampler.sampler, nullptr); });
+}
+
+VulkanTexture VulkanDevice::createTexture(const Texture::CreateInfo& createInfo)
+{
+    VulkanTexture ret;
+
+    VkImageCreateFlags flags = createInfo.type == Texture::Type::tCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
+
+    VkImageCreateInfo imageCrInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = flags,
+
+        .imageType = toVkImgType(createInfo.type),
+        .format = toVkFormat(createInfo.format),
+        .extent =
+            {
+                .width = createInfo.size.width,
+                .height = createInfo.size.height,
+                .depth = createInfo.size.depth,
+            },
+
+        .mipLevels = static_cast<uint32_t>(createInfo.mipLevels),
+        .arrayLayers = toVkArrayLayers(createInfo),
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = toVkImageUsage(createInfo.allStates),
+    };
+    VmaAllocationCreateInfo imgAllocInfo{
+        .usage = VMA_MEMORY_USAGE_AUTO,
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    };
+    VkResult res = vmaCreateImage(allocator, &imageCrInfo, &imgAllocInfo, &ret.image, &ret.allocation, nullptr);
+    assert(res == VK_SUCCESS);
+
+    if(!createInfo.initialData.empty())
+    {
+        // allocate staging buffer
+        VkBufferCreateInfo stagingBufferInfo = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = nullptr,
+            .size = createInfo.initialData.size(),
+            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        };
+        VmaAllocationCreateInfo vmaallocCrInfo = {
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .usage = VMA_MEMORY_USAGE_AUTO,
+            .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        };
+        VulkanBuffer stagingBuffer;
+        VkResult res = vmaCreateBuffer(
+            allocator,
+            &stagingBufferInfo,
+            &vmaallocCrInfo,
+            &stagingBuffer.buffer,
+            &stagingBuffer.allocation,
+            &stagingBuffer.allocInfo);
+        assert(res == VK_SUCCESS);
+
+        memcpy(stagingBuffer.allocInfo.pMappedData, createInfo.initialData.data(), createInfo.initialData.size());
+
+        immediateSubmit(
+            [&](VkCommandBuffer cmd)
+            {
+                VkImageMemoryBarrier2 imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+                    .texture = ret.image,
+                    // TODO: store in variable
+                    .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
+                    .stateBefore = ResourceState::Undefined,
+                    .stateAfter = ResourceState::TransferDst,
+                });
+                VkDependencyInfo dependencyInfo{
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .imageMemoryBarrierCount = 1,
+                    .pImageMemoryBarriers = &imgBarrier,
+                };
+                vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+
+                VkBufferImageCopy copyRegion{
+                    .bufferOffset = 0,
+                    .bufferRowLength = 0,
+                    .bufferImageHeight = 0,
+                    .imageSubresource =
+                        {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                         .mipLevel = 0,
+                         .baseArrayLayer = 0,
+                         .layerCount = 1},
+                    .imageExtent =
+                        {
+                            .width = createInfo.size.width,
+                            .height = createInfo.size.height,
+                            .depth = createInfo.size.depth,
+                        },
+                };
+
+                vkCmdCopyBufferToImage(
+                    cmd, stagingBuffer.buffer, ret.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+                imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+                    .texture = ret.image,
+                    .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
+                    .stateBefore = ResourceState::TransferDst,
+                    .stateAfter = createInfo.initialState,
+                });
+                dependencyInfo = VkDependencyInfo{
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .imageMemoryBarrierCount = 1,
+                    .pImageMemoryBarriers = &imgBarrier,
+                };
+                vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+
+                if(createInfo.fillMipLevels && createInfo.mipLevels > 1)
+                {
+                    fillMipLevels(
+                        cmd, ret.image, Texture::Descriptor::fromCreateInfo(createInfo), createInfo.initialState);
+                }
+            });
+
+        // immediate submit also waits on device idle so staging buffer is not being used here anymore
+        vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+    }
+    else if(createInfo.initialState != ResourceState::Undefined)
+    {
+        // Dont upload anything, just transition
+        immediateSubmit(
+            [&](VkCommandBuffer cmd)
+            {
+                auto imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+                    .texture = ret.image,
+                    .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
+                    .stateBefore = ResourceState::Undefined,
+                    .stateAfter = createInfo.initialState,
+                });
+                VkDependencyInfo dependencyInfo{
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .imageMemoryBarrierCount = 1,
+                    .pImageMemoryBarriers = &imgBarrier,
+                };
+                vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+            });
+    }
+    setDebugName(ret.image, (createInfo.debugName + "_image").c_str());
+
+    // Creating the resourceViews and descriptors for bindless
+
+    assert(createInfo.mipLevels > 0);
+    ret._mipResourceIndices = std::make_unique<uint32_t[]>(createInfo.mipLevels);
+    for(int i = 0; i < createInfo.mipLevels; i++)
+        ret._mipResourceIndices[i] = 0xFFFFFFFF;
+    ret._mipImageViews = std::make_unique<VkImageView[]>(createInfo.mipLevels);
+    for(int i = 0; i < createInfo.mipLevels; i++)
+        ret._mipImageViews[i] = VK_NULL_HANDLE;
+
+    if(createInfo.mipLevels == 1)
+    {
+        // create a single view and single resourceIndex
+        VkImageViewType viewType =
+            createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+        VkImageViewCreateInfo imageViewCrInfo{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .image = ret.image,
+            .viewType = viewType,
+            .format = toVkFormat(createInfo.format),
+            .components =
+                VkComponentMapping{
+                    .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                },
+            .subresourceRange =
+                {
+                    .aspectMask = toVkImageAspect(createInfo.format),
+                    .baseMipLevel = 0,
+                    .levelCount = static_cast<uint32_t>(createInfo.mipLevels),
+                    .baseArrayLayer = 0,
+                    .layerCount = toVkArrayLayers(Texture::Descriptor::fromCreateInfo(createInfo)),
+                },
+        };
+
+        vkCreateImageView(device, &imageViewCrInfo, nullptr, &ret.fullImageView);
+        ret._mipImageViews[0] = ret.fullImageView;
+        setDebugName(ret.fullImageView, (createInfo.debugName + "_viewFull").c_str());
+
+        // TODO: containsSamplingState()/...StorageState() functions!
+        bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
+                               (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
+                               (createInfo.allStates & ResourceState::SampleSourceCompute);
+        bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
+                              (createInfo.allStates & ResourceState::StorageGraphics) ||
+                              (createInfo.allStates & ResourceState::StorageCompute);
+
+        if(usedForSampling && usedForStorage)
+        {
+            ret.resourceIndex =
+                bindlessManager.createImageBinding(ret.fullImageView, BindlessManager::ImageUsage::Both);
+        }
+        // else: not both but maybe one of the two
+        else if(usedForSampling)
+        {
+            ret.resourceIndex =
+                bindlessManager.createImageBinding(ret.fullImageView, BindlessManager::ImageUsage::Sampled);
+        }
+        else if(usedForStorage)
+        {
+            ret.resourceIndex =
+                bindlessManager.createImageBinding(ret.fullImageView, BindlessManager::ImageUsage::Storage);
+        }
+        ret._mipResourceIndices[0] = ret.resourceIndex;
+    }
+    else
+    {
+        // create a view for the full image, can not be used for storage!
+        {
+            VkImageViewType viewType =
+                createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+            VkImageViewCreateInfo imageViewCrInfo{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = nullptr,
+                .image = ret.image,
+                .viewType = viewType,
+                .format = toVkFormat(createInfo.format),
+                .components =
+                    VkComponentMapping{
+                        .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+                .subresourceRange =
+                    {
+                        .aspectMask = toVkImageAspect(createInfo.format),
+                        .baseMipLevel = 0,
+                        .levelCount = static_cast<uint32_t>(createInfo.mipLevels),
+                        .baseArrayLayer = 0,
+                        .layerCount = toVkArrayLayers(Texture::Descriptor::fromCreateInfo(createInfo)),
+                    },
+            };
+
+            vkCreateImageView(device, &imageViewCrInfo, nullptr, &ret.fullImageView);
+            setDebugName(ret.fullImageView, (createInfo.debugName + "_viewFull").c_str());
+
+            bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
+                                   (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
+                                   (createInfo.allStates & ResourceState::SampleSourceCompute);
+
+            if(usedForSampling)
+            {
+                ret.resourceIndex =
+                    bindlessManager.createImageBinding(ret.fullImageView, BindlessManager::ImageUsage::Sampled);
+            }
+        }
+
+        // Create views for all individual mips, storage only for now, but wouldnt be hard to change
+        for(int m = 0; m < createInfo.mipLevels; m++)
+        {
+            VkImageViewType viewType =
+                createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+            VkImageViewCreateInfo imageViewCrInfo{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = nullptr,
+                .image = ret.image,
+                .viewType = viewType,
+                .format = toVkFormat(createInfo.format),
+                .components =
+                    VkComponentMapping{
+                        .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                        .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+                .subresourceRange =
+                    {
+                        .aspectMask = toVkImageAspect(createInfo.format),
+                        .baseMipLevel = static_cast<uint32_t>(m),
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = toVkArrayLayers(Texture::Descriptor::fromCreateInfo(createInfo)),
+                    },
+            };
+
+            vkCreateImageView(device, &imageViewCrInfo, nullptr, &ret._mipImageViews[m]);
+            setDebugName(ret._mipImageViews[m], (createInfo.debugName + "_viewMip" + std::to_string(m)).c_str());
+
+            VulkanDevice& gfxDevice = *VulkanDevice::get();
+            bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
+                                   (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
+                                   (createInfo.allStates & ResourceState::SampleSourceCompute);
+            bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
+                                  (createInfo.allStates & ResourceState::StorageGraphics) ||
+                                  (createInfo.allStates & ResourceState::StorageCompute);
+
+            // if(usedForSampling && usedForStorage)
+            // {
+            //     tex->_fullResourceIndex = gfxDevice.bindlessManager.createImageBinding(
+            //         tex->_fullImageView, BindlessManager::ImageUsage::Both);
+            // }
+            // // else: not both but maybe one of the two
+            // else if(usedForSampling)
+            // {
+            //     tex->_fullResourceIndex = gfxDevice.bindlessManager.createImageBinding(
+            //         tex->_fullImageView, BindlessManager::ImageUsage::Sampled);
+            // }
+            // else if(usedForStorage)
+            if(usedForStorage)
+            {
+                ret._mipResourceIndices[m] = gfxDevice.bindlessManager.createImageBinding(
+                    ret._mipImageViews[m], BindlessManager::ImageUsage::Storage);
+            }
+        }
+    }
+
+    return ret;
+}
+
+void VulkanDevice::deleteTexture(Texture* texture)
+{
+    VkImage image = texture->gpuTexture.image;
+    VmaAllocation vmaAllocation = texture->gpuTexture.allocation;
+
+    deleteQueue.pushBack([=]() { vmaDestroyImage(allocator, image, vmaAllocation); });
+
+    VkImageView imageView = texture->gpuTexture.fullImageView;
+    deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
+
+    if(texture->descriptor.mipLevels > 1)
+        for(int i = 0; i < texture->descriptor.mipLevels; i++)
+        {
+            imageView = texture->gpuTexture._mipImageViews[i];
+            deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
+        }
+}
+
+VkPipeline VulkanDevice::createComputePipeline(Span<uint32_t> spirv, std::string_view debugName)
+{
+    // (temp) Shader Modules ----------------
+    VkShaderModule tempSM;
+    VkShaderModuleCreateInfo SMCrInfo{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = nullptr,
+        .codeSize = 4u * spirv.size(), // size in bytes, but spirvBinary is uint32 vector!
+        .pCode = spirv.data(),
+    };
+    if(vkCreateShaderModule(device, &SMCrInfo, nullptr, &tempSM) != VK_SUCCESS)
+    {
+        assert(false);
+    }
+
+    // todo: check if pipeline with given parameters already exists, and just return that in case it does!
+    //       Though im not sure if that should happen on this level, or as part of the application level
+    //       Especially since it would require something like the spirv path to check equality
+
+    // Creating the pipeline ---------------------------
+    VkPipeline pipeline;
+    const VkPipelineShaderStageCreateInfo shaderStageCrInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .module = tempSM,
+        .pName = "main",
+        .pSpecializationInfo = nullptr,
+    };
+
+    const VkComputePipelineCreateInfo pipelineCrInfo{
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = shaderStageCrInfo,
+        .layout = bindlessPipelineLayout,
+        .basePipelineHandle = VK_NULL_HANDLE,
+    };
+
+    if(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCrInfo, nullptr, &pipeline) != VK_SUCCESS)
+    {
+        assert(false);
+    }
+    setDebugName(pipeline, (std::string{debugName}).c_str());
+
+    vkDestroyShaderModule(device, tempSM, nullptr);
+
+    return pipeline;
+}
+
+void VulkanDevice::deleteComputePipeline(ComputeShader* shader)
+{
+    if(shader->pipeline != VK_NULL_HANDLE)
+    {
+        deleteQueue.pushBack([=]() { vkDestroyPipeline(device, shader->pipeline, nullptr); });
+    }
+}
+
+VkPipeline VulkanDevice::createGraphicsPipeline(
+    Span<uint32_t> vertexSpirv, Span<uint32_t> fragmentSpirv, std::string_view debugName)
+{
+    // (temp) Shader Modules ----------------
+    VkShaderModule vertSM;
+    VkShaderModuleCreateInfo vertSMCrInfo{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = nullptr,
+        .codeSize = 4u * vertexSpirv.size(), // size in bytes, but spirvBinary is uint32 vector!
+        .pCode = vertexSpirv.data(),
+    };
+    if(vkCreateShaderModule(device, &vertSMCrInfo, nullptr, &vertSM) != VK_SUCCESS)
+    {
+        assert(false);
+    }
+
+    VkShaderModule fragSM;
+    VkShaderModuleCreateInfo fragSMCrInfo{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = nullptr,
+        .codeSize = 4u * fragmentSpirv.size(), // size in bytes, but spirvBinary is uint32 vector!
+        .pCode = fragmentSpirv.data(),
+    };
+    if(vkCreateShaderModule(device, &fragSMCrInfo, nullptr, &fragSM) != VK_SUCCESS)
+    {
+        assert(false);
+    }
+
+    // todo: check if pipeline with given parameters already exists, and just return that in case it does!
+    //       Though im not sure if that should happen on this level, or as part of the application level
+    //       Especially since it would require something like the spirv path to check equality
+
+    // Creating the pipeline ---------------------------
+
+    const VkPipelineShaderStageCreateInfo shaderStageCrInfos[2] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = nullptr,
+
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .module = vertSM,
+            .pName = "main",
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = nullptr,
+
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .module = fragSM,
+            .pName = "main",
+        },
+    };
+
+    const VertexInputDescription vertexDescription = VertexInputDescription::getDefault();
+    const VkPipelineVertexInputStateCreateInfo vertexInputStateCrInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .vertexBindingDescriptionCount = (uint32_t)vertexDescription.bindings.size(),
+        .pVertexBindingDescriptions = vertexDescription.bindings.data(),
+        .vertexAttributeDescriptionCount = (uint32_t)vertexDescription.attributes.size(),
+        .pVertexAttributeDescriptions = vertexDescription.attributes.data(),
+    };
+
+    const VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCrInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .primitiveRestartEnable = VK_FALSE,
+    };
+
+    const VkPipelineRasterizationStateCreateInfo rasterizationStateCrInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .depthClampEnable = VK_FALSE,
+        .rasterizerDiscardEnable = VK_FALSE,
+
+        .polygonMode = VK_POLYGON_MODE_FILL,
+
+        .cullMode = VK_CULL_MODE_NONE,
+        .frontFace = VK_FRONT_FACE_CLOCKWISE,
+
+        .depthBiasEnable = VK_FALSE,
+        .depthBiasConstantFactor = 0.0f,
+        .depthBiasClamp = 0.0f,
+        .depthBiasSlopeFactor = 0.0f,
+
+        .lineWidth = 1.0f,
+    };
+
+    const bool depthTest = true;
+    const VkPipelineDepthStencilStateCreateInfo depthStencilStateCrInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .depthTestEnable = depthTest ? VK_TRUE : VK_FALSE,
+        .depthWriteEnable = depthTest ? VK_TRUE : VK_FALSE, // TODO: decouple
+        .depthCompareOp = depthTest ? VK_COMPARE_OP_LESS : VK_COMPARE_OP_ALWAYS,
+        .depthBoundsTestEnable = VK_FALSE,
+        .stencilTestEnable = VK_FALSE,
+        .minDepthBounds = 0.0f,
+        .maxDepthBounds = 1.0f,
+    };
+
+    const VkPipelineMultisampleStateCreateInfo multisampleStateCrInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        .sampleShadingEnable = VK_FALSE,
+        .minSampleShading = 1.0f,
+        .pSampleMask = nullptr,
+        .alphaToCoverageEnable = VK_FALSE,
+        .alphaToOneEnable = VK_FALSE,
+    };
+
+    const VkPipelineColorBlendAttachmentState colorBlendAttachmentState = {
+        .blendEnable = VK_FALSE,
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | //
+                          VK_COLOR_COMPONENT_G_BIT | //
+                          VK_COLOR_COMPONENT_B_BIT | //
+                          VK_COLOR_COMPONENT_A_BIT,
+    };
+
+    const VkPipelineViewportStateCreateInfo viewportStateCrInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .viewportCount = 1,
+        .scissorCount = 1,
+    };
+
+    const VkPipelineColorBlendStateCreateInfo colorBlendStateCrInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .pNext = nullptr,
+
+        .logicOpEnable = VK_FALSE,
+        .logicOp = VK_LOGIC_OP_COPY,
+
+        .attachmentCount = 1,
+        .pAttachments = &colorBlendAttachmentState,
+    };
+
+    constexpr VkDynamicState dynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    const VkPipelineDynamicStateCreateInfo dynamicState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = ArraySize(dynamicStates),
+        .pDynamicStates = &dynamicStates[0],
+    };
+
+    const VkFormat colorAttachmentFormats[1] = {swapchainImageFormat};
+    const VkFormat depthAttachmentFormat = defaultDepthFormat;
+    const VkFormat stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+
+    const VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+        .pNext = nullptr,
+        .colorAttachmentCount = ArraySize(colorAttachmentFormats),
+        .pColorAttachmentFormats = &colorAttachmentFormats[0],
+        .depthAttachmentFormat = depthAttachmentFormat,
+        .stencilAttachmentFormat = stencilAttachmentFormat,
+    };
+
+    const VkGraphicsPipelineCreateInfo pipelineCrInfo{
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext = &pipelineRenderingCreateInfo,
+
+        .stageCount = 2,
+        .pStages = &shaderStageCrInfos[0],
+        .pVertexInputState = &vertexInputStateCrInfo,
+        .pInputAssemblyState = &inputAssemblyStateCrInfo,
+        .pViewportState = &viewportStateCrInfo,
+        .pRasterizationState = &rasterizationStateCrInfo,
+        .pMultisampleState = &multisampleStateCrInfo,
+        .pDepthStencilState = &depthStencilStateCrInfo,
+        .pColorBlendState = &colorBlendStateCrInfo,
+        .pDynamicState = &dynamicState,
+
+        .layout = bindlessPipelineLayout,
+        .renderPass = VK_NULL_HANDLE,
+        .subpass = 0,
+        .basePipelineHandle = VK_NULL_HANDLE,
+    };
+
+    VkPipeline pipeline;
+    if(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCrInfo, nullptr, &pipeline) != VK_SUCCESS)
+    {
+        assert(false);
+    }
+    setDebugName(pipeline, debugName.data());
+
+    vkDestroyShaderModule(device, vertSM, nullptr);
+    vkDestroyShaderModule(device, fragSM, nullptr);
+
+    return pipeline;
+}
+
+void VulkanDevice::deleteGraphicsPipeline(Material* material)
+{
+    if(material->pipeline != VK_NULL_HANDLE)
+    {
+        deleteQueue.pushBack([=]() { vkDestroyPipeline(device, material->pipeline, nullptr); });
+    }
+}
+
 void VulkanDevice::startNextFrame()
 {
     frameNumber++;
@@ -640,7 +1380,7 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
         {
             auto* rm = ResourceManager::get();
 
-            const Texture* tex = rm->get(barrier.image.texture);
+            const Texture* tex = barrier.image.texture;
             if(tex == nullptr)
             {
                 BREAKPOINT;
@@ -668,7 +1408,7 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
                 .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
                 .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
 
-                .image = tex->image,
+                .image = tex->gpuTexture.image,
                 .subresourceRange =
                     {
                         .aspectMask = toVkImageAspect(tex->descriptor.format),
@@ -730,7 +1470,7 @@ void VulkanDevice::pushConstants(VkCommandBuffer cmd, size_t size, void* data, s
 void VulkanDevice::bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset)
 {
     auto* rm = ResourceManager::get();
-    vkCmdBindIndexBuffer(cmd, rm->get(buffer)->buffer, offset, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(cmd, rm->get(buffer)->gpuBuffer.buffer, offset, VK_INDEX_TYPE_UINT32);
 }
 
 void VulkanDevice::bindVertexBuffers(
@@ -746,7 +1486,7 @@ void VulkanDevice::bindVertexBuffers(
     std::vector<VkBuffer> vkBuffers{buffers.size()};
     for(int i = 0; i < buffers.size(); i++)
     {
-        vkBuffers[i] = rm->get(buffers[i])->buffer;
+        vkBuffers[i] = rm->get(buffers[i])->gpuBuffer.buffer;
         assert(vkBuffers[i]);
     }
     vkCmdBindVertexBuffers(cmd, startBinding, count, &vkBuffers[0], offsets.data());
@@ -834,7 +1574,13 @@ void VulkanDevice::setDebugName(VkObjectType type, uint64_t handle, const char* 
     setObjectDebugName(device, &nameInfo);
 }
 
-void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state)
+void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state)
+{
+    return fillMipLevels(cmd, texture->gpuTexture.image, texture->descriptor, state);
+}
+
+void VulkanDevice::fillMipLevels(
+    VkCommandBuffer cmd, VkImage image, const Texture::Descriptor& descriptor, ResourceState state)
 {
     /*
         TODO: check that image was created with usage_transfer_src_bit !
@@ -843,55 +1589,58 @@ void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, R
               But requires a lot more work to handle different texture types (3d, cube, array)
     */
 
-    auto* rm = ResourceManager::get();
-
-    Texture* tex = rm->get(texture);
-
-    if(tex->descriptor.mipLevels == 1)
+    if(descriptor.mipLevels == 1)
         return;
 
-    uint32_t startWidth = tex->descriptor.size.width;
-    uint32_t startHeight = tex->descriptor.size.height;
-    uint32_t startDepth = tex->descriptor.size.depth;
+    uint32_t startWidth = descriptor.size.width;
+    uint32_t startHeight = descriptor.size.height;
+    uint32_t startDepth = descriptor.size.depth;
 
     // Transition mip 0 to transfer source
     if(state != ResourceState::TransferSrc)
     {
-        insertBarriers(
-            cmd,
-            {
-                Barrier::from(Barrier::Image{
-                    .texture = texture,
-                    .stateBefore = state,
-                    .stateAfter = ResourceState::TransferSrc,
-                    .mipLevel = 0,
-                    .mipCount = 1,
-                    // TODO: also have a Texture::ArrayLayers::All value? And set that as default?
-                    .arrayLength = int32_t(tex->descriptor.arrayLength),
-                }),
-            });
+        VkImageMemoryBarrier2 imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+            .texture = image,
+            .descriptor = descriptor,
+            .stateBefore = state,
+            .stateAfter = ResourceState::TransferSrc,
+            .mipLevel = 0,
+            .mipCount = 1,
+            .arrayLength = int32_t(descriptor.arrayLength),
+        });
+        VkDependencyInfo dependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &imgBarrier,
+        };
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
 
     // Generate mip chain
     // Downscaling from each level successively, but could also downscale mip 0 -> mip N each time
 
-    for(int i = 1; i < tex->descriptor.mipLevels; i++)
+    for(int i = 1; i < descriptor.mipLevels; i++)
     {
         // prepare current level to be transfer dst
-        if(state != ResourceState::TransferSrc)
+        if(state != ResourceState::TransferDst)
         {
-            insertBarriers(
-                cmd,
-                {
-                    Barrier::from(Barrier::Image{
-                        .texture = texture,
-                        .stateBefore = state,
-                        .stateAfter = ResourceState::TransferDst,
-                        .mipLevel = i,
-                        .mipCount = 1,
-                        .arrayLength = int32_t(tex->descriptor.arrayLength),
-                    }),
-                });
+            VkImageMemoryBarrier2 imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+                .texture = image,
+                .descriptor = descriptor,
+                .stateBefore = state,
+                .stateAfter = ResourceState::TransferDst,
+                .mipLevel = i,
+                .mipCount = 1,
+                .arrayLength = int32_t(descriptor.arrayLength),
+            });
+            VkDependencyInfo dependencyInfo{
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .imageMemoryBarrierCount = 1,
+                .pImageMemoryBarriers = &imgBarrier,
+            };
+            vkCmdPipelineBarrier2(cmd, &dependencyInfo);
         }
 
         uint32_t lastWidth = std::max(startWidth >> (i - 1), 1u);
@@ -908,7 +1657,7 @@ void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, R
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     .mipLevel = uint32_t(i - 1),
                     .baseArrayLayer = 0,
-                    .layerCount = toVkArrayLayers(tex->descriptor),
+                    .layerCount = toVkArrayLayers(descriptor),
                 },
             .srcOffsets =
                 {{.x = 0, .y = 0, .z = 0}, {int32_t(lastWidth), int32_t(lastHeight), int32_t(lastDepth)}},
@@ -917,7 +1666,7 @@ void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, R
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     .mipLevel = uint32_t(i),
                     .baseArrayLayer = 0,
-                    .layerCount = toVkArrayLayers(tex->descriptor),
+                    .layerCount = toVkArrayLayers(descriptor),
                 },
             .dstOffsets = {{.x = 0, .y = 0, .z = 0}, {int32_t(curWidth), int32_t(curHeight), int32_t(curDepth)}},
         };
@@ -925,43 +1674,50 @@ void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, R
         // do the blit
         vkCmdBlitImage(
             cmd,
-            tex->image,
+            image,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            tex->image,
+            image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1,
             &blit,
             VK_FILTER_LINEAR);
 
         // prepare current level to be transfer src for next mip
-        insertBarriers(
-            cmd,
-            {
-                Barrier::from(Barrier::Image{
-                    .texture = texture,
-                    // TODO: need better way to determine initial state, pass as parameter?
-                    .stateBefore = ResourceState::TransferDst,
-                    .stateAfter = ResourceState::TransferSrc,
-                    .mipLevel = i,
-                    .mipCount = 1,
-                    .arrayLength = int32_t(tex->descriptor.arrayLength),
-                }),
-            });
+        VkImageMemoryBarrier2 imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+            .texture = image,
+            .descriptor = descriptor,
+            .stateBefore = ResourceState::TransferDst,
+            .stateAfter = ResourceState::TransferSrc,
+            .mipLevel = i,
+            .mipCount = 1,
+            .arrayLength = int32_t(descriptor.arrayLength),
+        });
+        VkDependencyInfo dependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &imgBarrier,
+        };
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
 
     // after the loop, transfer all mips to input state
-    insertBarriers(
-        cmd,
-        {
-            Barrier::from(Barrier::Image{
-                .texture = texture,
-                .stateBefore = ResourceState::TransferSrc,
-                .stateAfter = state,
-                .mipLevel = 0,
-                .mipCount = tex->descriptor.mipLevels,
-                .arrayLength = int32_t(tex->descriptor.arrayLength),
-            }),
-        });
+    VkImageMemoryBarrier2 imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+        .texture = image,
+        .descriptor = descriptor,
+        .stateBefore = ResourceState::TransferSrc,
+        .stateAfter = state,
+        .mipLevel = 0,
+        .mipCount = descriptor.mipLevels,
+        .arrayLength = int32_t(descriptor.arrayLength),
+    });
+    VkDependencyInfo dependencyInfo{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pNext = nullptr,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &imgBarrier,
+    };
+    vkCmdPipelineBarrier2(cmd, &dependencyInfo);
 }
 
 size_t VulkanDevice::padUniformBufferSize(size_t originalSize)

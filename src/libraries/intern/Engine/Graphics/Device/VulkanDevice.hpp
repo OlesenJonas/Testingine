@@ -10,10 +10,12 @@
 #include <Datastructures/Span.hpp>
 #include <vulkan/vulkan_core.h>
 
+// TODO: full headers just for the create infos?
+#include <Engine/Graphics/Buffer/Buffer.hpp>
+
 struct GLFWwindow;
 struct Material;
 struct Barrier;
-struct Buffer;
 struct ComputeShader;
 
 class VulkanDevice
@@ -22,11 +24,29 @@ class VulkanDevice
 
   public:
     void init(GLFWwindow* window);
-
-    uint32_t getSwapchainWidth();
-    uint32_t getSwapchainHeight();
-
     void cleanup();
+
+    //-----------------------------------
+
+    VulkanBuffer createBuffer(const Buffer::CreateInfo& createInfo);
+    void deleteBuffer(Buffer* buffer);
+
+    VulkanSampler createSampler(const Sampler::Info& info);
+    void deleteSampler(Sampler* sampler);
+
+    VulkanTexture createTexture(const Texture::CreateInfo& createInfo);
+    void deleteTexture(Texture* texture);
+
+    VkPipeline createComputePipeline(Span<uint32_t> spirv, std::string_view debugName);
+    void deleteComputePipeline(ComputeShader* shader);
+
+    // TODO: not sure how to handle the material abstraction since a material could contain multiple pipeline
+    // states depending on vertex layout etc
+    VkPipeline
+    createGraphicsPipeline(Span<uint32_t> vertexSpirv, Span<uint32_t> fragmentSpirv, std::string_view debugName);
+    void deleteGraphicsPipeline(Material* material);
+
+    //-----------------------------------
 
     // Dont really like these functions, but have to do for now until a framegraph is implemented
     void startNextFrame();
@@ -43,6 +63,7 @@ class VulkanDevice
 
     void beginRendering(VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget);
     void endRendering(VkCommandBuffer cmd);
+
     void insertSwapchainImageBarrier(VkCommandBuffer cmd, ResourceState currentState, ResourceState targetState);
     void insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers);
 
@@ -83,8 +104,12 @@ class VulkanDevice
     // Waits until all currently submitted GPU commands are executed
     void waitForWorkFinished();
 
-    void fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state);
+    void fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state);
 
+    //-----------------------------------
+
+    uint32_t getSwapchainWidth();
+    uint32_t getSwapchainHeight();
     static constexpr int FRAMES_IN_FLIGHT = 2;
 
   private:
@@ -182,6 +207,60 @@ class VulkanDevice
     size_t padUniformBufferSize(size_t originalSize);
 
     void setDebugName(VkObjectType type, uint64_t handle, const char* name);
+
+    // ----------- Low level versions of "higher level" gfx calls so they can be used with vulkan objects directly
+
+    void
+    fillMipLevels(VkCommandBuffer cmd, VkImage image, const Texture::Descriptor& descriptor, ResourceState state);
+
+    // TODO: dont really like this struct being here, since its 99% a duplicate of the Barrier.hpp version
+    struct VulkanImageBarrier
+    {
+        VkImage texture;
+        const Texture::Descriptor& descriptor;
+        ResourceState stateBefore = ResourceState::None;
+        ResourceState stateAfter = ResourceState::None;
+        int32_t mipLevel = 0;
+        int32_t mipCount = Texture::MipLevels::All;
+        int32_t arrayLayer = 0;
+        int32_t arrayLength = 1;
+        bool allowDiscardOriginal = false;
+    };
+    constexpr VkImageMemoryBarrier2 toVkImageMemoryBarrier(VulkanImageBarrier&& barrier)
+    {
+        int32_t mipCount = barrier.mipCount == Texture::MipLevels::All
+                               ? barrier.descriptor.mipLevels - barrier.mipLevel
+                               : barrier.mipCount;
+        return VkImageMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+
+            .srcStageMask = toVkPipelineStage(barrier.stateBefore),
+            .srcAccessMask = toVkAccessFlags(barrier.stateBefore),
+
+            .dstStageMask = toVkPipelineStage(barrier.stateAfter),
+            .dstAccessMask = toVkAccessFlags(barrier.stateAfter),
+
+            .oldLayout =
+                barrier.allowDiscardOriginal ? VK_IMAGE_LAYOUT_UNDEFINED : toVkImageLayout(barrier.stateBefore),
+            .newLayout = toVkImageLayout(barrier.stateAfter),
+
+            .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
+            .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
+
+            .image = barrier.texture,
+            .subresourceRange =
+                {
+                    .aspectMask = toVkImageAspect(barrier.descriptor.format),
+                    .baseMipLevel = static_cast<uint32_t>(barrier.mipLevel),
+                    .levelCount = static_cast<uint32_t>(mipCount),
+                    .baseArrayLayer = static_cast<uint32_t>(barrier.arrayLayer),
+                    .layerCount = static_cast<uint32_t>(
+                        barrier.descriptor.type == Texture::Type::tCube ? 6 * barrier.arrayLength
+                                                                        : barrier.arrayLength),
+                },
+        };
+    }
 };
 
 extern PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;

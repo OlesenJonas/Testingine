@@ -40,19 +40,6 @@ ResourceManager::createComputeShader(Shaders::StageCreateInfo&& createInfo, std:
         shaderBinary = compileGLSL(createInfo.sourcePath, Shaders::Stage::Compute);
     }
 
-    // Shader Modules ----------------
-    VkShaderModuleCreateInfo vertSMcrInfo{
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .pNext = nullptr,
-        .codeSize = 4u * shaderBinary.size(), // size in bytes, but spirvBinary is uint32 vector!
-        .pCode = shaderBinary.data(),
-    };
-    if(vkCreateShaderModule(gfxDevice.device, &vertSMcrInfo, nullptr, &computeShader->shaderModule) != VK_SUCCESS)
-    {
-        assert(false);
-    }
-    gfxDevice.setDebugName(computeShader->shaderModule, (std::string{shaderName} + "module").c_str());
-
     // Parse Shader Interface -------------
 
     // todo: wrap into function taking shader byte code(s) (span)? could be moved into Shaders.cpp
@@ -69,65 +56,21 @@ ResourceManager::createComputeShader(Shaders::StageCreateInfo&& createInfo, std:
 
     // nameToMaterialLUT.insert({std::string{matName}, newMaterialHandle});
 
-    computeShader->createPipeline();
-    gfxDevice.setDebugName(computeShader->pipeline, (std::string{shaderName}).c_str());
+    computeShader->pipeline = gfxDevice.createComputePipeline(shaderBinary, debugName);
 
     return newComputeShaderHandle;
 }
 
 void ResourceManager::free(Handle<ComputeShader> handle)
 {
-    const ComputeShader* compShader = computeShaderPool.get(handle);
+    ComputeShader* compShader = computeShaderPool.get(handle);
     if(compShader == nullptr)
     {
         return;
     }
 
-    VulkanDevice& gfxDevice = *VulkanDevice::get();
-    VkDevice device = gfxDevice.device;
-    const VmaAllocator* allocator = &gfxDevice.allocator;
-
-    if(compShader->pipeline != VK_NULL_HANDLE)
-    {
-        gfxDevice.deleteQueue.pushBack([=]() { vkDestroyPipeline(device, compShader->pipeline, nullptr); });
-    }
-
-    gfxDevice.deleteQueue.pushBack([=]() { vkDestroyShaderModule(device, compShader->shaderModule, nullptr); });
+    VulkanDevice* gfxDevice = VulkanDevice::get();
+    gfxDevice->deleteComputePipeline(compShader);
 
     computeShaderPool.remove(handle);
-}
-
-void ComputeShader::createPipeline()
-{
-    // todo: check if pipeline with given parameters already exists, and just return that in case it does!
-
-    VulkanDevice& gfxDevice = *VulkanDevice::get();
-
-    // Creating the pipeline ---------------------------
-
-    const VkPipelineShaderStageCreateInfo shaderStageCrInfo{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .module = shaderModule,
-        .pName = "main",
-        .pSpecializationInfo = nullptr,
-    };
-
-    const VkComputePipelineCreateInfo pipelineCrInfo{
-        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .stage = shaderStageCrInfo,
-        .layout = gfxDevice.bindlessPipelineLayout,
-        .basePipelineHandle = VK_NULL_HANDLE,
-    };
-
-    if(vkCreateComputePipelines(
-           gfxDevice.device, gfxDevice.pipelineCache, 1, &pipelineCrInfo, nullptr, &pipeline) != VK_SUCCESS)
-    {
-        std::cout << "Failed to create pipeline!" << std::endl;
-        assert(false);
-    }
 }

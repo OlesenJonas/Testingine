@@ -23,8 +23,7 @@ void ResourceManager::cleanup()
 
     for(int i = 0; i < freeSamplerIndex; i++)
     {
-        device->deleteQueue.pushBack([=]()
-                                     { vkDestroySampler(device->device, samplerArray[i].sampler, nullptr); });
+        device->deleteSampler(&samplerArray[i]);
     }
 
     auto clearPool = [&](auto&& pool)

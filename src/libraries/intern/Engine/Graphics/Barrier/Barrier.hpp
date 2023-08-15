@@ -36,7 +36,7 @@ struct Barrier
 
     struct Image
     {
-        Handle<Texture> texture;
+        Texture* texture;
         ResourceState stateBefore = ResourceState::None;
         ResourceState stateAfter = ResourceState::None;
         int32_t mipLevel = 0;
@@ -48,7 +48,7 @@ struct Barrier
 
     struct Buffer
     {
-        Handle<Buffer> buffer;
+        Buffer* buffer;
         ResourceState stateBefore = ResourceState::None;
         ResourceState stateAfter = ResourceState::None;
         // TODO: Buffer abstraction!

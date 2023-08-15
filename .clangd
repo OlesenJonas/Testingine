@@ -12,4 +12,4 @@ InlayHints:
   DeducedTypes: No
 
 CompileFlags:
-  Add: [-Werror=return-type]
+  Add: [-Werror=return-type,-Werror=vla]

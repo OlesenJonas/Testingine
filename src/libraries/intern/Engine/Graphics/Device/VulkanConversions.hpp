@@ -227,6 +227,11 @@ constexpr uint32_t toVkArrayLayers(const Texture::Descriptor& desc)
     return desc.type == Texture::Type::tCube ? 6 * desc.arrayLength : desc.arrayLength;
 }
 
+constexpr uint32_t toVkArrayLayers(const Texture::CreateInfo& info)
+{
+    return info.type == Texture::Type::tCube ? 6 * info.arrayLength : info.arrayLength;
+}
+
 constexpr VkImageType toVkImgType(Texture::Type type)
 {
     switch(type)
@@ -357,5 +362,32 @@ constexpr VkSamplerAddressMode toVkAddressMode(Sampler::AddressMode mode)
         return VK_SAMPLER_ADDRESS_MODE_REPEAT;
     case Sampler::AddressMode::ClampEdge:
         return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    }
+}
+
+#include <Engine/Graphics/Buffer/Buffer.hpp>
+
+constexpr VmaAllocationCreateInfo toVMAAllocCrInfo(Buffer::MemoryType type)
+{
+    switch(type)
+    {
+    case Buffer::MemoryType::CPU:
+        return VmaAllocationCreateInfo{
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .usage = VMA_MEMORY_USAGE_AUTO,
+            .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        };
+    case Buffer::MemoryType::GPU:
+        return VmaAllocationCreateInfo{
+            .usage = VMA_MEMORY_USAGE_AUTO,
+            .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        };
+    case Buffer::MemoryType::GPU_BUT_CPU_VISIBLE:
+        return VmaAllocationCreateInfo{
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .usage = VMA_MEMORY_USAGE_AUTO,
+            .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        };
     }
 }

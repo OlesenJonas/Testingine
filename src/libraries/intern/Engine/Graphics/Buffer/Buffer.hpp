@@ -1,10 +1,9 @@
 #pragma once
 
 #include <Datastructures/Span.hpp>
+#include <Engine/Graphics/Device/HelperTypes.hpp>
 #include <Engine/Graphics/Graphics.hpp>
-#include <VMA/VMA.hpp>
 #include <string>
-#include <vulkan/vulkan_core.h>
 
 struct Buffer
 {
@@ -40,35 +39,5 @@ struct Buffer
 
     Descriptor descriptor;
 
-    VkBuffer buffer;
-    uint32_t resourceIndex = 0xFFFFFFFF;
-
-    VmaAllocation allocation;
-    VmaAllocationInfo allocInfo;
-    void* ptr = nullptr;
+    VulkanBuffer gpuBuffer;
 };
-
-constexpr VmaAllocationCreateInfo toVMAAllocCrInfo(Buffer::MemoryType type)
-{
-    switch(type)
-    {
-    case Buffer::MemoryType::CPU:
-        return VmaAllocationCreateInfo{
-            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-            .usage = VMA_MEMORY_USAGE_AUTO,
-            .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        };
-    case Buffer::MemoryType::GPU:
-        return VmaAllocationCreateInfo{
-            .usage = VMA_MEMORY_USAGE_AUTO,
-            .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        };
-    case Buffer::MemoryType::GPU_BUT_CPU_VISIBLE:
-        return VmaAllocationCreateInfo{
-            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-            .usage = VMA_MEMORY_USAGE_AUTO,
-            .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        };
-    }
-}

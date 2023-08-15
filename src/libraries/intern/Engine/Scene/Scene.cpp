@@ -316,7 +316,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         Texture* normalTex = rm->get(normalTextureHandle);
         Sampler* normalSampler = rm->get(normalSamplerHandle);
         matInst->parameters.setResource("normalTexture", normalTex->fullResourceIndex());
-        matInst->parameters.setResource("normalSampler", normalSampler->resourceIndex);
+        matInst->parameters.setResource("normalSampler", normalSampler->sampler.resourceIndex);
 
         const glTF::Texture& baseColorTextureGLTF =
             gltf.textures[material.pbrMetallicRoughness.baseColorTexture.index];
@@ -325,7 +325,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         Texture* baseColorTex = rm->get(baseColorTextureHandle);
         Sampler* baseColorSampler = rm->get(baseColorSamplerHandle);
         matInst->parameters.setResource("baseColorTexture", baseColorTex->fullResourceIndex());
-        matInst->parameters.setResource("baseColorSampler", baseColorSampler->resourceIndex);
+        matInst->parameters.setResource("baseColorSampler", baseColorSampler->sampler.resourceIndex);
 
         const glTF::Texture& metalRoughTextureGLTF =
             gltf.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index];
@@ -334,7 +334,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         Texture* metalRoughTex = rm->get(metalRoughTextureHandle);
         Sampler* metalRoughSampler = rm->get(metalRoughSamplerHandle);
         matInst->parameters.setResource("metalRoughTexture", metalRoughTex->fullResourceIndex());
-        matInst->parameters.setResource("metalRoughSampler", metalRoughSampler->resourceIndex);
+        matInst->parameters.setResource("metalRoughSampler", metalRoughSampler->sampler.resourceIndex);
 
         const glTF::Texture& occlusionTextureGLTF = gltf.textures[material.occlusionTexture.index];
         const Handle<Texture> occlusionTextureHandle = textures[occlusionTextureGLTF.sourceIndex];
@@ -342,7 +342,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         Texture* occlusionTex = rm->get(occlusionTextureHandle);
         Sampler* occlusionSampler = rm->get(occlusionSamplerHandle);
         matInst->parameters.setResource("occlusionTexture", occlusionTex->fullResourceIndex());
-        matInst->parameters.setResource("occlusionSampler", occlusionSampler->resourceIndex);
+        matInst->parameters.setResource("occlusionSampler", occlusionSampler->sampler.resourceIndex);
 
         matInst->parameters.pushChanges();
 

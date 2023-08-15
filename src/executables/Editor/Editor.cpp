@@ -157,7 +157,7 @@ Editor::Editor()
     // Scene and other test stuff loading -------------------------------------------
 
     // Disable validation error breakpoints during init, synch errors arent correct
-    gfxDevice.disableValidationErrorBreakpoint();
+    // gfxDevice.disableValidationErrorBreakpoint();
 
     Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf", &ecs, sceneRoot);
 
@@ -211,7 +211,7 @@ Editor::Editor()
             mainCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
-                    .texture = mipTestTexH,
+                    .texture = resourceManager.get(mipTestTexH),
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 }),
@@ -309,13 +309,13 @@ Editor::Editor()
             mainCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
-                    .texture = hdriCube,
+                    .texture = resourceManager.get(hdriCube),
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 }),
             });
 
-        gfxDevice.fillMipLevels(mainCmdBuffer, hdriCube, ResourceState::SampleSource);
+        gfxDevice.fillMipLevels(mainCmdBuffer, resourceManager.get(hdriCube), ResourceState::SampleSource);
     }
 
     Handle<ComputeShader> calcIrradianceComp = resourceManager.createComputeShader(
@@ -355,7 +355,7 @@ Editor::Editor()
             mainCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
-                    .texture = irradianceTexHandle,
+                    .texture = resourceManager.get(irradianceTexHandle),
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 }),
@@ -414,7 +414,7 @@ Editor::Editor()
             mainCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
-                    .texture = prefilteredEnvMap,
+                    .texture = resourceManager.get(prefilteredEnvMap),
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 }),
@@ -455,7 +455,7 @@ Editor::Editor()
             mainCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
-                    .texture = brdfIntegralMap,
+                    .texture = resourceManager.get(brdfIntegralMap),
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 }),
@@ -577,8 +577,6 @@ void Editor::update()
     //          (ie error out when command buffer begun before next frame started)
     gfxDevice.startNextFrame();
 
-    // TODO: Switch to ThreadPool
-
     // Draw Scene ------
     auto recordSceneDrawingCommands = [&](int threadIndex)
     {
@@ -588,7 +586,7 @@ void Editor::update()
             offscreenCmdBuffer,
             {
                 Barrier::from(Barrier::Image{
-                    .texture = depthTexture,
+                    .texture = resourceManager.get(depthTexture),
                     .stateBefore = ResourceState::DepthStencilTarget,
                     .stateAfter = ResourceState::DepthStencilTarget,
                     .allowDiscardOriginal = true,
@@ -631,12 +629,11 @@ void Editor::update()
 
         Buffer* renderPassDataBuffer = resourceManager.get(getCurrentFrameData().renderPassDataBuffer);
 
-        void* data = renderPassDataBuffer->allocInfo.pMappedData;
-        memcpy(data, &renderPassData, sizeof(renderPassData));
+        memcpy(renderPassDataBuffer->gpuBuffer.ptr, &renderPassData, sizeof(renderPassData));
 
         Buffer* objectBuffer = resourceManager.get(getCurrentFrameData().objectBuffer);
 
-        void* objectData = objectBuffer->allocInfo.pMappedData;
+        void* objectData = objectBuffer->gpuBuffer.ptr;
         // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
         auto* objectSSBO = (GPUObjectData*)objectData;
         for(int i = 0; i < renderables.size(); i++)
@@ -648,8 +645,8 @@ void Editor::update()
         //---
 
         BindlessIndices pushConstants;
-        pushConstants.RenderInfoBuffer = renderPassDataBuffer->resourceIndex;
-        pushConstants.transformBuffer = objectBuffer->resourceIndex;
+        pushConstants.RenderInfoBuffer = renderPassDataBuffer->gpuBuffer.resourceIndex;
+        pushConstants.transformBuffer = objectBuffer->gpuBuffer.resourceIndex;
 
         Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
         Handle<Material> lastMaterial = Handle<Material>::Invalid();
@@ -673,7 +670,7 @@ void Editor::update()
                     Buffer* materialParamsBuffer = resourceManager.get(newMat->parameters.getGPUBuffer());
                     if(materialParamsBuffer != nullptr)
                     {
-                        pushConstants.materialParamsBuffer = materialParamsBuffer->resourceIndex;
+                        pushConstants.materialParamsBuffer = materialParamsBuffer->gpuBuffer.resourceIndex;
                     }
                     lastMaterial = newMatInst->parentMaterial;
                 }
@@ -681,7 +678,8 @@ void Editor::update()
                 Buffer* materialInstanceParamsBuffer = resourceManager.get(newMatInst->parameters.getGPUBuffer());
                 if(materialInstanceParamsBuffer != nullptr)
                 {
-                    pushConstants.materialInstanceParamsBuffer = materialInstanceParamsBuffer->resourceIndex;
+                    pushConstants.materialInstanceParamsBuffer =
+                        materialInstanceParamsBuffer->gpuBuffer.resourceIndex;
                 }
             }
 

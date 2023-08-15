@@ -1,9 +1,7 @@
 #pragma once
 
-#include <VMA/VMA.hpp>
-#include <vulkan/vulkan_core.h>
-
 #include <Datastructures/Span.hpp>
+#include <Engine/Graphics/Device/HelperTypes.hpp>
 #include <Engine/Graphics/Graphics.hpp>
 #include <Engine/Misc/EnumHelpers.hpp>
 #include <functional>
@@ -95,6 +93,18 @@ struct Texture
         Extent size = {1, 1, 1};
         int32_t mipLevels = 1;
         uint32_t arrayLength = 1;
+
+        constexpr static Descriptor fromCreateInfo(const CreateInfo& crInfo)
+        {
+            return Descriptor{
+                .type = crInfo.type,
+                .format = crInfo.format,
+                .allStates = crInfo.allStates,
+                .size = crInfo.size,
+                .mipLevels = crInfo.mipLevels,
+                .arrayLength = crInfo.arrayLength,
+            };
+        }
     };
 
     static LoadResult loadHDR(Texture::LoadInfo&& loadInfo);
@@ -106,20 +116,6 @@ struct Texture
     VkImageView fullResourceView() const;
     VkImageView mipResourceView(uint32_t level) const;
 
-    /*
-        todo:
-            have a global string buffer and store debug name there, then store string_view here
-            That way debug name can be retrieved later without storing full string in here
-    */
-
     Descriptor descriptor;
-
-    VkImage image = VK_NULL_HANDLE;
-    VmaAllocation allocation = VK_NULL_HANDLE;
-
-    // TODO: could make this private with getter and setter, but would also need resource manager as friend
-    uint32_t _fullResourceIndex = 0xFFFFFFFF;
-    std::unique_ptr<uint32_t[]> _mipResourceIndices;
-    VkImageView _fullImageView = VK_NULL_HANDLE;
-    std::unique_ptr<VkImageView[]> _mipImageViews = VK_NULL_HANDLE;
+    VulkanTexture gpuTexture;
 };
