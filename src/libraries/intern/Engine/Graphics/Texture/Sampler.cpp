@@ -26,7 +26,7 @@ Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)
 
     Handle<Sampler> samplerHandle{freeSamplerIndex, 1};
     freeSamplerIndex++;
-    Sampler* sampler = &samplerArray[samplerHandle.index];
+    Sampler* sampler = &samplerArray[samplerHandle.getIndex()];
     sampler->sampler = gfxDevice->createSampler(info);
     sampler->info = info;
     assert(sampler == get(samplerHandle));

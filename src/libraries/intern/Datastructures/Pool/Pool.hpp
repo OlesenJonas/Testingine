@@ -1,11 +1,12 @@
 #pragma once
 
-#include "DynamicBitset.hpp"
+#include "../DynamicBitset.hpp"
+#include "Handle.hpp"
 
-#include <Engine/Misc/Concepts.hpp>
 #include <cassert>
 #include <type_traits>
 
+// Handle and Pool types as shown in https://twitter.com/SebAaltonen/status/1562747716584648704 and realted tweets
 /*
     not sure this is correct yet, will see
         https://stackoverflow.com/questions/222557/what-uses-are-there-for-placement-new
@@ -13,6 +14,19 @@
         https://www.stroustrup.com/bs_faq2.html#placement-delete
         https://stackoverflow.com/questions/11781724/do-i-really-have-to-worry-about-alignment-when-using-placement-new-operator
 */
+
+namespace PoolHelper
+{
+    template <typename T>
+    concept hasRelocationHint = requires(T t) {
+        {
+            T::is_trivially_relocatable
+        };
+    };
+    template <typename T>
+    concept is_trivially_relocatable =
+        (std::is_trivially_move_constructible_v<T> && std::is_trivially_destructible_v<T>) || hasRelocationHint<T>;
+} // namespace PoolHelper
 
 #ifdef _WIN32
     #include <malloc.h>
@@ -24,63 +38,17 @@
     #define POOL_FREE std::free
 #endif
 
-// Handle and Pool types as shown in https://twitter.com/SebAaltonen/status/1562747716584648704 and realted tweets
-template <typename T>
-class Handle
-{
-  public:
-    Handle() = default;
-    Handle(uint32_t index, uint32_t generation) : index(index), generation(generation){};
-    static Handle Invalid()
-    {
-        return {0, 0};
-    }
-    static Handle Null()
-    {
-        return Invalid();
-    }
-    [[nodiscard]] bool isValid() const
-    {
-        return generation != 0u;
-    }
-    bool operator==(const Handle<T>& other) const
-    {
-        return index == other.index && generation == other.generation;
-    }
-    bool operator!=(const Handle<T>& other) const
-    {
-        return index != other.index || generation != other.generation;
-    }
-    [[nodiscard]] uint32_t hash() const
-    {
-        return (uint32_t(index) << 16u) + uint32_t(generation);
-    }
-    [[nodiscard]] auto getIndex() const
-    {
-        return index;
-    }
-
-  private:
-    uint16_t index = 0;
-    uint16_t generation = 0;
-
-    template <typename U>
-    friend class Pool;
-    friend class ResourceManager;
-};
-
 template <typename T>
 // TODO: not sure which concepts should be used here...
 //   internally memory is just memcopy-ed on resize, so the object should just be movable, but they could have
 //   destructors.
 //   std::is_trivially_relocatable sounds perfect but doesnt exist yet...
-//   For now I could derive from an empty class that acts as a kind of attribute and then check for is_derived I
-//   think
 class Pool
 {
   public:
-    explicit Pool(size_t initialCapacity) : capacity(initialCapacity), freeArray(initialCapacity)
+    explicit Pool(uint32_t initialCapacity) : capacity(initialCapacity)
     {
+        freeArray = DynamicBitset{initialCapacity};
         storage = static_cast<T*>(POOL_ALLOC(initialCapacity * sizeof(T), alignof(T))); // NOLINT
         freeArray.fill();
         generations = new uint32_t[initialCapacity]; // NOLINT
@@ -120,15 +88,15 @@ class Pool
             // todo: return boolean indicating nothing happened?
             return;
         }
-        storage[handle.index].~T();
-        freeArray.setBit(handle.index);
+        storage[handle.getIndex()].~T();
+        freeArray.setBit(handle.getIndex());
     }
 
     inline T* get(Handle<T> handle)
     {
         if(!isHandleValid(handle))
             return nullptr;
-        return &storage[handle.index];
+        return &storage[handle.getIndex()];
     }
 
     Handle<T> getFirst()
@@ -143,9 +111,9 @@ class Pool
 
     bool isHandleValid(Handle<T> handle)
     {
-        assert(handle.index < capacity);
+        assert(handle.getIndex() < capacity);
 
-        return generations[handle.index] == handle.generation && !freeArray.getBit(handle.index);
+        return generations[handle.getIndex()] == handle.getGeneration() && !freeArray.getBit(handle.getIndex());
     }
 
   private:
@@ -187,10 +155,10 @@ class Pool
     }
 
     // if T is trivially_relocatable then we can grow the Pool with simple memmoves
-    static constexpr bool canUseMemcpy = is_trivially_relocatable<T>;
+    static constexpr bool canUseMemcpy = PoolHelper::is_trivially_relocatable<T>;
 
     size_t capacity = 0;
-    T* storage;
-    DynamicBitset freeArray;
-    uint32_t* generations;
+    T* storage = nullptr;
+    DynamicBitset freeArray{0};
+    uint32_t* generations = nullptr;
 };

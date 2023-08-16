@@ -3,7 +3,7 @@
 #include "glTF/glTF.hpp"
 #include "glTF/glTFtoTI.hpp"
 
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 #include <Engine/Application/Application.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <cstddef>

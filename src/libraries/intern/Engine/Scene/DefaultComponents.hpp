@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 #include <ECS/ECS.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>

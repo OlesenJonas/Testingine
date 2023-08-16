@@ -2,7 +2,7 @@
 
 #include "../Buffer/Buffer.hpp"
 
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 #include <Datastructures/Span.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>

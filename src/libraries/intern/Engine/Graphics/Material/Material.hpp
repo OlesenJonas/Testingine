@@ -5,7 +5,7 @@
 #include <Engine/Graphics/Shaders/Shaders.hpp>
 #include <Engine/Misc/StringHash.hpp>
 
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
@@ -44,4 +44,4 @@ struct Material
     friend ResourceManager;
 };
 
-static_assert(is_trivially_relocatable<Material>);
+static_assert(PoolHelper::is_trivially_relocatable<Material>);

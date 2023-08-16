@@ -10,4 +10,4 @@ struct MaterialInstance
     ParameterBuffer parameters;
 };
 
-static_assert(is_trivially_relocatable<MaterialInstance>);
+static_assert(PoolHelper::is_trivially_relocatable<MaterialInstance>);

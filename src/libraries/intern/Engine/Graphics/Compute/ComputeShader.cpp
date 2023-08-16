@@ -1,6 +1,6 @@
 #include "ComputeShader.hpp"
 
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 #include <Graphics/Device/VulkanDevice.hpp>
 #include <Graphics/Shaders/GLSL.hpp>
 #include <Graphics/Shaders/HLSL.hpp>

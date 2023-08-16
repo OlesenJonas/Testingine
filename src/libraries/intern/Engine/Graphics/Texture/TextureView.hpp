@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Texture.hpp"
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 
 struct TextureView
 {

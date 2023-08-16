@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Engine/Graphics/Graphics.hpp>
 #include <concepts>
 #include <type_traits>
 #include <vulkan/vulkan_core.h>
@@ -26,8 +27,6 @@ consteval VkObjectType toVkObjectType()
 
 template <typename T>
 concept VulkanConvertible = toVkObjectType<T>() != VK_OBJECT_TYPE_UNKNOWN;
-
-#include <Engine/Graphics/Graphics.hpp>
 
 constexpr VkImageUsageFlags toVkImageUsageSingle(ResourceState state)
 {

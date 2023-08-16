@@ -1,7 +1,9 @@
 #pragma once
+#include <Datastructures/Pool/Pool.hpp>
 #include <Engine/Misc/EnumHelpers.hpp>
 #include <cstdint>
 #include <type_traits>
+#include <variant>
 
 // see Barrier/Barrier.hpp
 
@@ -98,8 +100,6 @@ constexpr inline ResourceStateMulti operator|(ResourceState lhs, ResourceState r
     return lhsM | rhs;
 }
 
-#include <Datastructures/Pool.hpp>
-#include <variant>
 struct Texture;
 struct RenderTarget
 {

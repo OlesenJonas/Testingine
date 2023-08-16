@@ -1,7 +1,7 @@
 #pragma once
 
 // todo: only forward declarations where possible
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 #include <Datastructures/Span.hpp>
 #include <Engine/Graphics/Buffer/Buffer.hpp>
 #include <Engine/Graphics/Compute/ComputeShader.hpp>
@@ -87,7 +87,7 @@ class ResourceManager
     // Samplers dont use pool, so special getter needed
     inline Sampler* get(Handle<Sampler> handle)
     {
-        return &samplerArray[handle.index];
+        return &samplerArray[handle.getIndex()];
     }
 
 #define NAME_TO_HANDLE_GETTER(T, LUT)                                                                             \
