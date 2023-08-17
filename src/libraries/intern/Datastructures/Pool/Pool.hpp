@@ -46,15 +46,20 @@ template <typename T>
 class Pool
 {
   public:
-    explicit Pool(uint32_t initialCapacity) : capacity(initialCapacity)
+    Pool() = default;
+    explicit Pool(uint32_t initialCapacity) { init(initialCapacity); }
+    bool init(uint32_t initialCapacity)
     {
+        capacity = initialCapacity;
         freeArray = DynamicBitset{initialCapacity};
         storage = static_cast<T*>(POOL_ALLOC(initialCapacity * sizeof(T), alignof(T))); // NOLINT
         freeArray.fill();
         generations = new uint32_t[initialCapacity]; // NOLINT
         memset(generations, 0u, 4 * initialCapacity);
+
+        return true;
     }
-    ~Pool()
+    void shutdown()
     {
         for(auto i = 0; i < capacity; i++)
         {

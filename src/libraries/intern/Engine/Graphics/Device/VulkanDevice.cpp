@@ -1,13 +1,15 @@
 #include "VulkanDevice.hpp"
-#include "VulkanDebug.hpp"
-
-#include "Graphics/Barrier/Barrier.hpp"
+#include "../Barrier/Barrier.hpp"
+#include "../Compute/ComputeShader.hpp"
+#include "../Material/Material.hpp"
+#include "../Mesh/Mesh.hpp"
 #include "Init/VulkanDeviceFinder.hpp"
 #include "Init/VulkanInit.hpp"
 #include "Init/VulkanSwapchainSetup.hpp"
-#include "ResourceManager/ResourceManager.hpp"
+#include "VulkanConversions.hpp"
+#include "VulkanDebug.hpp"
+
 #include <Datastructures/ArrayHelpers.hpp>
-#include <Engine/Graphics/Device/VulkanConversions.hpp>
 
 #include <GLFW/glfw3.h>
 #include <ImGui/imgui.h>
@@ -26,10 +28,11 @@ void VulkanDevice::init(GLFWwindow* window)
     INIT_STATIC_GETTER();
     mainWindow = window;
 
+    bufferPool.init(10);
+    texturePool.init(10);
+
     initVulkan();
     initPipelineCache();
-
-    // everything went fine
 
     // per frame stuff
     initSwapchain();
@@ -44,14 +47,28 @@ void VulkanDevice::init(GLFWwindow* window)
     _initialized = true;
 }
 
-uint32_t VulkanDevice::getSwapchainWidth()
+void VulkanDevice::destroyResources()
 {
-    return swapchainExtent.width;
+    for(int i = 0; i < freeSamplerIndex; i++)
+    {
+        destroy(&samplerArray[i]);
+    }
+
+    auto clearPool = [&](auto&& pool)
+    {
+        Handle handle = pool.getFirst();
+        while(handle.isValid())
+        {
+            destroy(handle);
+            handle = pool.getFirst();
+        }
+    };
+    clearPool(texturePool);
+    clearPool(bufferPool);
 }
-uint32_t VulkanDevice::getSwapchainHeight()
-{
-    return swapchainExtent.height;
-}
+
+uint32_t VulkanDevice::getSwapchainWidth() { return swapchainExtent.width; }
+uint32_t VulkanDevice::getSwapchainHeight() { return swapchainExtent.height; }
 
 void VulkanDevice::initVulkan()
 {
@@ -376,6 +393,8 @@ void VulkanDevice::cleanup()
 
     savePipelineCache();
 
+    destroyResources();
+
     deleteQueue.flushReverse();
 
     vmaDestroyAllocator(allocator);
@@ -393,13 +412,28 @@ void VulkanDevice::cleanup()
     glfwTerminate();
 }
 
-void VulkanDevice::waitForWorkFinished()
-{
-    vkDeviceWaitIdle(device);
-}
+void VulkanDevice::waitForWorkFinished() { vkDeviceWaitIdle(device); }
 
-VulkanBuffer VulkanDevice::createBuffer(const Buffer::CreateInfo& createInfo)
+Handle<Buffer> VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
 {
+    // High level setup
+
+    if(createInfo.allStates.containsStorageBufferUsage() && createInfo.allStates.containsUniformBufferUsage())
+    {
+        // TODO: LOGGER: Cant use both, using just storage
+        createInfo.allStates.unset(
+            ResourceState::UniformBuffer | ResourceState::UniformBufferGraphics |
+            ResourceState::UniformBufferCompute);
+        assert(!createInfo.allStates.containsUniformBufferUsage());
+    }
+    if(!createInfo.initialData.empty() && !(createInfo.allStates & ResourceState::TransferDst))
+    {
+        // TODO: Log: Trying to create buffer with initial data but without transfer dst bit set
+        createInfo.allStates |= ResourceState::TransferDst;
+    }
+
+    // Low level creation
+
     VulkanBuffer ret;
 
     VkBufferCreateInfo bufferCrInfo{
@@ -491,17 +525,54 @@ VulkanBuffer VulkanDevice::createBuffer(const Buffer::CreateInfo& createInfo)
         ret.resourceIndex = bindlessManager.createBufferBinding(ret.buffer, BindlessManager::BufferUsage::Storage);
     }
 
-    return ret;
+    // TODO: lock pool?
+    Handle<Buffer> newHandle = bufferPool.insert(Buffer{
+        .descriptor =
+            {
+                .size = createInfo.size,
+                .memoryType = createInfo.memoryType,
+                .allStates = createInfo.allStates,
+            },
+        .gpuBuffer = ret,
+    });
+
+    return newHandle;
 }
 
-void VulkanDevice::deleteBuffer(Buffer* buffer)
+void VulkanDevice::destroy(Handle<Buffer> handle)
 {
+    // TODO: Enqueue into a per frame queue
+
+    Buffer* buffer = bufferPool.get(handle);
+    // its possible that this handle is outdated
+    if(buffer == nullptr)
+    {
+        return;
+    }
     deleteQueue.pushBack([=]()
                          { vmaDestroyBuffer(allocator, buffer->gpuBuffer.buffer, buffer->gpuBuffer.allocation); });
+    bufferPool.remove(handle);
 }
 
-VulkanSampler VulkanDevice::createSampler(const Sampler::Info& info)
+Handle<Sampler> VulkanDevice::createSampler(const Sampler::Info& info)
 {
+    // Check if such a sampler already exists
+
+    // since the sampler limit is quite low atm, and sampler creation should be a rare thing
+    // just doing a linear search here. Could of course hash the creation info and do some lookup
+    // in the future
+
+    for(uint32_t i = 0; i < freeSamplerIndex; i++)
+    {
+        Sampler::Info& entryInfo = samplerArray[i].info;
+        if(entryInfo == info)
+        {
+            return Handle<Sampler>{i, 1};
+        }
+    }
+
+    // Otherwise create a new sampler
+
     VkSamplerCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext = nullptr,
@@ -527,16 +598,49 @@ VulkanSampler VulkanDevice::createSampler(const Sampler::Info& info)
     vkCreateSampler(device, &createInfo, nullptr, &sampler.sampler);
     sampler.resourceIndex = bindlessManager.createSamplerBinding(sampler.sampler);
 
-    return sampler;
+    Handle<Sampler> samplerHandle{freeSamplerIndex, 1};
+    freeSamplerIndex++;
+    Sampler* sampler_p = &samplerArray[samplerHandle.getIndex()];
+    sampler_p->sampler = sampler;
+    sampler_p->info = info;
+    assert(sampler_p == get(samplerHandle));
+
+    return samplerHandle;
 }
 
-void VulkanDevice::deleteSampler(Sampler* sampler)
+void VulkanDevice::destroy(Sampler* sampler)
 {
     deleteQueue.pushBack([=]() { vkDestroySampler(device, sampler->sampler.sampler, nullptr); });
 }
 
-VulkanTexture VulkanDevice::createTexture(const Texture::CreateInfo& createInfo)
+Handle<Texture> VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
 {
+    // Hight level setup
+
+    const uint32_t maxDimension = std::max({createInfo.size.width, createInfo.size.height, createInfo.size.depth});
+    const uint32_t maxMipLevels = int32_t(floor(log2(maxDimension))) + 1;
+    // TODO: warn if clmaping to max happened
+    int32_t actualMipLevels = createInfo.mipLevels == Texture::MipLevels::All
+                                  ? maxMipLevels
+                                  : std::min<int32_t>(createInfo.mipLevels, maxMipLevels);
+    assert(actualMipLevels > 0);
+    createInfo.mipLevels = actualMipLevels;
+
+    if(!createInfo.initialData.empty())
+    {
+        // TODO: LOG: warn
+        createInfo.allStates |= ResourceState::TransferDst;
+    }
+
+    if(createInfo.mipLevels > 1)
+    {
+        // TODO: LOG: warn (needed for automatic mip fill)
+        createInfo.allStates |= ResourceState::TransferSrc;
+        createInfo.allStates |= ResourceState::TransferDst;
+    }
+
+    // Low level creation
+
     VulkanTexture ret;
 
     VkImageCreateFlags flags = createInfo.type == Texture::Type::tCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
@@ -849,11 +953,17 @@ VulkanTexture VulkanDevice::createTexture(const Texture::CreateInfo& createInfo)
         }
     }
 
-    return ret;
+    Handle<Texture> newHandle = texturePool.insert(Texture{
+        .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
+        .gpuTexture = std::move(ret),
+    });
+
+    return newHandle;
 }
 
-void VulkanDevice::deleteTexture(Texture* texture)
+void VulkanDevice::destroy(Handle<Texture> handle)
 {
+    Texture* texture = get(handle);
     VkImage image = texture->gpuTexture.image;
     VmaAllocation vmaAllocation = texture->gpuTexture.allocation;
 
@@ -868,65 +978,8 @@ void VulkanDevice::deleteTexture(Texture* texture)
             imageView = texture->gpuTexture._mipImageViews[i];
             deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
         }
-}
 
-VkPipeline VulkanDevice::createComputePipeline(Span<uint32_t> spirv, std::string_view debugName)
-{
-    // (temp) Shader Modules ----------------
-    VkShaderModule tempSM;
-    VkShaderModuleCreateInfo SMCrInfo{
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .pNext = nullptr,
-        .codeSize = 4u * spirv.size(), // size in bytes, but spirvBinary is uint32 vector!
-        .pCode = spirv.data(),
-    };
-    if(vkCreateShaderModule(device, &SMCrInfo, nullptr, &tempSM) != VK_SUCCESS)
-    {
-        assert(false);
-    }
-
-    // todo: check if pipeline with given parameters already exists, and just return that in case it does!
-    //       Though im not sure if that should happen on this level, or as part of the application level
-    //       Especially since it would require something like the spirv path to check equality
-
-    // Creating the pipeline ---------------------------
-    VkPipeline pipeline;
-    const VkPipelineShaderStageCreateInfo shaderStageCrInfo{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .module = tempSM,
-        .pName = "main",
-        .pSpecializationInfo = nullptr,
-    };
-
-    const VkComputePipelineCreateInfo pipelineCrInfo{
-        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .stage = shaderStageCrInfo,
-        .layout = bindlessPipelineLayout,
-        .basePipelineHandle = VK_NULL_HANDLE,
-    };
-
-    if(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCrInfo, nullptr, &pipeline) != VK_SUCCESS)
-    {
-        assert(false);
-    }
-    setDebugName(pipeline, (std::string{debugName}).c_str());
-
-    vkDestroyShaderModule(device, tempSM, nullptr);
-
-    return pipeline;
-}
-
-void VulkanDevice::deleteComputePipeline(ComputeShader* shader)
-{
-    if(shader->pipeline != VK_NULL_HANDLE)
-    {
-        deleteQueue.pushBack([=]() { vkDestroyPipeline(device, shader->pipeline, nullptr); });
-    }
+    texturePool.remove(handle);
 }
 
 VkPipeline VulkanDevice::createGraphicsPipeline(
@@ -1128,11 +1181,62 @@ VkPipeline VulkanDevice::createGraphicsPipeline(
     return pipeline;
 }
 
-void VulkanDevice::deleteGraphicsPipeline(Material* material)
+VkPipeline VulkanDevice::createComputePipeline(Span<uint32_t> spirv, std::string_view debugName)
 {
-    if(material->pipeline != VK_NULL_HANDLE)
+    // (temp) Shader Modules ----------------
+    VkShaderModule tempSM;
+    VkShaderModuleCreateInfo SMCrInfo{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = nullptr,
+        .codeSize = 4u * spirv.size(), // size in bytes, but spirvBinary is uint32 vector!
+        .pCode = spirv.data(),
+    };
+    if(vkCreateShaderModule(device, &SMCrInfo, nullptr, &tempSM) != VK_SUCCESS)
     {
-        deleteQueue.pushBack([=]() { vkDestroyPipeline(device, material->pipeline, nullptr); });
+        assert(false);
+    }
+
+    // todo: check if pipeline with given parameters already exists, and just return that in case it does!
+    //       Though im not sure if that should happen on this level, or as part of the application level
+    //       Especially since it would require something like the spirv path to check equality
+
+    // Creating the pipeline ---------------------------
+    VkPipeline pipeline;
+    const VkPipelineShaderStageCreateInfo shaderStageCrInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .module = tempSM,
+        .pName = "main",
+        .pSpecializationInfo = nullptr,
+    };
+
+    const VkComputePipelineCreateInfo pipelineCrInfo{
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = shaderStageCrInfo,
+        .layout = bindlessPipelineLayout,
+        .basePipelineHandle = VK_NULL_HANDLE,
+    };
+
+    if(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCrInfo, nullptr, &pipeline) != VK_SUCCESS)
+    {
+        assert(false);
+    }
+    setDebugName(pipeline, (std::string{debugName}).c_str());
+
+    vkDestroyShaderModule(device, tempSM, nullptr);
+
+    return pipeline;
+}
+
+void VulkanDevice::destroy(VkPipeline pipeline)
+{
+    if(pipeline != VK_NULL_HANDLE)
+    {
+        deleteQueue.pushBack([=]() { vkDestroyPipeline(device, pipeline, nullptr); });
     }
 }
 
@@ -1222,10 +1326,7 @@ VkCommandBuffer VulkanDevice::beginCommandBuffer(uint32_t threadIndex)
 
     return cmdBuffer;
 }
-void VulkanDevice::endCommandBuffer(VkCommandBuffer cmd)
-{
-    vkEndCommandBuffer(cmd);
-}
+void VulkanDevice::endCommandBuffer(VkCommandBuffer cmd) { vkEndCommandBuffer(cmd); }
 
 void VulkanDevice::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
 {
@@ -1293,8 +1394,6 @@ void VulkanDevice::insertSwapchainImageBarrier(
 void VulkanDevice::beginRendering(
     VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget)
 {
-    ResourceManager* rm = ResourceManager::get();
-
     VkClearValue clearValue{.color = {0.0f, 0.0f, 0.0f, 1.0f}};
     VkClearValue depthStencilClear{.depthStencil = {.depth = 1.0f, .stencil = 0u}};
 
@@ -1303,7 +1402,7 @@ void VulkanDevice::beginRendering(
     for(const auto& target : colorTargets)
     {
         const VkImageView view = std::holds_alternative<Handle<Texture>>(target.texture)
-                                     ? rm->get(std::get<Handle<Texture>>(depthTarget.texture))->fullResourceView()
+                                     ? get(std::get<Handle<Texture>>(depthTarget.texture))->fullResourceView()
                                      : swapchainImageViews[currentSwapchainImageIndex];
         colorAttachmentInfos.emplace_back(VkRenderingAttachmentInfo{
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -1323,7 +1422,7 @@ void VulkanDevice::beginRendering(
         depthAttachmentInfo = {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = rm->get(std::get<Handle<Texture>>(depthTarget.texture))->fullResourceView(),
+            .imageView = get(std::get<Handle<Texture>>(depthTarget.texture))->fullResourceView(),
             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             .loadOp = toVkLoadOp(depthTarget.loadOp),
             .storeOp = toVkStoreOp(depthTarget.storeOp),
@@ -1360,10 +1459,7 @@ void VulkanDevice::beginRendering(
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 }
 
-void VulkanDevice::endRendering(VkCommandBuffer cmd)
-{
-    vkCmdEndRendering(cmd);
-}
+void VulkanDevice::endRendering(VkCommandBuffer cmd) { vkCmdEndRendering(cmd); }
 
 void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers)
 {
@@ -1378,8 +1474,6 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
         }
         else if(barrier.type == Barrier::Type::Image)
         {
-            auto* rm = ResourceManager::get();
-
             const Texture* tex = barrier.image.texture;
             if(tex == nullptr)
             {
@@ -1449,16 +1543,14 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
     imageBarriers.clear();
 }
 
-void VulkanDevice::setGraphicsPipelineState(VkCommandBuffer cmd, Handle<Material> mat)
+void VulkanDevice::setGraphicsPipelineState(VkCommandBuffer cmd, VkPipeline pipe)
 {
-    auto* rm = ResourceManager::get();
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rm->get(mat)->pipeline);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
 }
 
-void VulkanDevice::setComputePipelineState(VkCommandBuffer cmd, Handle<ComputeShader> shader)
+void VulkanDevice::setComputePipelineState(VkCommandBuffer cmd, VkPipeline pipe)
 {
-    auto* rm = ResourceManager::get();
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rm->get(shader)->pipeline);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
 }
 
 // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
@@ -1469,8 +1561,7 @@ void VulkanDevice::pushConstants(VkCommandBuffer cmd, size_t size, void* data, s
 
 void VulkanDevice::bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset)
 {
-    auto* rm = ResourceManager::get();
-    vkCmdBindIndexBuffer(cmd, rm->get(buffer)->gpuBuffer.buffer, offset, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(cmd, get(buffer)->gpuBuffer.buffer, offset, VK_INDEX_TYPE_UINT32);
 }
 
 void VulkanDevice::bindVertexBuffers(
@@ -1480,13 +1571,11 @@ void VulkanDevice::bindVertexBuffers(
     Span<const Handle<Buffer>> buffers,
     Span<const uint64_t> offsets)
 {
-    auto* rm = ResourceManager::get();
-
     assert(buffers.size() == offsets.size());
     std::vector<VkBuffer> vkBuffers{buffers.size()};
     for(int i = 0; i < buffers.size(); i++)
     {
-        vkBuffers[i] = rm->get(buffers[i])->gpuBuffer.buffer;
+        vkBuffers[i] = get(buffers[i])->gpuBuffer.buffer;
         assert(vkBuffers[i]);
     }
     vkCmdBindVertexBuffers(cmd, startBinding, count, &vkBuffers[0], offsets.data());
@@ -1503,10 +1592,7 @@ void VulkanDevice::drawIndexed(
     vkCmdDrawIndexed(cmd, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-void VulkanDevice::drawImGui(VkCommandBuffer cmd)
-{
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
-}
+void VulkanDevice::drawImGui(VkCommandBuffer cmd) { ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd); }
 
 void VulkanDevice::dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
 {
@@ -1533,14 +1619,8 @@ void VulkanDevice::presentSwapchain()
     assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
 }
 
-void VulkanDevice::disableValidationErrorBreakpoint()
-{
-    breakOnValidationError = false;
-}
-void VulkanDevice::enableValidationErrorBreakpoint()
-{
-    breakOnValidationError = true;
-}
+void VulkanDevice::disableValidationErrorBreakpoint() { breakOnValidationError = false; }
+void VulkanDevice::enableValidationErrorBreakpoint() { breakOnValidationError = true; }
 
 void VulkanDevice::startDebugRegion(VkCommandBuffer cmd, const char* name)
 {
@@ -1551,10 +1631,7 @@ void VulkanDevice::startDebugRegion(VkCommandBuffer cmd, const char* name)
     };
     pfnCmdBeginDebugUtilsLabelEXT(cmd, &info);
 }
-void VulkanDevice::endDebugRegion(VkCommandBuffer cmd)
-{
-    pfnCmdEndDebugUtilsLabelEXT(cmd);
-}
+void VulkanDevice::endDebugRegion(VkCommandBuffer cmd) { pfnCmdEndDebugUtilsLabelEXT(cmd); }
 
 void VulkanDevice::setDebugName(VkObjectType type, uint64_t handle, const char* name)
 {

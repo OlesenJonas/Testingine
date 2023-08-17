@@ -126,12 +126,11 @@ Editor::Editor()
     }
     defaultSamplerDefines.close();
 
-    resourceManager.createMaterial(
-        {
-            .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
-        },
-        "PBRBasic");
+    resourceManager.createMaterial({
+        .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
+        .debugName = "PBRBasic",
+    });
     assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);
 
     resourceManager.createMesh(Cube::positions, Cube::attributes, Cube::indices, "DefaultCube");
@@ -178,7 +177,7 @@ Editor::Editor()
         Texture* mipTestTex = resourceManager.get(mipTestTexH);
 
         gfxDevice.startDebugRegion(mainCmdBuffer, "Mip test tex filling");
-        gfxDevice.setComputePipelineState(mainCmdBuffer, debugMipFillShaderH);
+        gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(debugMipFillShaderH)->pipeline);
 
         struct DebugMipFillPushConstants
         {
@@ -238,12 +237,11 @@ Editor::Editor()
             resourceManager.createMesh(triangleVertexPositions, triangleVertexAttributes, {}, "triangle");
     }
 
-    auto unlitTexturedMaterialH = resourceManager.createMaterial(
-        {
-            .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
-        },
-        "texturedUnlit");
+    auto unlitTexturedMaterialH = resourceManager.createMaterial({
+        .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
+        .debugName = "texturedUnlit",
+    });
 
     auto unlitTexturedMaterial = resourceManager.createMaterialInstance(unlitTexturedMaterialH);
     resourceManager.get(unlitTexturedMaterial)
@@ -291,7 +289,7 @@ Editor::Editor()
     ComputeShader* conversionShader = resourceManager.get(conversionShaderHandle);
 
     {
-        gfxDevice.setComputePipelineState(mainCmdBuffer, conversionShaderHandle);
+        gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(conversionShaderHandle)->pipeline);
 
         struct ConversionPushConstants
         {
@@ -334,7 +332,7 @@ Editor::Editor()
     {
         Texture* irradianceTex = resourceManager.get(irradianceTexHandle);
 
-        gfxDevice.setComputePipelineState(mainCmdBuffer, calcIrradianceComp);
+        gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(calcIrradianceComp)->pipeline);
 
         struct ConversionPushConstants
         {
@@ -379,7 +377,7 @@ Editor::Editor()
     {
         Texture* prefilteredEnv = resourceManager.get(prefilteredEnvMap);
 
-        gfxDevice.setComputePipelineState(mainCmdBuffer, prefilterEnvShaderHandle);
+        gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(prefilterEnvShaderHandle)->pipeline);
 
         struct PrefilterPushConstants
         {
@@ -437,7 +435,7 @@ Editor::Editor()
     {
         Texture* brdfIntegral = resourceManager.get(brdfIntegralMap);
 
-        gfxDevice.setComputePipelineState(mainCmdBuffer, integrateBrdfShaderHandle);
+        gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(integrateBrdfShaderHandle)->pipeline);
 
         struct IntegratePushConstants
         {
@@ -477,12 +475,11 @@ Editor::Editor()
         todo:
             load by default on engine init!
     */
-    auto equiSkyboxMat = resourceManager.createMaterial(
-        {
-            .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
-        },
-        "equiSkyboxMat");
+    auto equiSkyboxMat = resourceManager.createMaterial({
+        .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
+        .debugName = "equiSkyboxMat",
+    });
     auto equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
     {
         auto* inst = resourceManager.get(equiSkyboxMatInst);
@@ -490,12 +487,11 @@ Editor::Editor()
         inst->parameters.pushChanges();
     }
 
-    auto cubeSkyboxMat = resourceManager.createMaterial(
-        {
-            .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
-        },
-        "cubeSkyboxMat");
+    auto cubeSkyboxMat = resourceManager.createMaterial({
+        .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
+        .debugName = "cubeSkyboxMat",
+    });
 
     auto cubeSkyboxMatInst = resourceManager.createMaterialInstance(cubeSkyboxMat);
     {
@@ -666,7 +662,8 @@ void Editor::update()
                 if(newMatInst->parentMaterial != lastMaterial)
                 {
                     Material* newMat = resourceManager.get(newMatInst->parentMaterial);
-                    gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, newMatInst->parentMaterial);
+                    gfxDevice.setGraphicsPipelineState(
+                        offscreenCmdBuffer, resourceManager.get(newMatInst->parentMaterial)->pipeline);
                     Buffer* materialParamsBuffer = resourceManager.get(newMat->parameters.getGPUBuffer());
                     if(materialParamsBuffer != nullptr)
                     {

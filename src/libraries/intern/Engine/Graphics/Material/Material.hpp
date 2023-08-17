@@ -1,15 +1,8 @@
 #pragma once
 
 #include "ParameterBuffer.hpp"
-
 #include <Engine/Graphics/Shaders/Shaders.hpp>
 #include <Engine/Misc/StringHash.hpp>
-
-#include <Datastructures/Pool/Pool.hpp>
-#include <string_view>
-#include <type_traits>
-#include <unordered_map>
-#include <vulkan/vulkan_core.h>
 
 class ResourceManager;
 
@@ -26,6 +19,8 @@ struct Material
     {
         Shaders::StageCreateInfo vertexShader;
         Shaders::StageCreateInfo fragmentShader;
+
+        std::string_view debugName;
     };
 
     VkPipeline pipeline = VK_NULL_HANDLE;

@@ -40,14 +40,14 @@ class BindlessManager
     //        At least seperate into compute and graphics?
     static constexpr auto maxBindlessPushConstantSize = sizeof(uint32_t) * 8;
 
-  private:
     // todo: check against limit from physicalDeviceProperties.limits
-    static const uint32_t samplerLimit = 32;
-    static const uint32_t sampledImagesLimit = 128;
-    static const uint32_t storageImagesLimit = 128;
-    static const uint32_t uniformBuffersLimit = 128;
-    static const uint32_t storageBuffersLimit = 128;
+    static constexpr uint32_t samplerLimit = 32;
+    static constexpr uint32_t sampledImagesLimit = 128;
+    static constexpr uint32_t storageImagesLimit = 128;
+    static constexpr uint32_t uniformBuffersLimit = 128;
+    static constexpr uint32_t storageBuffersLimit = 128;
 
+  private:
     struct BindlessSet
     {
         uint32_t setIndex = 0xFFFFFFFF;

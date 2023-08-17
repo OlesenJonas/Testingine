@@ -62,10 +62,7 @@ struct Barrier
         Buffer buffer;
     };
 
-    static inline Barrier from(Image&& barrierInfo)
-    {
-        return Barrier{.type = Type::Image, .image = barrierInfo};
-    }
+    static inline Barrier from(Image&& barrierInfo) { return Barrier{.type = Type::Image, .image = barrierInfo}; }
     static inline Barrier from(Buffer&& barrierInfo)
     {
         return Barrier{.type = Type::Buffer, .buffer = barrierInfo};

@@ -7,16 +7,19 @@
 #include <Engine/Misc/Macros.hpp>
 
 #include <Datastructures/FunctionQueue.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 #include <Datastructures/Span.hpp>
 #include <vulkan/vulkan_core.h>
 
 // TODO: full headers just for the create infos?
-#include <Engine/Graphics/Buffer/Buffer.hpp>
+#include "../Buffer/Buffer.hpp"
 
 struct GLFWwindow;
 struct Material;
 struct Barrier;
 struct ComputeShader;
+struct MaterialInstance;
+struct Mesh;
 
 class VulkanDevice
 {
@@ -25,26 +28,27 @@ class VulkanDevice
   public:
     void init(GLFWwindow* window);
     void cleanup();
+    void destroyResources();
 
     //-----------------------------------
 
-    VulkanBuffer createBuffer(const Buffer::CreateInfo& createInfo);
-    void deleteBuffer(Buffer* buffer);
+    Handle<Buffer> createBuffer(Buffer::CreateInfo&& createInfo);
+    void destroy(Handle<Buffer> handle);
+    inline Buffer* get(Handle<Buffer> handle) { return bufferPool.get(handle); }
 
-    VulkanSampler createSampler(const Sampler::Info& info);
-    void deleteSampler(Sampler* sampler);
+    Handle<Sampler> createSampler(const Sampler::Info& info);
+    void destroy(Sampler* sampler);
+    inline Sampler* get(Handle<Sampler> handle) { return &samplerArray[handle.getIndex()]; }
 
-    VulkanTexture createTexture(const Texture::CreateInfo& createInfo);
-    void deleteTexture(Texture* texture);
+    Handle<Texture> createTexture(Texture::CreateInfo&& createInfo);
+    void destroy(Handle<Texture> handle);
+    inline Texture* get(Handle<Texture> handle) { return texturePool.get(handle); }
 
-    VkPipeline createComputePipeline(Span<uint32_t> spirv, std::string_view debugName);
-    void deleteComputePipeline(ComputeShader* shader);
-
-    // TODO: not sure how to handle the material abstraction since a material could contain multiple pipeline
-    // states depending on vertex layout etc
+    // TODO: wrap in handles aswell?
     VkPipeline
     createGraphicsPipeline(Span<uint32_t> vertexSpirv, Span<uint32_t> fragmentSpirv, std::string_view debugName);
-    void deleteGraphicsPipeline(Material* material);
+    VkPipeline createComputePipeline(Span<uint32_t> spirv, std::string_view debugName);
+    void destroy(VkPipeline pipeline);
 
     //-----------------------------------
 
@@ -67,8 +71,8 @@ class VulkanDevice
     void insertSwapchainImageBarrier(VkCommandBuffer cmd, ResourceState currentState, ResourceState targetState);
     void insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers);
 
-    void setGraphicsPipelineState(VkCommandBuffer cmd, Handle<Material> mat);
-    void setComputePipelineState(VkCommandBuffer cmd, Handle<ComputeShader> shader);
+    void setGraphicsPipelineState(VkCommandBuffer cmd, VkPipeline pipe);
+    void setComputePipelineState(VkCommandBuffer cmd, VkPipeline pipe);
     // this explicitely uses the bindless layout, so just call this function setBindlessIndices ??
     void pushConstants(VkCommandBuffer cmd, size_t size, void* data, size_t offset = 0);
     void bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset = 0);
@@ -122,10 +126,7 @@ class VulkanDevice
         std::vector<std::vector<VkCommandBuffer>> usedCommandBuffersPerPool{};
     };
     PerFrameData perFrameData[FRAMES_IN_FLIGHT];
-    inline PerFrameData& getCurrentFrameData()
-    {
-        return perFrameData[frameNumber % FRAMES_IN_FLIGHT];
-    }
+    inline PerFrameData& getCurrentFrameData() { return perFrameData[frameNumber % FRAMES_IN_FLIGHT]; }
     uint32_t currentSwapchainImageIndex = 0xFFFFFFFF;
 
     // TODO: move into variable part on refactor
@@ -164,6 +165,17 @@ class VulkanDevice
     VkFormat defaultDepthFormat;
 
   private:
+    // --------- Resources
+
+    Pool<Buffer> bufferPool;
+    Pool<Texture> texturePool;
+    // this value needs to match the one in bindless.glsl!
+    // todo: could pass this as a define to shader compilation I guess
+    std::array<Sampler, BindlessManager::samplerLimit> samplerArray;
+    // since samplers are never deleted, a simple linear index is enough
+    // todo: free entries after they arent in use for some time, then need mechanism to reclaim that entry
+    uint32_t freeSamplerIndex = 0;
+
     // ---------
     VkDebugUtilsMessengerEXT debugMessenger;
     PFN_vkSetDebugUtilsObjectNameEXT setObjectDebugName = nullptr;
