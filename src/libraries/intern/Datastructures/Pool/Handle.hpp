@@ -12,7 +12,7 @@ class Handle
     Handle(uint32_t index, uint32_t generation) : index(index), generation(generation){};
     static Handle Invalid() { return {0, 0}; }
     static Handle Null() { return Invalid(); }
-    [[nodiscard]] bool isValid() const { return generation != 0u; }
+    [[nodiscard]] bool isValid() const { return generation != 0u || index != 0u; }
     bool operator==(const Handle<T>& other) const
     {
         return index == other.index && generation == other.generation;
