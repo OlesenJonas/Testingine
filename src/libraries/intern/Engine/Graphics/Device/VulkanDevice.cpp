@@ -30,6 +30,7 @@ void VulkanDevice::init(GLFWwindow* window)
 
     bufferPool.init(10);
     texturePool.init(10);
+    samplerPool.init(BindlessManager::samplerLimit);
 
     initVulkan();
     initPipelineCache();
@@ -49,11 +50,6 @@ void VulkanDevice::init(GLFWwindow* window)
 
 void VulkanDevice::destroyResources()
 {
-    for(int i = 0; i < freeSamplerIndex; i++)
-    {
-        destroy(&samplerArray[i]);
-    }
-
     auto clearPool = [&](auto&& pool)
     {
         Handle handle = pool.getFirst();
@@ -63,6 +59,7 @@ void VulkanDevice::destroyResources()
             handle = pool.getFirst();
         }
     };
+    clearPool(samplerPool);
     clearPool(texturePool);
     clearPool(bufferPool);
 }
@@ -562,14 +559,9 @@ Handle<Sampler> VulkanDevice::createSampler(const Sampler::Info& info)
     // just doing a linear search here. Could of course hash the creation info and do some lookup
     // in the future
 
-    for(uint32_t i = 0; i < freeSamplerIndex; i++)
-    {
-        Sampler::Info& entryInfo = samplerArray[i].info;
-        if(entryInfo == info)
-        {
-            return Handle<Sampler>{i, 1};
-        }
-    }
+    Handle<Sampler> newHandle = samplerPool.find([&](Sampler* sampler) { return sampler->info == info; });
+    if(newHandle.isValid())
+        return newHandle;
 
     // Otherwise create a new sampler
 
@@ -598,19 +590,19 @@ Handle<Sampler> VulkanDevice::createSampler(const Sampler::Info& info)
     vkCreateSampler(device, &createInfo, nullptr, &sampler.sampler);
     sampler.resourceIndex = bindlessManager.createSamplerBinding(sampler.sampler);
 
-    Handle<Sampler> samplerHandle{freeSamplerIndex, 1};
-    freeSamplerIndex++;
-    Sampler* sampler_p = &samplerArray[samplerHandle.getIndex()];
-    sampler_p->sampler = sampler;
-    sampler_p->info = info;
-    assert(sampler_p == get(samplerHandle));
+    newHandle = samplerPool.insert(Sampler{
+        .info = info,
+        .sampler = sampler,
+    });
 
-    return samplerHandle;
+    return newHandle;
 }
 
-void VulkanDevice::destroy(Sampler* sampler)
+void VulkanDevice::destroy(Handle<Sampler> sampler)
 {
-    deleteQueue.pushBack([=]() { vkDestroySampler(device, sampler->sampler.sampler, nullptr); });
+    VulkanSampler vksampler = get(sampler)->sampler;
+    deleteQueue.pushBack([=]() { vkDestroySampler(device, vksampler.sampler, nullptr); });
+    samplerPool.remove(sampler);
 }
 
 Handle<Texture> VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)

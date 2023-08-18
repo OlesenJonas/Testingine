@@ -4,7 +4,7 @@
 
 namespace PoolHelper
 {
-    inline constexpr size_t unlimited = ~(size_t(0u));
+    inline constexpr uint32_t unlimited = ~(uint32_t(0u));
 
     template <typename T>
     concept hasRelocationHint = requires(T t) {

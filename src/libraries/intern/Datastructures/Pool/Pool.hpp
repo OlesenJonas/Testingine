@@ -5,6 +5,7 @@
 #include "PoolHelpers.hpp"
 
 #include <cassert>
+#include <functional>
 #include <type_traits>
 
 // Handle and Pool types as shown in https://twitter.com/SebAaltonen/status/1562747716584648704 and realted tweets
@@ -26,7 +27,7 @@
     #define POOL_FREE std::free
 #endif
 
-template <size_t limit, typename T>
+template <uint32_t limit, typename T>
 // TODO: not sure which concepts should be used here...
 //   internally memory is just memcopy-ed on resize, so the object should just be movable, but they could have
 //   destructors.
@@ -36,9 +37,9 @@ class PoolImpl
   public:
     PoolImpl() = default;
 
-    explicit PoolImpl(size_t initialCapacity) { init(initialCapacity); }
+    explicit PoolImpl(uint32_t initialCapacity) { init(initialCapacity); }
 
-    bool init(size_t initialCapacity)
+    bool init(uint32_t initialCapacity)
     {
         capacity = std::min(limit, initialCapacity);
         freeArray = DynamicBitset{capacity};
@@ -130,10 +131,22 @@ class PoolImpl
         return handle.getGeneration() == generations[handle.getIndex()];
     }
 
+    Handle<T> find(std::function<bool(T*)> pred)
+    {
+        for(uint32_t i = 0; i < capacity; i++)
+        {
+            if(!freeArray.getBit(i) && pred(&storage[i]))
+            {
+                return Handle<T>{i, generations[i]};
+            }
+        }
+        return Handle<T>::Null();
+    }
+
   private:
     void grow()
     {
-        size_t oldCapacity = capacity;
+        uint32_t oldCapacity = capacity;
         T* oldStorage = storage;
         uint32_t* oldGenerations = generations;
 
@@ -172,7 +185,7 @@ class PoolImpl
     static constexpr bool canUseMemcpy = PoolHelper::is_trivially_relocatable<T>;
     static constexpr bool isLimited = limit != PoolHelper::unlimited;
 
-    size_t capacity = 0;
+    uint32_t capacity = 0;
     T* storage = nullptr;
     DynamicBitset freeArray{0};
     uint32_t* generations = nullptr;
@@ -181,5 +194,5 @@ class PoolImpl
 template <typename T>
 using Pool = PoolImpl<PoolHelper::unlimited, T>;
 
-template <size_t limit, typename T>
+template <uint32_t limit, typename T>
 using PoolLimited = PoolImpl<limit, T>;

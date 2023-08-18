@@ -37,8 +37,8 @@ class VulkanDevice
     inline Buffer* get(Handle<Buffer> handle) { return bufferPool.get(handle); }
 
     Handle<Sampler> createSampler(const Sampler::Info& info);
-    void destroy(Sampler* sampler);
-    inline Sampler* get(Handle<Sampler> handle) { return &samplerArray[handle.getIndex()]; }
+    void destroy(Handle<Sampler> sampler);
+    inline Sampler* get(Handle<Sampler> handle) { return samplerPool.get(handle); }
 
     Handle<Texture> createTexture(Texture::CreateInfo&& createInfo);
     void destroy(Handle<Texture> handle);
@@ -169,12 +169,8 @@ class VulkanDevice
 
     Pool<Buffer> bufferPool;
     Pool<Texture> texturePool;
-    // this value needs to match the one in bindless.glsl!
-    // todo: could pass this as a define to shader compilation I guess
-    std::array<Sampler, BindlessManager::samplerLimit> samplerArray;
-    // since samplers are never deleted, a simple linear index is enough
-    // todo: free entries after they arent in use for some time, then need mechanism to reclaim that entry
-    uint32_t freeSamplerIndex = 0;
+    // this value needs to match "GLOBAL_SAMPLER_COUNT" in the bindless shader code! Pass as eg. spec constant?
+    PoolLimited<BindlessManager::samplerLimit, Sampler> samplerPool;
 
     // ---------
     VkDebugUtilsMessengerEXT debugMessenger;
