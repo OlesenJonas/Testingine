@@ -42,10 +42,10 @@ class PoolImpl
     bool init(uint32_t initialCapacity)
     {
         capacity = std::min(limit, initialCapacity);
-        freeArray = DynamicBitset{capacity};
+        inUseMask = DynamicBitset{capacity};
+        inUseMask.clear();
         storage = static_cast<T*>(POOL_ALLOC(capacity * sizeof(T), alignof(T))); // NOLINT
-        freeArray.fill();
-        generations = new uint32_t[capacity]; // NOLINT
+        generations = new uint32_t[capacity];                                    // NOLINT
         memset(generations, 0u, 4 * capacity);
         // otherwise first insert in slot0 will have handle {0,0} which is representation of invalid
         generations[0] = 1;
@@ -56,7 +56,7 @@ class PoolImpl
     {
         for(auto i = 0; i < capacity; i++)
         {
-            if(!freeArray.getBit(i))
+            if(inUseMask.getBit(i))
             {
                 storage[i].~T();
             }
@@ -66,7 +66,7 @@ class PoolImpl
 
         capacity = 0;
         storage = nullptr;
-        freeArray.resize(0);
+        inUseMask.resize(0);
         generations = nullptr;
     }
     ~PoolImpl() { shutdown(); }
@@ -75,7 +75,7 @@ class PoolImpl
     Handle<T> insert(ArgTypes&&... args)
         requires std::is_constructible_v<T, ArgTypes...>
     {
-        if(!freeArray.anyBitSet())
+        if(!inUseMask.anyBitClear())
         {
             if constexpr(isLimited)
             {
@@ -85,9 +85,9 @@ class PoolImpl
             grow();
         }
 
-        uint32_t index = freeArray.getFirstBitSet();
+        uint32_t index = inUseMask.getFirstBitClear();
         T* newT = new(&storage[index]) T(std::forward<ArgTypes>(args)...); // placement new
-        freeArray.clearBit(index);
+        inUseMask.setBit(index);
 
         const Handle<T> newHandle{index, generations[index]};
         assert(isHandleValid(newHandle));
@@ -104,7 +104,7 @@ class PoolImpl
         }
         generations[handle.getIndex()]++;
         storage[handle.getIndex()].~T();
-        freeArray.setBit(handle.getIndex());
+        inUseMask.clearBit(handle.getIndex());
     }
 
     inline T* get(Handle<T> handle)
@@ -116,10 +116,10 @@ class PoolImpl
 
     Handle<T> getFirst()
     {
-        if(!freeArray.anyBitClear())
+        if(!inUseMask.anyBitSet())
             return Handle<T>::Null();
 
-        uint32_t index = freeArray.getFirstBitClear();
+        uint32_t index = inUseMask.getFirstBitSet();
 
         return {index, generations[index]};
     }
@@ -135,13 +135,67 @@ class PoolImpl
     {
         for(uint32_t i = 0; i < capacity; i++)
         {
-            if(!freeArray.getBit(i) && pred(&storage[i]))
+            if(inUseMask.getBit(i) && pred(&storage[i]))
             {
                 return Handle<T>{i, generations[i]};
             }
         }
         return Handle<T>::Null();
     }
+
+    // Basic pointer to enable iterating over elements
+    // iterate directly over the elements inside the storage array
+    //   TODO: could have another iterator that uses Handles which would be a bit more robust in some cases I think
+    struct DirectIterator
+    {
+        using iterator_type = std::forward_iterator_tag;
+        using difference_type = uint32_t;
+        // TODO: iterate over the handles? or over tuples?
+        // using value_type = T;
+        // using pointer = Handle<T>;
+        // using reference = Handle<T>;
+
+        using Pool = PoolImpl<limit, T>;
+
+        DirectIterator(uint32_t start, Pool* owner) : pool(owner), index(start) {}
+
+        T* operator*() const { return &pool->storage[index]; };
+        T& operator->() { return pool->storage[index]; };
+
+        DirectIterator& operator++()
+        {
+            // TODO: test if its faster to just for loop over all bits and get them here
+            //       maybe with caching the current word
+            // TODO: implement alternative iterator that caches full words of the freeLists bitmask?
+            //       would be invalidated by insertions and removals (since cached mask != actual free mask), but
+            //       faster
+            index = pool->inUseMask.getNextBitSet(index);
+            return *this;
+        }
+
+        DirectIterator operator++(int)
+        {
+            DirectIterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        friend bool operator==(const DirectIterator& a, const DirectIterator& b)
+        {
+            return a.pool == b.pool && a.index == b.index;
+        }
+        friend bool operator!=(const DirectIterator& a, const DirectIterator& b)
+        {
+            return a.pool != b.pool || a.index != b.index;
+        }
+
+      private:
+        uint32_t index;
+        Pool* pool;
+    };
+
+    DirectIterator begin() { return {inUseMask.getFirstBitSet(), this}; }
+    DirectIterator end() { return {0xFFFFFFFF, this}; }
 
   private:
     void grow()
@@ -156,10 +210,10 @@ class PoolImpl
         generations = new uint32_t[capacity];                                    // NOLINT
         // todo: really just need to memset the part thats not memcpy-ed into afterwards
         memset(generations, 0u, 4 * capacity);
-        freeArray.resize(capacity);
+        inUseMask.resize(capacity);
 
         memcpy(generations, oldGenerations, oldCapacity * sizeof(uint32_t));
-        freeArray.fill(oldCapacity, capacity - 1);
+        inUseMask.clear(oldCapacity, capacity - 1);
 
         if constexpr(canUseMemcpy)
         {
@@ -187,7 +241,8 @@ class PoolImpl
 
     uint32_t capacity = 0;
     T* storage = nullptr;
-    DynamicBitset freeArray{0};
+    // bit set == element currently contains active object
+    DynamicBitset inUseMask{0};
     uint32_t* generations = nullptr;
 };
 
