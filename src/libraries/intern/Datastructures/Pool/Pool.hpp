@@ -161,6 +161,7 @@ class PoolImpl
 
         T* operator*() const { return &pool->storage[index]; };
         T& operator->() { return pool->storage[index]; };
+        Handle<T> asHandle() { return {index, pool->generations[index]}; }
 
         DirectIterator& operator++()
         {

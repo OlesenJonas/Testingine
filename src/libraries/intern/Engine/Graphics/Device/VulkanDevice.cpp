@@ -52,11 +52,9 @@ void VulkanDevice::destroyResources()
 {
     auto clearPool = [&](auto&& pool)
     {
-        Handle handle = pool.getFirst();
-        while(handle.isValid())
+        for(auto iter = pool.begin(); iter != pool.end(); iter++)
         {
-            destroy(handle);
-            handle = pool.getFirst();
+            destroy(iter.asHandle());
         }
     };
     clearPool(samplerPool);
