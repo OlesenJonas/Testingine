@@ -202,4 +202,24 @@ int main()
         bitset.clearBit(32);
         assert(bitset.getFirstBitClear() == 32);
     }
+    {
+        DynamicBitset bitset{110};
+        bitset.setBit(3);
+        bitset.setBit(13);
+        assert(bitset.getFirstBitSet() == 3);
+        assert(bitset.getNextBitSet(3) == 13);
+
+        bitset.setBit(32);
+        assert(bitset.getNextBitSet(13) == 32);
+        bitset.setBit(63);
+        assert(bitset.getNextBitSet(32) == 63);
+        bitset.setBit(64);
+        assert(bitset.getNextBitSet(63) == 64);
+
+        bitset.setBit(96);
+        assert(bitset.getNextBitSet(96) == 0xFFFFFFFF);
+        bitset.setBit(108);
+        assert(bitset.getNextBitSet(96) == 108);
+        assert(bitset.getNextBitSet(108) == 0xFFFFFFFF);
+    }
 }
