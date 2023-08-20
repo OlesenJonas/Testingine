@@ -4,14 +4,13 @@
 #include <Datastructures/Span.hpp>
 #include <Engine/Graphics/Buffer/Buffer.hpp>
 #include <Engine/Graphics/Compute/ComputeShader.hpp>
+#include <Engine/Graphics/Device/VulkanDevice.hpp>
 #include <Engine/Graphics/Material/Material.hpp>
-#include <Engine/Graphics/Material/MaterialInstance.hpp>
 #include <Engine/Graphics/Mesh/Mesh.hpp>
 #include <Engine/Graphics/Texture/Sampler.hpp>
 #include <Engine/Graphics/Texture/Texture.hpp>
 #include <Engine/Graphics/Texture/TextureView.hpp>
 #include <Engine/Misc/Macros.hpp>
-#include <Engine/Misc/StringHash.hpp>
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
@@ -64,7 +63,7 @@ class ResourceManager
     inline Material* get(Handle<Material> handle) { return materialPool.get(handle); };
     CREATE_NAME_TO_HANDLE_GETTER(Material, nameToMaterialLUT);
 
-    Handle<MaterialInstance> createMaterialInstance(Handle<Material> material);
+    Handle<MaterialInstance> createMaterialInstance(Handle<Material> parent);
     void destroy(Handle<MaterialInstance> handle);
     inline MaterialInstance* get(Handle<MaterialInstance> handle) { return materialInstancePool.get(handle); };
 
@@ -76,7 +75,8 @@ class ResourceManager
 
     void cleanup();
 
-    constexpr static uint32_t samplerLimit = 32;
+    auto& getMaterialPool() { return materialPool; }
+    auto& getMaterialInstancePool() { return materialInstancePool; }
 
   private:
     bool _initialized = false;

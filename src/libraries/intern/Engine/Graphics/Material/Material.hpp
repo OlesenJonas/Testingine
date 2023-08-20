@@ -1,16 +1,20 @@
 #pragma once
 
-#include "ParameterBuffer.hpp"
+#include <Datastructures/Pool/Handle.hpp>
+#include <Datastructures/Pool/PoolHelpers.hpp>
+#include <Datastructures/StringMap.hpp>
 #include <Engine/Graphics/Shaders/Shaders.hpp>
-#include <Engine/Misc/StringHash.hpp>
 
-class ResourceManager;
+// TODO: find abstraction for VkPipeline and remove include
+#include <vulkan/vulkan_core.h>
 
-struct ParameterInfo
+struct Buffer;
+
+struct ParameterBuffer
 {
-    // todo: use some bits to store type information etc. so I can do at least *some* tests
-    uint16_t byteSize = 0xFFFF;
-    uint16_t byteOffsetInBuffer = 0xFFFF;
+    uint32_t bufferSize = 0;
+    Handle<Buffer> writeBuffer = Handle<Buffer>::Invalid();
+    Handle<Buffer> deviceBuffer = Handle<Buffer>::Invalid();
 };
 
 struct Material
@@ -23,20 +27,42 @@ struct Material
         std::string_view debugName;
     };
 
-    VkPipeline pipeline = VK_NULL_HANDLE;
+    struct ParameterInfo
+    {
+        // todo: use some bits to store type information etc. so I can do at least *some* tests
+        uint16_t byteSize = 0;
+        uint16_t byteOffsetInBuffer = 0;
+    };
+    using ParameterMap = StringMap<ParameterInfo>;
+
+    std::string name;
+
+    ParameterMap parametersLUT;
+    size_t parametersBufferSize = 0;
+    ParameterMap instanceParametersLUT;
+    size_t instanceParametersBufferSize = 0;
 
     ParameterBuffer parameters;
 
-  private:
-    using ParameterMap = std::unordered_map<std::string, ParameterInfo, StringHash, std::equal_to<>>;
-    // not sure I like this being a pointer, but for now it makes stuff easier
-    ParameterMap* parametersLUT = nullptr;
-    ParameterMap* instanceParametersLUT = nullptr;
-    uint32_t parametersBufferSize = 0;
-    uint32_t instanceParametersBufferSize = 0;
+    VkPipeline pipeline = VK_NULL_HANDLE;
 
-    friend ParameterBuffer;
-    friend ResourceManager;
+    bool dirty = false;
+
+    void setResource(std::string_view name, uint32_t index);
 };
 
-static_assert(PoolHelper::is_trivially_relocatable<Material>);
+static_assert(std::is_move_constructible<Material>::value);
+
+struct MaterialInstance
+{
+    Handle<Material> parentMaterial;
+
+    ParameterBuffer parameters;
+
+    bool dirty = false;
+
+    void setResource(std::string_view name, uint32_t index);
+};
+
+static_assert(std::is_move_constructible<MaterialInstance>::value);
+static_assert(PoolHelper::is_trivially_relocatable<MaterialInstance>);

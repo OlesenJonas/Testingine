@@ -129,18 +129,9 @@ void BindlessManager::init()
     }
 }
 
-uint32_t BindlessManager::getDescriptorSetsCount() const
-{
-    return bindlessDescriptorSets.size();
-}
-const VkDescriptorSet* BindlessManager::getDescriptorSets()
-{
-    return bindlessDescriptorSets.data();
-}
-const VkDescriptorSetLayout* BindlessManager::getDescriptorSetLayouts()
-{
-    return bindlessSetLayouts.data();
-}
+uint32_t BindlessManager::getDescriptorSetsCount() const { return bindlessDescriptorSets.size(); }
+const VkDescriptorSet* BindlessManager::getDescriptorSets() { return bindlessDescriptorSets.data(); }
+const VkDescriptorSetLayout* BindlessManager::getDescriptorSetLayouts() { return bindlessSetLayouts.data(); }
 
 uint32_t BindlessManager::createBufferBinding(VkBuffer buffer, BufferUsage possibleBufferUsage)
 {
@@ -197,7 +188,7 @@ void createImageDescriptor(
         .imageLayout = layout,
     };
 
-    uint32_t binding = descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ? ResourceManager::samplerLimit : 0;
+    uint32_t binding = descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ? BindlessManager::samplerLimit : 0;
 
     VkWriteDescriptorSet setWrite{
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,

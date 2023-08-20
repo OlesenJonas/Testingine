@@ -156,7 +156,7 @@ Editor::Editor()
     // Scene and other test stuff loading -------------------------------------------
 
     // Disable validation error breakpoints during init, synch errors arent correct
-    // gfxDevice.disableValidationErrorBreakpoint();
+    gfxDevice.disableValidationErrorBreakpoint();
 
     Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf", &ecs, sceneRoot);
 
@@ -209,11 +209,11 @@ Editor::Editor()
         gfxDevice.insertBarriers(
             mainCmdBuffer,
             {
-                Barrier::from(Barrier::Image{
+                Barrier::FromImage{
                     .texture = resourceManager.get(mipTestTexH),
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
-                }),
+                },
             });
         gfxDevice.endDebugRegion(mainCmdBuffer);
     }
@@ -245,8 +245,7 @@ Editor::Editor()
 
     auto unlitTexturedMaterial = resourceManager.createMaterialInstance(unlitTexturedMaterialH);
     resourceManager.get(unlitTexturedMaterial)
-        ->parameters.setResource("texture", resourceManager.get(mipTestTexH)->fullResourceIndex());
-    resourceManager.get(unlitTexturedMaterial)->parameters.pushChanges();
+        ->setResource("texture", resourceManager.get(mipTestTexH)->fullResourceIndex());
 
     auto newRenderable = ecs.createEntity();
     {
@@ -306,11 +305,11 @@ Editor::Editor()
         gfxDevice.insertBarriers(
             mainCmdBuffer,
             {
-                Barrier::from(Barrier::Image{
+                Barrier::FromImage{
                     .texture = resourceManager.get(hdriCube),
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
-                }),
+                },
             });
 
         gfxDevice.fillMipLevels(mainCmdBuffer, resourceManager.get(hdriCube), ResourceState::SampleSource);
@@ -352,11 +351,11 @@ Editor::Editor()
         gfxDevice.insertBarriers(
             mainCmdBuffer,
             {
-                Barrier::from(Barrier::Image{
+                Barrier::FromImage{
                     .texture = resourceManager.get(irradianceTexHandle),
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
-                }),
+                },
             });
     }
 
@@ -411,11 +410,11 @@ Editor::Editor()
         gfxDevice.insertBarriers(
             mainCmdBuffer,
             {
-                Barrier::from(Barrier::Image{
+                Barrier::FromImage{
                     .texture = resourceManager.get(prefilteredEnvMap),
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
-                }),
+                },
             });
     }
 
@@ -452,22 +451,19 @@ Editor::Editor()
         gfxDevice.insertBarriers(
             mainCmdBuffer,
             {
-                Barrier::from(Barrier::Image{
+                Barrier::FromImage{
                     .texture = resourceManager.get(brdfIntegralMap),
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
-                }),
+                },
             });
     }
 
     // TODO: getPtrTmp() function (explicitetly state temporary!)
     auto* basicPBRMaterial = resourceManager.get(resourceManager.getMaterial("PBRBasic"));
-    basicPBRMaterial->parameters.setResource(
-        "irradianceTex", resourceManager.get(irradianceTexHandle)->fullResourceIndex());
-    basicPBRMaterial->parameters.setResource(
-        "prefilterTex", resourceManager.get(prefilteredEnvMap)->fullResourceIndex());
-    basicPBRMaterial->parameters.setResource("brdfLUT", resourceManager.get(brdfIntegralMap)->fullResourceIndex());
-    basicPBRMaterial->parameters.pushChanges();
+    basicPBRMaterial->setResource("irradianceTex", resourceManager.get(irradianceTexHandle)->fullResourceIndex());
+    basicPBRMaterial->setResource("prefilterTex", resourceManager.get(prefilteredEnvMap)->fullResourceIndex());
+    basicPBRMaterial->setResource("brdfLUT", resourceManager.get(brdfIntegralMap)->fullResourceIndex());
 
     auto defaultCube = resourceManager.getMesh("DefaultCube");
 
@@ -483,8 +479,7 @@ Editor::Editor()
     auto equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
     {
         auto* inst = resourceManager.get(equiSkyboxMatInst);
-        inst->parameters.setResource("equirectangularMap", resourceManager.get(hdri)->fullResourceIndex());
-        inst->parameters.pushChanges();
+        inst->setResource("equirectangularMap", resourceManager.get(hdri)->fullResourceIndex());
     }
 
     auto cubeSkyboxMat = resourceManager.createMaterial({
@@ -496,9 +491,8 @@ Editor::Editor()
     auto cubeSkyboxMatInst = resourceManager.createMaterialInstance(cubeSkyboxMat);
     {
         auto* inst = resourceManager.get(cubeSkyboxMatInst);
-        inst->parameters.setResource("cubeMap", resourceManager.get(hdriCube)->fullResourceIndex());
-        // inst->parameters.setResource("cubeMap", resourceManager.get(irradianceTexHandle)->sampledResourceIndex);
-        inst->parameters.pushChanges();
+        inst->setResource("cubeMap", resourceManager.get(hdriCube)->fullResourceIndex());
+        // inst->setResource("cubeMap", resourceManager.get(irradianceTexHandle)->sampledResourceIndex);
     }
 
     // todo: createEntity takes initial set of components as arguments and returns all the pointers as []-thingy
@@ -513,8 +507,71 @@ Editor::Editor()
 
     // ------------------------------------------------------------------------------
 
+    gfxDevice.enableValidationErrorBreakpoint();
+
     gfxDevice.endCommandBuffer(mainCmdBuffer);
-    gfxDevice.submitCommandBuffers({mainCmdBuffer});
+
+    VkCommandBuffer materialUpdateCmds = gfxDevice.beginCommandBuffer();
+    auto& materials = resourceManager.getMaterialPool();
+    // TODO: MERGE ALL BARRIER SUBMITS !!
+    for(auto iter = materials.begin(); iter != materials.end(); iter++)
+    {
+        auto* material = *iter;
+        if(!material->dirty)
+            continue;
+        gfxDevice.insertBarriers(
+            materialUpdateCmds,
+            {
+                Barrier::FromBuffer{
+                    .buffer = resourceManager.get(material->parameters.deviceBuffer),
+                    .stateBefore = ResourceState::UniformBuffer,
+                    .stateAfter = ResourceState::TransferDst,
+                },
+            });
+        gfxDevice.copyBuffer(
+            materialUpdateCmds, material->parameters.writeBuffer, material->parameters.deviceBuffer);
+        material->dirty = false;
+        gfxDevice.insertBarriers(
+            materialUpdateCmds,
+            {
+                Barrier::FromBuffer{
+                    .buffer = resourceManager.get(material->parameters.deviceBuffer),
+                    .stateBefore = ResourceState::TransferDst,
+                    .stateAfter = ResourceState::UniformBuffer,
+                },
+            });
+    }
+    auto& materialInstances = resourceManager.getMaterialInstancePool();
+    for(auto iter = materialInstances.begin(); iter != materialInstances.end(); iter++)
+    {
+        auto* materialInst = *iter;
+        if(!materialInst->dirty)
+            continue;
+        gfxDevice.insertBarriers(
+            materialUpdateCmds,
+            {
+                Barrier::FromBuffer{
+                    .buffer = resourceManager.get(materialInst->parameters.deviceBuffer),
+                    .stateBefore = ResourceState::UniformBuffer,
+                    .stateAfter = ResourceState::TransferDst,
+                },
+            });
+        gfxDevice.copyBuffer(
+            materialUpdateCmds, materialInst->parameters.writeBuffer, materialInst->parameters.deviceBuffer);
+        materialInst->dirty = false;
+        gfxDevice.insertBarriers(
+            materialUpdateCmds,
+            {
+                Barrier::FromBuffer{
+                    .buffer = resourceManager.get(materialInst->parameters.deviceBuffer),
+                    .stateBefore = ResourceState::TransferDst,
+                    .stateAfter = ResourceState::UniformBuffer,
+                },
+            });
+    }
+    gfxDevice.endCommandBuffer(materialUpdateCmds);
+
+    gfxDevice.submitCommandBuffers({materialUpdateCmds, mainCmdBuffer});
     // Needed so swapchain "progresses" (see vulkan validation message) TODO: fix
     gfxDevice.presentSwapchain();
 
@@ -581,12 +638,12 @@ void Editor::update()
         gfxDevice.insertBarriers(
             offscreenCmdBuffer,
             {
-                Barrier::from(Barrier::Image{
+                Barrier::FromImage{
                     .texture = resourceManager.get(depthTexture),
                     .stateBefore = ResourceState::DepthStencilTarget,
                     .stateAfter = ResourceState::DepthStencilTarget,
                     .allowDiscardOriginal = true,
-                }),
+                },
             });
         gfxDevice.insertSwapchainImageBarrier(
             offscreenCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::Rendertarget);
@@ -662,22 +719,21 @@ void Editor::update()
                 if(newMatInst->parentMaterial != lastMaterial)
                 {
                     Material* newMat = resourceManager.get(newMatInst->parentMaterial);
-                    gfxDevice.setGraphicsPipelineState(
-                        offscreenCmdBuffer, resourceManager.get(newMatInst->parentMaterial)->pipeline);
-                    Buffer* materialParamsBuffer = resourceManager.get(newMat->parameters.getGPUBuffer());
+                    gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, newMat->pipeline);
+                    Buffer* materialParamsBuffer = resourceManager.get(newMat->parameters.deviceBuffer);
                     if(materialParamsBuffer != nullptr)
-                    {
                         pushConstants.materialParamsBuffer = materialParamsBuffer->gpuBuffer.resourceIndex;
-                    }
+                    else
+                        pushConstants.materialParamsBuffer = 0xFFFFFFFF;
                     lastMaterial = newMatInst->parentMaterial;
                 }
 
-                Buffer* materialInstanceParamsBuffer = resourceManager.get(newMatInst->parameters.getGPUBuffer());
+                Buffer* materialInstanceParamsBuffer = resourceManager.get(newMatInst->parameters.deviceBuffer);
                 if(materialInstanceParamsBuffer != nullptr)
-                {
                     pushConstants.materialInstanceParamsBuffer =
                         materialInstanceParamsBuffer->gpuBuffer.resourceIndex;
-                }
+                else
+                    pushConstants.materialInstanceParamsBuffer = 0xFFFFFFFF;
             }
 
             pushConstants.transformIndex = i;

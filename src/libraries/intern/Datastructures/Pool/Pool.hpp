@@ -146,21 +146,23 @@ class PoolImpl
     // Basic pointer to enable iterating over elements
     // iterate directly over the elements inside the storage array
     //   TODO: could have another iterator that uses Handles which would be a bit more robust in some cases I think
+    template <bool isConst = true>
     struct DirectIterator
     {
         using iterator_type = std::forward_iterator_tag;
         using difference_type = uint32_t;
-        // TODO: iterate over the handles? or over tuples?
-        // using value_type = T;
-        // using pointer = Handle<T>;
-        // using reference = Handle<T>;
 
-        using Pool = PoolImpl<limit, T>;
+        using Tptr = std::conditional<isConst, const T*, T*>::type;
+        using Tref = std::conditional<isConst, const T&, T&>::type;
+
+        using Pool = std::conditional<isConst, const PoolImpl<limit, T>, PoolImpl<limit, T>>::type;
 
         DirectIterator(uint32_t start, Pool* owner) : pool(owner), index(start) {}
 
-        T* operator*() const { return &pool->storage[index]; };
-        T& operator->() { return pool->storage[index]; };
+        // would auto here automatically make the return type either T* or const T* ?
+        Tptr operator*() const { return &pool->storage[index]; };
+        Tref operator->() const { return pool->storage[index]; };
+        // TODO: handle const correctness for handles
         Handle<T> asHandle() { return {index, pool->generations[index]}; }
 
         DirectIterator& operator++()
@@ -195,8 +197,12 @@ class PoolImpl
         Pool* pool;
     };
 
-    DirectIterator begin() { return {inUseMask.getFirstBitSet(), this}; }
-    DirectIterator end() { return {0xFFFFFFFF, this}; }
+    DirectIterator<true> cbegin() const { return {inUseMask.getFirstBitSet(), this}; }
+    DirectIterator<true> begin() const { return cbegin(); }
+    DirectIterator<false> begin() { return {inUseMask.getFirstBitSet(), this}; }
+    DirectIterator<true> cend() const { return {0xFFFFFFFF, this}; }
+    DirectIterator<true> end() const { return cend(); }
+    DirectIterator<false> end() { return {0xFFFFFFFF, this}; }
 
   private:
     void grow()

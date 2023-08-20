@@ -1341,6 +1341,34 @@ void VulkanDevice::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
     assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
 }
 
+void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state)
+{
+    return fillMipLevels(cmd, texture->gpuTexture.image, texture->descriptor, state);
+}
+
+void VulkanDevice::copyBuffer(VkCommandBuffer cmd, Handle<Buffer> src, Handle<Buffer> dest)
+{
+    size_t bufSize = get(src)->descriptor.size;
+    copyBuffer(cmd, src, 0, dest, 0, bufSize);
+}
+void VulkanDevice::copyBuffer(
+    VkCommandBuffer cmd, Handle<Buffer> src, size_t srcOffset, Handle<Buffer> dest, size_t destOffset, size_t size)
+{
+    Buffer* srcBuf = get(src);
+    Buffer* destBuf = get(dest);
+    VkBufferCopy copyRegion{
+        srcOffset,
+        destOffset,
+        size,
+    };
+    vkCmdCopyBuffer(cmd, srcBuf->gpuBuffer.buffer, destBuf->gpuBuffer.buffer, 1, &copyRegion);
+}
+
+void VulkanDevice::dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
+{
+    vkCmdDispatch(cmd, groupsX, groupsY, groupsZ);
+}
+
 void VulkanDevice::insertSwapchainImageBarrier(
     VkCommandBuffer cmd, ResourceState currentState, ResourceState targetState)
 {
@@ -1460,7 +1488,31 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
     {
         if(barrier.type == Barrier::Type::Buffer)
         {
-            assert(false);
+            const Buffer* buf = barrier.buffer.buffer;
+            if(buf == nullptr)
+            {
+                BREAKPOINT;
+                continue; // TODO: LOG warning
+            }
+            VkBufferMemoryBarrier2 vkBarrier{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+
+                .srcStageMask = toVkPipelineStage(barrier.buffer.stateBefore),
+                .srcAccessMask = toVkAccessFlags(barrier.buffer.stateBefore),
+
+                .dstStageMask = toVkPipelineStage(barrier.buffer.stateAfter),
+                .dstAccessMask = toVkAccessFlags(barrier.buffer.stateAfter),
+
+                .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
+                .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
+
+                .buffer = buf->gpuBuffer.buffer,
+                .offset = barrier.buffer.offset,
+                .size = barrier.buffer.size,
+            };
+
+            bufferBarriers.emplace_back(vkBarrier);
         }
         else if(barrier.type == Barrier::Type::Image)
         {
@@ -1584,11 +1636,6 @@ void VulkanDevice::drawIndexed(
 
 void VulkanDevice::drawImGui(VkCommandBuffer cmd) { ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd); }
 
-void VulkanDevice::dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
-{
-    vkCmdDispatch(cmd, groupsX, groupsY, groupsZ);
-}
-
 void VulkanDevice::presentSwapchain()
 {
     const auto& curFrameData = getCurrentFrameData();
@@ -1639,11 +1686,6 @@ void VulkanDevice::setDebugName(VkObjectType type, uint64_t handle, const char* 
         .pObjectName = name,
     };
     setObjectDebugName(device, &nameInfo);
-}
-
-void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state)
-{
-    return fillMipLevels(cmd, texture->gpuTexture.image, texture->descriptor, state);
 }
 
 void VulkanDevice::fillMipLevels(

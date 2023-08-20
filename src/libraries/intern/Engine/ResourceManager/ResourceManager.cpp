@@ -254,9 +254,6 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
     auto iterator = nameToMaterialLUT.find(crInfo.debugName);
     assert(iterator == nameToMaterialLUT.end());
 
-    Handle<Material> newMaterialHandle = materialPool.insert();
-    Material* material = get(newMaterialHandle);
-
     std::vector<uint32_t> vertexBinary;
     std::vector<uint32_t> fragmentBinary;
     if(crInfo.vertexShader.sourceLanguage == Shaders::Language::HLSL)
@@ -306,17 +303,14 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
             materialInstanceParametersBinding = &binding;
     }
 
+    Material::ParameterMap parametersMap;
+    size_t parametersBufferSize = 0;
+    Material::ParameterMap instanceParametersMap;
+    size_t instanceParametersBufferSize = 0;
+
     if(materialParametersBinding != nullptr)
     {
-        material->parametersBufferSize = materialParametersBinding->block.padded_size;
-        material->parameters.bufferSize = materialParametersBinding->block.padded_size;
-        material->parameters.cpuBuffer = (char*)malloc(material->parameters.bufferSize);
-        memset(material->parameters.cpuBuffer, 0, material->parameters.bufferSize);
-
-        // Store offset (and size?) as LUT by name for writing parameters later
-        material->parametersLUT = new std::unordered_map<std::string, ParameterInfo, StringHash, std::equal_to<>>;
-        material->parameters.lut = material->parametersLUT;
-        auto& LUT = *material->parametersLUT;
+        parametersBufferSize = materialParametersBinding->block.padded_size;
 
         std::span<SpvReflectBlockVariable> members{
             materialParametersBinding->block.members, materialParametersBinding->block.member_count};
@@ -325,39 +319,20 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
         {
             assert(member.padded_size >= member.size);
 
-            auto insertion = LUT.try_emplace(
+            auto insertion = parametersMap.try_emplace(
                 member.name,
-                ParameterInfo{
+                Material::ParameterInfo{
                     .byteSize = (uint16_t)member.padded_size,
                     // not sure what absolute offset is, but .offset seems to work
                     .byteOffsetInBuffer = (uint16_t)member.offset,
                 });
             assert(insertion.second); // assertion must have happened, otherwise something is srsly wrong
         }
-
-        for(int i = 0; i < VulkanDevice::FRAMES_IN_FLIGHT; i++)
-        {
-            material->parameters.gpuBuffers[i] = createBuffer(Buffer::CreateInfo{
-                .debugName = (std::string{crInfo.debugName} + "Params" + std::to_string(i)),
-                .size = material->parameters.bufferSize,
-                .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
-                .allStates = ResourceState::UniformBuffer | ResourceState::TransferDst,
-                .initialState = ResourceState::UniformBuffer,
-                .initialData = {(uint8_t*)material->parameters.cpuBuffer, material->parametersBufferSize},
-            });
-        }
     }
 
     if(materialInstanceParametersBinding != nullptr)
     {
-        // only create parameter LUT, actual buffers will be allocated when instances are created
-
-        material->instanceParametersBufferSize = materialInstanceParametersBinding->block.padded_size;
-
-        // Store offset (and size?) as LUT by name for writing parameters later
-        material->instanceParametersLUT =
-            new std::unordered_map<std::string, ParameterInfo, StringHash, std::equal_to<>>;
-        auto& LUT = *material->instanceParametersLUT;
+        instanceParametersBufferSize = materialInstanceParametersBinding->block.padded_size;
 
         std::span<SpvReflectBlockVariable> members{
             materialInstanceParametersBinding->block.members,
@@ -367,9 +342,9 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
         {
             assert(member.padded_size >= member.size);
 
-            auto insertion = LUT.try_emplace(
+            auto insertion = instanceParametersMap.try_emplace(
                 member.name,
-                ParameterInfo{
+                Material::ParameterInfo{
                     .byteSize = (uint16_t)member.padded_size,
                     // not sure what absolute offset is, but .offset seems to work
                     .byteOffsetInBuffer = (uint16_t)member.offset,
@@ -378,10 +353,51 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
         }
     }
 
-    nameToMaterialLUT.insert({std::string{crInfo.debugName}, newMaterialHandle});
+    Handle<Material> newMaterialHandle =
+        materialPool.insert(
+            Material{
+                .name = std::string{crInfo.debugName},
+                .parametersLUT = std::move(parametersMap),
+                .parametersBufferSize = parametersBufferSize,
+                .instanceParametersLUT = std::move(instanceParametersMap),
+                .instanceParametersBufferSize = instanceParametersBufferSize,
+                .parameters =
+                    ParameterBuffer{
+                        .bufferSize = uint32_t(parametersBufferSize),
+                        // Dont need to manage names for this, so could create directly through gfx device
+                        .writeBuffer = parametersBufferSize == 0
+                                           ? Handle<Buffer>::Null()
+                                           : createBuffer(Buffer::CreateInfo{
+                                                 .debugName = (std::string{crInfo.debugName} + "ParamsCPU"),
+                                                 .size = parametersBufferSize,
+                                                 .memoryType = Buffer::MemoryType::CPU,
+                                                 .allStates = ResourceState::TransferSrc,
+                                                 .initialState = ResourceState::TransferSrc,
+                                             }),
+                        .deviceBuffer = parametersBufferSize == 0
+                                            ? Handle<Buffer>::Null()
+                                            : createBuffer(Buffer::CreateInfo{
+                                                  .debugName = (std::string{crInfo.debugName} + "ParamsGPU"),
+                                                  .size = parametersBufferSize,
+                                                  .memoryType = Buffer::MemoryType::GPU,
+                                                  .allStates =
+                                                      ResourceState::UniformBuffer | ResourceState::TransferDst,
+                                                  .initialState = ResourceState::TransferDst,
+                                              }),
+                    },
+                .pipeline =
+                    VulkanDevice::get()->createGraphicsPipeline(vertexBinary, fragmentBinary, crInfo.debugName),
+                .dirty = parametersBufferSize > 0,
+            });
 
-    material->pipeline =
-        VulkanDevice::get()->createGraphicsPipeline(vertexBinary, fragmentBinary, crInfo.debugName);
+    if(parametersBufferSize > 0)
+    {
+        Material* material = get(newMaterialHandle);
+        Buffer* writeBuffer = get(material->parameters.writeBuffer);
+        memset(writeBuffer->gpuBuffer.ptr, 0, material->parameters.bufferSize);
+    }
+
+    nameToMaterialLUT.insert({std::string{crInfo.debugName}, newMaterialHandle});
 
     return newMaterialHandle;
 }
@@ -396,52 +412,56 @@ void ResourceManager::destroy(Handle<Material> handle)
 
     VulkanDevice* gfxDevice = VulkanDevice::get();
 
-    if(material->parameters.cpuBuffer != nullptr)
-    {
-        ::free(material->parameters.cpuBuffer);
-
-        uint32_t bufferCount = ArraySize(material->parameters.gpuBuffers);
-        for(int i = 0; i < bufferCount; i++)
-        {
-            Handle<Buffer> buffer = material->parameters.gpuBuffers[i];
-            gfxDevice->destroy(buffer);
-        }
-    }
-
-    delete material->parametersLUT;
-
+    destroy(material->parameters.writeBuffer);
+    destroy(material->parameters.deviceBuffer);
     gfxDevice->destroy(material->pipeline);
 
     materialPool.remove(handle);
 }
 
-Handle<MaterialInstance> ResourceManager::createMaterialInstance(Handle<Material> material)
+Handle<MaterialInstance> ResourceManager::createMaterialInstance(Handle<Material> parent)
 {
-    Handle<MaterialInstance> matInstHandle = materialInstancePool.insert();
-    MaterialInstance* matInst = get(matInstHandle);
-    Material* parentMat = get(material);
-
-    matInst->parentMaterial = material;
-    matInst->parameters.bufferSize = parentMat->instanceParametersBufferSize;
-    if(matInst->parameters.bufferSize > 0)
-    {
-        matInst->parameters.lut = parentMat->instanceParametersLUT;
-        matInst->parameters.cpuBuffer = (char*)malloc(parentMat->instanceParametersBufferSize);
-        memset(matInst->parameters.cpuBuffer, 0, matInst->parameters.bufferSize);
-
-        for(int i = 0; i < VulkanDevice::FRAMES_IN_FLIGHT; i++)
-        {
-            matInst->parameters.gpuBuffers[i] = createBuffer(Buffer::CreateInfo{
-                .size = matInst->parameters.bufferSize,
-                .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
-                .allStates = ResourceState::UniformBuffer | ResourceState::TransferDst,
-                .initialState = ResourceState::UniformBuffer,
-                .initialData = {(uint8_t*)matInst->parameters.cpuBuffer, matInst->parameters.bufferSize},
+    Material* material = get(parent);
+    auto parametersBufferSize = material->instanceParametersBufferSize;
+    Handle<MaterialInstance> newHandle =
+        materialInstancePool.insert(
+            MaterialInstance{
+                .parentMaterial = parent,
+                .parameters =
+                    ParameterBuffer{
+                        .bufferSize = uint32_t(parametersBufferSize),
+                        // Dont need to manage names for this, so could create directly through gfx device
+                        .writeBuffer = parametersBufferSize == 0
+                                           ? Handle<Buffer>::Null()
+                                           : createBuffer(Buffer::CreateInfo{
+                                                 .debugName = (material->name + "InstanceParamsCPU"),
+                                                 .size = parametersBufferSize,
+                                                 .memoryType = Buffer::MemoryType::CPU,
+                                                 .allStates = ResourceState::TransferSrc,
+                                                 .initialState = ResourceState::TransferSrc,
+                                             }),
+                        .deviceBuffer = parametersBufferSize == 0
+                                            ? Handle<Buffer>::Null()
+                                            : createBuffer(Buffer::CreateInfo{
+                                                  .debugName = (material->name + "InstanceParamsGPU"),
+                                                  .size = parametersBufferSize,
+                                                  .memoryType = Buffer::MemoryType::GPU,
+                                                  .allStates =
+                                                      ResourceState::UniformBuffer | ResourceState::TransferDst,
+                                                  .initialState = ResourceState::TransferDst,
+                                              }),
+                    },
+                .dirty = parametersBufferSize > 0,
             });
-        }
+
+    if(parametersBufferSize > 0)
+    {
+        MaterialInstance* instance = get(newHandle);
+        Buffer* writeBuffer = get(instance->parameters.writeBuffer);
+        memset(writeBuffer->gpuBuffer.ptr, 0, material->parameters.bufferSize);
     }
 
-    return matInstHandle;
+    return newHandle;
 }
 
 void ResourceManager::destroy(Handle<MaterialInstance> handle)
@@ -452,21 +472,10 @@ void ResourceManager::destroy(Handle<MaterialInstance> handle)
         return;
     }
 
-    VulkanDevice& gfxDevice = *VulkanDevice::get();
-    VkDevice device = gfxDevice.device;
-    const VmaAllocator* allocator = &gfxDevice.allocator;
+    VulkanDevice* gfxDevice = VulkanDevice::get();
 
-    if(matInst->parameters.cpuBuffer != nullptr)
-    {
-        ::free(matInst->parameters.cpuBuffer);
-
-        uint32_t bufferCount = ArraySize(matInst->parameters.gpuBuffers);
-        for(int i = 0; i < bufferCount; i++)
-        {
-            Handle<Buffer> buffer = matInst->parameters.gpuBuffers[i];
-            gfxDevice.destroy(buffer);
-        }
-    }
+    destroy(matInst->parameters.writeBuffer);
+    destroy(matInst->parameters.deviceBuffer);
 
     materialInstancePool.remove(handle);
 }

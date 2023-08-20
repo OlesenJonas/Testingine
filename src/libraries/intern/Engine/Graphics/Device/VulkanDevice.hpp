@@ -65,6 +65,19 @@ class VulkanDevice
 
     // TODO: turn the functions into member functions of the command buffer instead ?
 
+    void fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state);
+
+    void copyBuffer(VkCommandBuffer cmd, Handle<Buffer> src, Handle<Buffer> dest);
+    void copyBuffer(
+        VkCommandBuffer cmd,
+        Handle<Buffer> src,
+        size_t srcOffset,
+        Handle<Buffer> dest,
+        size_t destOffset,
+        size_t size);
+
+    void dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ);
+
     void beginRendering(VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget);
     void endRendering(VkCommandBuffer cmd);
 
@@ -91,8 +104,6 @@ class VulkanDevice
         uint32_t firstInstance);
     void drawImGui(VkCommandBuffer cmd);
 
-    void dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ);
-
     void presentSwapchain();
 
     void disableValidationErrorBreakpoint();
@@ -107,8 +118,6 @@ class VulkanDevice
 
     // Waits until all currently submitted GPU commands are executed
     void waitForWorkFinished();
-
-    void fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state);
 
     //-----------------------------------
 

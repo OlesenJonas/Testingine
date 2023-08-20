@@ -92,7 +92,7 @@ int main()
         assert(*pool1.get(handle2) == 3.0f);
         assert(*pool1.get(handle3) == 2.0f);
 
-        decltype(pool1)::DirectIterator deletedIter{1, &pool1};
+        decltype(pool1)::DirectIterator<false> deletedIter{1, &pool1};
 
         pool1.remove(handle2);
 
