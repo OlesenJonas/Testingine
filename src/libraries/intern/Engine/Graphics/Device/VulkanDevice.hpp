@@ -52,6 +52,11 @@ class VulkanDevice
 
     //-----------------------------------
 
+    // Initialization happens during the 0th frame, this ensures all necessary fences etc are correctly set-up
+    // ie: a normal frame minus swapchain related things
+    void startInitializationWork();
+    void submitInitializationWork(Span<const VkCommandBuffer> cmdBuffersToSubmit);
+
     // Dont really like these functions, but have to do for now until a framegraph is implemented
     void startNextFrame();
 
@@ -143,7 +148,8 @@ class VulkanDevice
     //       not sure if I want to cover scenario where window pointer can change in the future
     GLFWwindow* mainWindow;
 
-    int frameNumber = -1;
+    bool inInitialization = true;
+    int frameNumber = 0;
 
     bool _initialized = false;
 

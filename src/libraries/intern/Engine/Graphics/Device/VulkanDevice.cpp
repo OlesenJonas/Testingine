@@ -1230,8 +1230,41 @@ void VulkanDevice::destroy(VkPipeline pipeline)
     }
 }
 
+void VulkanDevice::startInitializationWork()
+{
+    auto& curFrameData = getCurrentFrameData();
+
+    assertVkResult(vkWaitForFences(device, 1, &curFrameData.commandsDone, true, UINT64_MAX));
+    assertVkResult(vkResetFences(device, 1, &curFrameData.commandsDone));
+
+    // no commmand buffers / pools to clear / reset yet
+}
+
+void VulkanDevice::submitInitializationWork(Span<const VkCommandBuffer> cmdBuffersToSubmit)
+{
+    inInitialization = false;
+
+    const auto& curFrameData = getCurrentFrameData();
+
+    VkSubmitInfo submitInfo{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = nullptr,
+
+        .waitSemaphoreCount = 0,
+
+        .commandBufferCount = static_cast<uint32_t>(cmdBuffersToSubmit.size()),
+        .pCommandBuffers = cmdBuffersToSubmit.data(),
+
+        .signalSemaphoreCount = 0,
+    };
+
+    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
+}
+
 void VulkanDevice::startNextFrame()
 {
+    assert(inInitialization == false && "Initialization frame has not been ended yet!");
+
     frameNumber++;
 
     auto& curFrameData = getCurrentFrameData();
@@ -1339,6 +1372,26 @@ void VulkanDevice::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
     };
 
     assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
+}
+
+void VulkanDevice::presentSwapchain()
+{
+    const auto& curFrameData = getCurrentFrameData();
+
+    VkPresentInfoKHR presentInfo{
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext = nullptr,
+
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &curFrameData.swapchainImageRenderFinished,
+
+        .swapchainCount = 1,
+        .pSwapchains = &swapchain,
+
+        .pImageIndices = &currentSwapchainImageIndex,
+    };
+
+    assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
 }
 
 void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state)
@@ -1635,26 +1688,6 @@ void VulkanDevice::drawIndexed(
 }
 
 void VulkanDevice::drawImGui(VkCommandBuffer cmd) { ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd); }
-
-void VulkanDevice::presentSwapchain()
-{
-    const auto& curFrameData = getCurrentFrameData();
-
-    VkPresentInfoKHR presentInfo{
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .pNext = nullptr,
-
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &curFrameData.swapchainImageRenderFinished,
-
-        .swapchainCount = 1,
-        .pSwapchains = &swapchain,
-
-        .pImageIndices = &currentSwapchainImageIndex,
-    };
-
-    assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
-}
 
 void VulkanDevice::disableValidationErrorBreakpoint() { breakOnValidationError = false; }
 void VulkanDevice::enableValidationErrorBreakpoint() { breakOnValidationError = true; }

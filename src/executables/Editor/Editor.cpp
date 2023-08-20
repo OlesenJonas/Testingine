@@ -19,6 +19,8 @@ Editor::Editor()
       }),
       sceneRoot(ecs.createEntity())
 {
+    gfxDevice.startInitializationWork();
+
     gfxDevice.defaultDepthFormat = toVkFormat(depthFormat);
 
     inputManager.init(mainWindow.glfwWindow);
@@ -142,18 +144,8 @@ Editor::Editor()
     glfwSetTime(0.0);
     inputManager.resetTime();
 
-    // ------------------------------------------------------
-
-    // single startup frame, so device is in correct state for rendering commands to be inserted between init() and
-    // run()
-    frameNumber++;
-    gfxDevice.startNextFrame();
-
-    VkCommandBuffer mainCmdBuffer = gfxDevice.beginCommandBuffer();
-    gfxDevice.insertSwapchainImageBarrier(
-        mainCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::PresentSrc);
-
     // Scene and other test stuff loading -------------------------------------------
+    VkCommandBuffer mainCmdBuffer = gfxDevice.beginCommandBuffer();
 
     // Disable validation error breakpoints during init, synch errors arent correct
     gfxDevice.disableValidationErrorBreakpoint();
@@ -571,9 +563,7 @@ Editor::Editor()
     }
     gfxDevice.endCommandBuffer(materialUpdateCmds);
 
-    gfxDevice.submitCommandBuffers({materialUpdateCmds, mainCmdBuffer});
-    // Needed so swapchain "progresses" (see vulkan validation message) TODO: fix
-    gfxDevice.presentSwapchain();
+    gfxDevice.submitInitializationWork({materialUpdateCmds, mainCmdBuffer});
 
     // just to be safe, wait for all commands to be done here
     gfxDevice.waitForWorkFinished();
