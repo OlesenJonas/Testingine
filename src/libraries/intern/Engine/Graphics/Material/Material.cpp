@@ -10,9 +10,7 @@ void Material::setResource(std::string_view name, uint32_t index)
         return;
     }
     const auto& parameterInfo = iterator->second;
-    Buffer* writeBuffer = ResourceManager::get()->get(parameters.writeBuffer);
-    auto* bufferPtr = static_cast<uint8_t*>(writeBuffer->gpuBuffer.ptr);
-    auto* ptr = (uint32_t*)(&bufferPtr[parameterInfo.byteOffsetInBuffer]);
+    auto* ptr = (uint32_t*)(&parameters.writeBuffer[parameterInfo.byteOffsetInBuffer]);
     *ptr = index;
 }
 
@@ -27,9 +25,7 @@ void MaterialInstance::setResource(std::string_view name, uint32_t index)
         return;
     }
     const auto& parameterInfo = iterator->second;
-    Buffer* writeBuffer = ResourceManager::get()->get(parameters.writeBuffer);
-    auto* bufferPtr = static_cast<uint8_t*>(writeBuffer->gpuBuffer.ptr);
-    auto* ptr = (uint32_t*)(&bufferPtr[parameterInfo.byteOffsetInBuffer]);
+    auto* ptr = (uint32_t*)(&parameters.writeBuffer[parameterInfo.byteOffsetInBuffer]);
     *ptr = index;
 }
 

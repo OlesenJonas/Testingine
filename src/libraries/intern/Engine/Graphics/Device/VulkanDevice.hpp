@@ -9,6 +9,7 @@
 #include <Datastructures/FunctionQueue.hpp>
 #include <Datastructures/Pool/Pool.hpp>
 #include <Datastructures/Span.hpp>
+#include <atomic>
 #include <vulkan/vulkan_core.h>
 
 // TODO: full headers just for the create infos?
@@ -49,6 +50,21 @@ class VulkanDevice
     createGraphicsPipeline(Span<uint32_t> vertexSpirv, Span<uint32_t> fragmentSpirv, std::string_view debugName);
     VkPipeline createComputePipeline(Span<uint32_t> spirv, std::string_view debugName);
     void destroy(VkPipeline pipeline);
+
+    //-----------------------------------
+
+    struct GPUAllocation
+    {
+        Handle<Buffer> buffer;
+        size_t offset = 0;
+        size_t size = 0;
+        void* ptr = nullptr;
+    };
+    /*
+        Allocates CPU but GPU visible memory intended for subsequent copies on the GPU
+        Assume that this is only alive for the duration of the frame
+    */
+    GPUAllocation allocateStagingData(size_t size);
 
     //-----------------------------------
 
@@ -131,6 +147,17 @@ class VulkanDevice
     static constexpr int FRAMES_IN_FLIGHT = 2;
 
   private:
+    struct LinearAllocator
+    {
+        Handle<Buffer> buffer;
+        size_t capacity = 0;
+        std::atomic<size_t> offset = 0;
+        uint8_t* ptr = nullptr;
+
+        void reset();
+        GPUAllocation allocate(size_t size);
+    };
+
     struct PerFrameData
     {
         VkSemaphore swapchainImageAvailable = VK_NULL_HANDLE;
@@ -138,6 +165,8 @@ class VulkanDevice
         VkFence commandsDone = VK_NULL_HANDLE;
         std::vector<VkCommandPool> commandPools{};
         std::vector<std::vector<VkCommandBuffer>> usedCommandBuffersPerPool{};
+
+        LinearAllocator stagingAllocator;
     };
     PerFrameData perFrameData[FRAMES_IN_FLIGHT];
     inline PerFrameData& getCurrentFrameData() { return perFrameData[frameNumber % FRAMES_IN_FLIGHT]; }
@@ -221,6 +250,7 @@ class VulkanDevice
     void initSwapchain();
     void initCommands();
     void initSyncStructures();
+    void initAllocators();
     void initBindless();
     void initPipelineCache();
     void initImGui();

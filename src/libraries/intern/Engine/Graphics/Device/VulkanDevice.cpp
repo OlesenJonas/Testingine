@@ -39,6 +39,7 @@ void VulkanDevice::init(GLFWwindow* window)
     initSwapchain();
     initCommands();
     initSyncStructures();
+    initAllocators();
 
     // TODO: where to put this?
     initBindless();
@@ -278,6 +279,27 @@ void VulkanDevice::initSyncStructures()
     };
     assertVkResult(vkCreateFence(device, &uploadFenceCreateInfo, nullptr, &uploadContext.uploadFence));
     deleteQueue.pushBack([=]() { vkDestroyFence(device, uploadContext.uploadFence, nullptr); });
+}
+
+#define MB(x) ((size_t)(x) << 20)
+
+void VulkanDevice::initAllocators()
+{
+    for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
+    {
+        auto& frameData = perFrameData[i];
+        constexpr size_t stagingBufferSize = MB(50);
+        frameData.stagingAllocator.buffer = createBuffer(Buffer::CreateInfo{
+            .debugName = "StagingBuffer" + std::to_string(i),
+            .size = stagingBufferSize,
+            .memoryType = Buffer::MemoryType::CPU,
+            .allStates = ResourceState::TransferSrc,
+            .initialState = ResourceState::TransferSrc,
+        });
+        frameData.stagingAllocator.capacity = stagingBufferSize;
+        frameData.stagingAllocator.ptr =
+            static_cast<uint8_t*>(get(frameData.stagingAllocator.buffer)->gpuBuffer.ptr);
+    }
 }
 
 void VulkanDevice::initBindless()
@@ -1230,12 +1252,19 @@ void VulkanDevice::destroy(VkPipeline pipeline)
     }
 }
 
+VulkanDevice::GPUAllocation VulkanDevice::allocateStagingData(size_t size)
+{
+    auto& currentFrameData = getCurrentFrameData();
+    return currentFrameData.stagingAllocator.allocate(size);
+}
+
 void VulkanDevice::startInitializationWork()
 {
     auto& curFrameData = getCurrentFrameData();
 
     assertVkResult(vkWaitForFences(device, 1, &curFrameData.commandsDone, true, UINT64_MAX));
     assertVkResult(vkResetFences(device, 1, &curFrameData.commandsDone));
+    curFrameData.stagingAllocator.reset();
 
     // no commmand buffers / pools to clear / reset yet
 }
@@ -1271,6 +1300,7 @@ void VulkanDevice::startNextFrame()
 
     assertVkResult(vkWaitForFences(device, 1, &curFrameData.commandsDone, true, UINT64_MAX));
     assertVkResult(vkResetFences(device, 1, &curFrameData.commandsDone));
+    curFrameData.stagingAllocator.reset();
 
     assertVkResult(vkAcquireNextImageKHR(
         device,
@@ -1910,4 +1940,17 @@ void VulkanDevice::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& fu
     vkResetFences(device, 1, &uploadContext.uploadFence);
 
     vkResetCommandPool(device, uploadContext.commandPool, 0);
+}
+
+void VulkanDevice::LinearAllocator::reset() { offset = 0; }
+VulkanDevice::GPUAllocation VulkanDevice::LinearAllocator::allocate(size_t size)
+{
+    if(offset + size > capacity)
+    {
+        // TODO: handle growth strategy (needs to be thread safe!)
+        assert(false);
+    }
+    // TODO: alignment?
+    auto oldOffset = offset.fetch_add(size);
+    return GPUAllocation{.buffer = buffer, .offset = oldOffset, .size = size, .ptr = &(ptr[oldOffset])};
 }

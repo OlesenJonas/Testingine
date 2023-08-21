@@ -520,8 +520,15 @@ Editor::Editor()
                     .stateAfter = ResourceState::TransferDst,
                 },
             });
+        auto gpuAlloc = gfxDevice.allocateStagingData(material->parameters.bufferSize);
+        memcpy(gpuAlloc.ptr, material->parameters.writeBuffer, material->parameters.bufferSize);
         gfxDevice.copyBuffer(
-            materialUpdateCmds, material->parameters.writeBuffer, material->parameters.deviceBuffer);
+            materialUpdateCmds,
+            gpuAlloc.buffer,
+            gpuAlloc.offset,
+            material->parameters.deviceBuffer,
+            0,
+            material->parameters.bufferSize);
         material->dirty = false;
         gfxDevice.insertBarriers(
             materialUpdateCmds,
@@ -548,8 +555,15 @@ Editor::Editor()
                     .stateAfter = ResourceState::TransferDst,
                 },
             });
+        auto gpuAlloc = gfxDevice.allocateStagingData(materialInst->parameters.bufferSize);
+        memcpy(gpuAlloc.ptr, materialInst->parameters.writeBuffer, materialInst->parameters.bufferSize);
         gfxDevice.copyBuffer(
-            materialUpdateCmds, materialInst->parameters.writeBuffer, materialInst->parameters.deviceBuffer);
+            materialUpdateCmds,
+            gpuAlloc.buffer,
+            gpuAlloc.offset,
+            materialInst->parameters.deviceBuffer,
+            0,
+            materialInst->parameters.bufferSize);
         materialInst->dirty = false;
         gfxDevice.insertBarriers(
             materialUpdateCmds,

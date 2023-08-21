@@ -13,7 +13,7 @@ struct Buffer;
 struct ParameterBuffer
 {
     uint32_t bufferSize = 0;
-    Handle<Buffer> writeBuffer = Handle<Buffer>::Invalid();
+    uint8_t* writeBuffer = nullptr;
     Handle<Buffer> deviceBuffer = Handle<Buffer>::Invalid();
 };
 
