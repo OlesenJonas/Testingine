@@ -318,7 +318,7 @@ void VulkanDevice::initAllocators()
     for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
     {
         auto& frameData = perFrameData[i];
-        constexpr size_t stagingBufferSize = MB(250);
+        constexpr size_t stagingBufferSize = MB(50);
         frameData.stagingAllocator.buffer = createBuffer(Buffer::CreateInfo{
             .debugName = "StagingBuffer" + std::to_string(i),
             .size = stagingBufferSize,
@@ -576,8 +576,9 @@ void VulkanDevice::destroy(Handle<Buffer> handle)
     {
         return;
     }
-    deleteQueue.pushBack([=]()
-                         { vmaDestroyBuffer(allocator, buffer->gpuBuffer.buffer, buffer->gpuBuffer.allocation); });
+    deleteQueue.pushBack(
+        [allocator = allocator, buffer = buffer->gpuBuffer.buffer, alloc = buffer->gpuBuffer.allocation]()
+        { vmaDestroyBuffer(allocator, buffer, alloc); });
     bufferPool.remove(handle);
 }
 
@@ -1967,10 +1968,30 @@ GPUAllocation VulkanDevice::LinearAllocator::allocate(size_t size)
 {
     if(offset + size > capacity)
     {
-        // TODO: handle growth strategy (needs to be thread safe!)
-        assert(false);
+        // TODO: could handle special cases where the requested size is like >=80% of the staging buffer capacity!
+        //       in that case, could just return a dedicated allocation for just that request instead of using the
+        //       normal allocation mechanism
+
+        // enqueue current buffer for deletion
+        VulkanDevice::get()->destroy(this->buffer);
+
+        // create new buffer
+
+        // TODO: be smarter?
+        size_t newSize = std::max(this->capacity, size);
+
+        this->buffer = VulkanDevice::get()->createBuffer(Buffer::CreateInfo{
+            .debugName = "StagingBufferReplacement",
+            .size = newSize,
+            .memoryType = Buffer::MemoryType::CPU,
+            .allStates = ResourceState::TransferSrc,
+            .initialState = ResourceState::TransferSrc,
+        });
+        this->capacity = newSize;
+        this->offset = 0;
+        this->ptr = static_cast<uint8_t*>(VulkanDevice::get()->get(this->buffer)->gpuBuffer.ptr);
     }
     // TODO: alignment?
-    auto oldOffset = offset.fetch_add(size);
+    size_t oldOffset = offset.fetch_add(size);
     return GPUAllocation{.buffer = buffer, .offset = oldOffset, .size = size, .ptr = &(ptr[oldOffset])};
 }

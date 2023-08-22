@@ -56,6 +56,7 @@ class VulkanDevice
     /*
         Allocates CPU but GPU visible memory intended for subsequent copies on the GPU
         Assume that this is only alive for the duration of the frame
+        ! NOT THREAD SAFE IF BUFFER RUNS OUT OF MEMORY !
     */
     GPUAllocation allocateStagingData(size_t size);
 
