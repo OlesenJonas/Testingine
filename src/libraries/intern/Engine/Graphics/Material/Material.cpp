@@ -12,6 +12,7 @@ void Material::setResource(std::string_view name, uint32_t index)
     const auto& parameterInfo = iterator->second;
     auto* ptr = (uint32_t*)(&parameters.writeBuffer[parameterInfo.byteOffsetInBuffer]);
     *ptr = index;
+    dirty = true;
 }
 
 void MaterialInstance::setResource(std::string_view name, uint32_t index)
@@ -27,6 +28,7 @@ void MaterialInstance::setResource(std::string_view name, uint32_t index)
     const auto& parameterInfo = iterator->second;
     auto* ptr = (uint32_t*)(&parameters.writeBuffer[parameterInfo.byteOffsetInBuffer]);
     *ptr = index;
+    dirty = true;
 }
 
 // void MaterialInstance::setResource(std::string_view name, uint32_t index) {}

@@ -309,6 +309,35 @@ class VulkanDevice
                 },
         };
     }
+
+    struct VulkanBufferBarrier
+    {
+        VkBuffer buffer;
+        ResourceState stateBefore = ResourceState::None;
+        ResourceState stateAfter = ResourceState::None;
+        size_t offset = 0;
+        size_t size = VK_WHOLE_SIZE;
+    };
+    constexpr VkBufferMemoryBarrier2 toVkBufferMemoryBarrier(VulkanBufferBarrier&& barrier)
+    {
+        return VkBufferMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+
+            .srcStageMask = toVkPipelineStage(barrier.stateBefore),
+            .srcAccessMask = toVkAccessFlags(barrier.stateBefore),
+
+            .dstStageMask = toVkPipelineStage(barrier.stateAfter),
+            .dstAccessMask = toVkAccessFlags(barrier.stateAfter),
+
+            .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
+            .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
+
+            .buffer = barrier.buffer,
+            .offset = barrier.offset,
+            .size = barrier.size,
+        };
+    }
 };
 
 extern PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;

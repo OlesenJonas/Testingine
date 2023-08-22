@@ -138,7 +138,7 @@ constexpr VkPipelineStageFlags2 toVkPipelineStage(ResourceState state)
     case ResourceState::DepthStencilReadOnly:
         return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
     case ResourceState::VertexBuffer:
-        return VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+        return VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
     case ResourceState::IndexBuffer:
         return VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
     case ResourceState::IndirectArgument:

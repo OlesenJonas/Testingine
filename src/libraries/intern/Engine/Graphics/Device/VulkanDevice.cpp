@@ -318,7 +318,7 @@ void VulkanDevice::initAllocators()
     for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
     {
         auto& frameData = perFrameData[i];
-        constexpr size_t stagingBufferSize = MB(50);
+        constexpr size_t stagingBufferSize = MB(250);
         frameData.stagingAllocator.buffer = createBuffer(Buffer::CreateInfo{
             .debugName = "StagingBuffer" + std::to_string(i),
             .size = stagingBufferSize,
@@ -463,6 +463,7 @@ void VulkanDevice::waitForWorkFinished() { vkDeviceWaitIdle(device); }
 
 Handle<Buffer> VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
 {
+    assert(createInfo.initialData.size() <= createInfo.size);
     // High level setup
 
     if(createInfo.allStates.containsStorageBufferUsage() && createInfo.allStates.containsUniformBufferUsage())
@@ -503,48 +504,33 @@ Handle<Buffer> VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
 
     if(!createInfo.initialData.empty())
     {
-        /*
-            todo:
-                - Currently waits for GPU Idle after upload
-                - try asynchronous transfer queue
-                - dont re-create staging buffers all the time!
-                    keep a few large ones around?
-                    or at least keep the last created ones around for a few frames in case theyre needed again?
-        */
-
-        // allocate staging buffer
-        VkBufferCreateInfo stagingBufferInfo = {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .pNext = nullptr,
-            .size = createInfo.size,
-            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        };
-        VmaAllocationCreateInfo vmaallocCrInfo = {
-            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-            .usage = VMA_MEMORY_USAGE_AUTO,
-            .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        };
-        VulkanBuffer stagingBuffer;
-        VkResult res = vmaCreateBuffer(
-            allocator,
-            &stagingBufferInfo,
-            &vmaallocCrInfo,
-            &stagingBuffer.buffer,
-            &stagingBuffer.allocation,
-            &stagingBuffer.allocInfo);
-        assert(res == VK_SUCCESS);
-
-        memcpy(stagingBuffer.allocInfo.pMappedData, createInfo.initialData.data(), createInfo.initialData.size());
+        auto stagingAlloc = allocateStagingData(createInfo.initialData.size());
+        memcpy(stagingAlloc.ptr, createInfo.initialData.data(), createInfo.initialData.size());
 
         VkBufferCopy copy{
-            .srcOffset = 0,
+            .srcOffset = stagingAlloc.offset,
             .dstOffset = 0,
             .size = createInfo.size,
         };
-        vkCmdCopyBuffer(getCurrentFrameData().uploadCommandBuffer, stagingBuffer.buffer, ret.buffer, 1, &copy);
+        vkCmdCopyBuffer(
+            getCurrentFrameData().uploadCommandBuffer,
+            get(stagingAlloc.buffer)->gpuBuffer.buffer,
+            ret.buffer,
+            1,
+            &copy);
 
-        deleteQueue.pushBack([=]()
-                             { vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation); });
+        VkBufferMemoryBarrier2 barrier = toVkBufferMemoryBarrier(VulkanBufferBarrier{
+            .buffer = ret.buffer,
+            .stateBefore = ResourceState::TransferDst,
+            .stateAfter = createInfo.initialState,
+        });
+        VkDependencyInfo dependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .bufferMemoryBarrierCount = 1,
+            .pBufferMemoryBarriers = &barrier,
+        };
+        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
     }
 
     if(!createInfo.debugName.empty())
@@ -710,29 +696,8 @@ Handle<Texture> VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
 
     if(!createInfo.initialData.empty())
     {
-        // allocate staging buffer
-        VkBufferCreateInfo stagingBufferInfo = {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .pNext = nullptr,
-            .size = createInfo.initialData.size(),
-            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        };
-        VmaAllocationCreateInfo vmaallocCrInfo = {
-            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-            .usage = VMA_MEMORY_USAGE_AUTO,
-            .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        };
-        VulkanBuffer stagingBuffer;
-        VkResult res = vmaCreateBuffer(
-            allocator,
-            &stagingBufferInfo,
-            &vmaallocCrInfo,
-            &stagingBuffer.buffer,
-            &stagingBuffer.allocation,
-            &stagingBuffer.allocInfo);
-        assert(res == VK_SUCCESS);
-
-        memcpy(stagingBuffer.allocInfo.pMappedData, createInfo.initialData.data(), createInfo.initialData.size());
+        auto stagingAlloc = allocateStagingData(createInfo.initialData.size());
+        memcpy(stagingAlloc.ptr, createInfo.initialData.data(), createInfo.initialData.size());
 
         VkImageMemoryBarrier2 imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
             .texture = ret.image,
@@ -750,7 +715,7 @@ Handle<Texture> VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
         vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
 
         VkBufferImageCopy copyRegion{
-            .bufferOffset = 0,
+            .bufferOffset = stagingAlloc.offset,
             .bufferRowLength = 0,
             .bufferImageHeight = 0,
             .imageSubresource =
@@ -765,7 +730,7 @@ Handle<Texture> VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
 
         vkCmdCopyBufferToImage(
             getCurrentFrameData().uploadCommandBuffer,
-            stagingBuffer.buffer,
+            get(stagingAlloc.buffer)->gpuBuffer.buffer,
             ret.image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1,
@@ -793,9 +758,6 @@ Handle<Texture> VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
                 Texture::Descriptor::fromCreateInfo(createInfo),
                 createInfo.initialState);
         }
-
-        deleteQueue.pushBack([=]()
-                             { vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation); });
     }
     else if(createInfo.initialState != ResourceState::Undefined)
     {
@@ -1309,7 +1271,6 @@ void VulkanDevice::submitInitializationWork(Span<const VkCommandBuffer> cmdBuffe
 
     auto& curFrameData = getCurrentFrameData();
 
-    // uploads happended this frame
     vkEndCommandBuffer(curFrameData.uploadCommandBuffer);
     std::vector<VkCommandBuffer> buffers{cmdBuffersToSubmit.size() + 1};
     std::copy(cmdBuffersToSubmit.begin(), cmdBuffersToSubmit.end(), ++buffers.begin());
@@ -1439,7 +1400,6 @@ void VulkanDevice::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
 {
     auto& curFrameData = getCurrentFrameData();
 
-    // uploads happended this frame
     vkEndCommandBuffer(curFrameData.uploadCommandBuffer);
     std::vector<VkCommandBuffer> buffers{cmdBuffers.size() + 1};
     std::copy(cmdBuffers.begin(), cmdBuffers.end(), ++buffers.begin());
@@ -1555,7 +1515,7 @@ void VulkanDevice::insertSwapchainImageBarrier(
 void VulkanDevice::beginRendering(
     VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget)
 {
-    VkClearValue clearValue{.color = {0.0f, 0.0f, 0.0f, 1.0f}};
+    VkClearValue clearValue{.color = {1.0f, 1.0f, 1.0f, 1.0f}};
     VkClearValue depthStencilClear{.depthStencil = {.depth = 1.0f, .stencil = 0u}};
 
     std::vector<VkRenderingAttachmentInfo> colorAttachmentInfos;
