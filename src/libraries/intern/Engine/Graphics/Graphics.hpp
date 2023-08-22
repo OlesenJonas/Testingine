@@ -74,10 +74,7 @@ struct ResourceStateMulti
         return value != 0u;
     }
 
-    constexpr void unset(const ResourceStateMulti& rhs)
-    {
-        value &= ~static_cast<U>(rhs.value);
-    }
+    constexpr void unset(const ResourceStateMulti& rhs) { value &= ~static_cast<U>(rhs.value); }
     bool containsUniformBufferUsage();
     bool containsStorageBufferUsage();
 };
@@ -123,4 +120,14 @@ struct RenderTarget
         DontCare,
     };
     StoreOp storeOp = StoreOp::Store;
+};
+
+struct Buffer;
+
+struct GPUAllocation
+{
+    Handle<Buffer> buffer;
+    size_t offset = 0;
+    size_t size = 0;
+    void* ptr = nullptr;
 };

@@ -53,13 +53,6 @@ class VulkanDevice
 
     //-----------------------------------
 
-    struct GPUAllocation
-    {
-        Handle<Buffer> buffer;
-        size_t offset = 0;
-        size_t size = 0;
-        void* ptr = nullptr;
-    };
     /*
         Allocates CPU but GPU visible memory intended for subsequent copies on the GPU
         Assume that this is only alive for the duration of the frame
@@ -75,6 +68,8 @@ class VulkanDevice
 
     // Dont really like these functions, but have to do for now until a framegraph is implemented
     void startNextFrame();
+
+    void generateUploadCommandBuffer(uint32_t threadIndex = 0);
 
     VkCommandBuffer beginCommandBuffer(uint32_t threadIndex = 0);
     void endCommandBuffer(VkCommandBuffer cmd);
@@ -167,6 +162,7 @@ class VulkanDevice
         std::vector<std::vector<VkCommandBuffer>> usedCommandBuffersPerPool{};
 
         LinearAllocator stagingAllocator;
+        VkCommandBuffer uploadCommandBuffer = VK_NULL_HANDLE;
     };
     PerFrameData perFrameData[FRAMES_IN_FLIGHT];
     inline PerFrameData& getCurrentFrameData() { return perFrameData[frameNumber % FRAMES_IN_FLIGHT]; }

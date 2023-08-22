@@ -42,15 +42,17 @@ class ThreadPool
     bool busy();
     void stop();
 
-    inline uint32_t amountOfThreads() const
-    {
-        return threads.size();
-    }
+    inline uint32_t amountOfThreads() const { return threads.size(); }
+
+    int getThreadPoolThreadIndex();
+
+    /*
+        Only works with single byte characters!
+    */
+    static void nameCurrentThread(std::string_view name);
 
   private:
     void threadLoop();
-
-    int getThreadPoolThreadIndex();
 
     bool shouldTerminate = false;           // If set threads will stop looking for job
     std::mutex queueMutex;                  // Prevent race condition when accessing job queue

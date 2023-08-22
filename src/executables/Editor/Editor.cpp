@@ -21,6 +21,8 @@ Editor::Editor()
 {
     gfxDevice.startInitializationWork();
 
+    gfxDevice.generateUploadCommandBuffer(0);
+
     gfxDevice.defaultDepthFormat = toVkFormat(depthFormat);
 
     inputManager.init(mainWindow.glfwWindow);
@@ -28,6 +30,10 @@ Editor::Editor()
     inputManager.setupCallbacks(
         mainWindow.glfwWindow, keyCallback, mouseButtonCallback, scrollCallback, resizeCallback);
 
+    // reserve index 0 for main thread
+    auto index = threadPool.getThreadPoolThreadIndex();
+    assert(index == 0);
+    ThreadPool::nameCurrentThread("Main Thread");
     threadPool.start(4);
 
     ecs.registerComponent<Transform>();

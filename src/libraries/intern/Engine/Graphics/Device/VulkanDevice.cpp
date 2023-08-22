@@ -506,21 +506,15 @@ Handle<Buffer> VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
 
         memcpy(stagingBuffer.allocInfo.pMappedData, createInfo.initialData.data(), createInfo.initialData.size());
 
-        immediateSubmit(
-            [=](VkCommandBuffer cmd)
-            {
-                VkBufferCopy copy{
-                    .srcOffset = 0,
-                    .dstOffset = 0,
-                    .size = createInfo.size,
-                };
-                vkCmdCopyBuffer(cmd, stagingBuffer.buffer, ret.buffer, 1, &copy);
-            });
+        VkBufferCopy copy{
+            .srcOffset = 0,
+            .dstOffset = 0,
+            .size = createInfo.size,
+        };
+        vkCmdCopyBuffer(getCurrentFrameData().uploadCommandBuffer, stagingBuffer.buffer, ret.buffer, 1, &copy);
 
-        // since immediateSubmit also waits until the commands have executed, we can safely delete the staging
-        // buffer immediately here
-        //  todo: again, dont like the wait here. So once I fix that this call also has to be changed
-        vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+        deleteQueue.pushBack([=]()
+                             { vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation); });
     }
 
     if(!createInfo.debugName.empty())
@@ -710,88 +704,85 @@ Handle<Texture> VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
 
         memcpy(stagingBuffer.allocInfo.pMappedData, createInfo.initialData.data(), createInfo.initialData.size());
 
-        immediateSubmit(
-            [&](VkCommandBuffer cmd)
-            {
-                VkImageMemoryBarrier2 imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
-                    .texture = ret.image,
-                    // TODO: store in variable
-                    .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
-                    .stateBefore = ResourceState::Undefined,
-                    .stateAfter = ResourceState::TransferDst,
-                });
-                VkDependencyInfo dependencyInfo{
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .imageMemoryBarrierCount = 1,
-                    .pImageMemoryBarriers = &imgBarrier,
-                };
-                vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+        VkImageMemoryBarrier2 imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+            .texture = ret.image,
+            // TODO: store in variable
+            .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
+            .stateBefore = ResourceState::Undefined,
+            .stateAfter = ResourceState::TransferDst,
+        });
+        VkDependencyInfo dependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &imgBarrier,
+        };
+        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
 
-                VkBufferImageCopy copyRegion{
-                    .bufferOffset = 0,
-                    .bufferRowLength = 0,
-                    .bufferImageHeight = 0,
-                    .imageSubresource =
-                        {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                         .mipLevel = 0,
-                         .baseArrayLayer = 0,
-                         .layerCount = 1},
-                    .imageExtent =
-                        {
-                            .width = createInfo.size.width,
-                            .height = createInfo.size.height,
-                            .depth = createInfo.size.depth,
-                        },
-                };
-
-                vkCmdCopyBufferToImage(
-                    cmd, stagingBuffer.buffer, ret.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
-                imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
-                    .texture = ret.image,
-                    .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
-                    .stateBefore = ResourceState::TransferDst,
-                    .stateAfter = createInfo.initialState,
-                });
-                dependencyInfo = VkDependencyInfo{
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .imageMemoryBarrierCount = 1,
-                    .pImageMemoryBarriers = &imgBarrier,
-                };
-                vkCmdPipelineBarrier2(cmd, &dependencyInfo);
-
-                if(createInfo.fillMipLevels && createInfo.mipLevels > 1)
+        VkBufferImageCopy copyRegion{
+            .bufferOffset = 0,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource =
+                {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+            .imageExtent =
                 {
-                    fillMipLevels(
-                        cmd, ret.image, Texture::Descriptor::fromCreateInfo(createInfo), createInfo.initialState);
-                }
-            });
+                    .width = createInfo.size.width,
+                    .height = createInfo.size.height,
+                    .depth = createInfo.size.depth,
+                },
+        };
 
-        // immediate submit also waits on device idle so staging buffer is not being used here anymore
-        vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+        vkCmdCopyBufferToImage(
+            getCurrentFrameData().uploadCommandBuffer,
+            stagingBuffer.buffer,
+            ret.image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &copyRegion);
+
+        imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+            .texture = ret.image,
+            .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
+            .stateBefore = ResourceState::TransferDst,
+            .stateAfter = createInfo.initialState,
+        });
+        dependencyInfo = VkDependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &imgBarrier,
+        };
+        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
+
+        if(createInfo.fillMipLevels && createInfo.mipLevels > 1)
+        {
+            fillMipLevels(
+                getCurrentFrameData().uploadCommandBuffer,
+                ret.image,
+                Texture::Descriptor::fromCreateInfo(createInfo),
+                createInfo.initialState);
+        }
+
+        deleteQueue.pushBack([=]()
+                             { vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation); });
     }
     else if(createInfo.initialState != ResourceState::Undefined)
     {
         // Dont upload anything, just transition
-        immediateSubmit(
-            [&](VkCommandBuffer cmd)
-            {
-                auto imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
-                    .texture = ret.image,
-                    .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
-                    .stateBefore = ResourceState::Undefined,
-                    .stateAfter = createInfo.initialState,
-                });
-                VkDependencyInfo dependencyInfo{
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .imageMemoryBarrierCount = 1,
-                    .pImageMemoryBarriers = &imgBarrier,
-                };
-                vkCmdPipelineBarrier2(cmd, &dependencyInfo);
-            });
+        auto imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+            .texture = ret.image,
+            .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
+            .stateBefore = ResourceState::Undefined,
+            .stateAfter = createInfo.initialState,
+        });
+        VkDependencyInfo dependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &imgBarrier,
+        };
+        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
     }
     setDebugName(ret.image, (createInfo.debugName + "_image").c_str());
 
@@ -1252,7 +1243,7 @@ void VulkanDevice::destroy(VkPipeline pipeline)
     }
 }
 
-VulkanDevice::GPUAllocation VulkanDevice::allocateStagingData(size_t size)
+GPUAllocation VulkanDevice::allocateStagingData(size_t size)
 {
     auto& currentFrameData = getCurrentFrameData();
     return currentFrameData.stagingAllocator.allocate(size);
@@ -1273,21 +1264,47 @@ void VulkanDevice::submitInitializationWork(Span<const VkCommandBuffer> cmdBuffe
 {
     inInitialization = false;
 
-    const auto& curFrameData = getCurrentFrameData();
+    auto& curFrameData = getCurrentFrameData();
 
-    VkSubmitInfo submitInfo{
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pNext = nullptr,
+    if(curFrameData.uploadCommandBuffer != VK_NULL_HANDLE)
+    {
+        // uploads happended this frame
+        vkEndCommandBuffer(curFrameData.uploadCommandBuffer);
+        std::vector<VkCommandBuffer> buffers{cmdBuffersToSubmit.size() + 1};
+        std::copy(cmdBuffersToSubmit.begin(), cmdBuffersToSubmit.end(), ++buffers.begin());
+        buffers[0] = curFrameData.uploadCommandBuffer;
+        curFrameData.uploadCommandBuffer = VK_NULL_HANDLE;
 
-        .waitSemaphoreCount = 0,
+        VkSubmitInfo submitInfo{
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = nullptr,
 
-        .commandBufferCount = static_cast<uint32_t>(cmdBuffersToSubmit.size()),
-        .pCommandBuffers = cmdBuffersToSubmit.data(),
+            .waitSemaphoreCount = 0,
 
-        .signalSemaphoreCount = 0,
-    };
+            .commandBufferCount = static_cast<uint32_t>(buffers.size()),
+            .pCommandBuffers = buffers.data(),
 
-    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
+            .signalSemaphoreCount = 0,
+        };
+
+        assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
+    }
+    else
+    {
+        VkSubmitInfo submitInfo{
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = nullptr,
+
+            .waitSemaphoreCount = 0,
+
+            .commandBufferCount = static_cast<uint32_t>(cmdBuffersToSubmit.size()),
+            .pCommandBuffers = cmdBuffersToSubmit.data(),
+
+            .signalSemaphoreCount = 0,
+        };
+
+        assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
+    }
 }
 
 void VulkanDevice::startNextFrame()
@@ -1329,6 +1346,12 @@ void VulkanDevice::startNextFrame()
     {
         assertVkResult(vkResetCommandPool(device, cmdPool, 0));
     }
+}
+
+void VulkanDevice::generateUploadCommandBuffer(uint32_t threadIndex)
+{
+    auto& curFrameData = getCurrentFrameData();
+    curFrameData.uploadCommandBuffer = beginCommandBuffer(threadIndex);
 }
 
 VkCommandBuffer VulkanDevice::beginCommandBuffer(uint32_t threadIndex)
@@ -1383,25 +1406,55 @@ void VulkanDevice::endCommandBuffer(VkCommandBuffer cmd) { vkEndCommandBuffer(cm
 
 void VulkanDevice::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
 {
-    const auto& curFrameData = getCurrentFrameData();
+    auto& curFrameData = getCurrentFrameData();
 
-    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submitInfo{
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pNext = nullptr,
+    if(curFrameData.uploadCommandBuffer != VK_NULL_HANDLE)
+    {
+        // uploads happended this frame
+        vkEndCommandBuffer(curFrameData.uploadCommandBuffer);
+        std::vector<VkCommandBuffer> buffers{cmdBuffers.size() + 1};
+        std::copy(cmdBuffers.begin(), cmdBuffers.end(), ++buffers.begin());
+        buffers[0] = curFrameData.uploadCommandBuffer;
+        curFrameData.uploadCommandBuffer = VK_NULL_HANDLE;
 
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &curFrameData.swapchainImageAvailable,
-        .pWaitDstStageMask = &waitStage,
+        VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        VkSubmitInfo submitInfo{
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = nullptr,
 
-        .commandBufferCount = static_cast<uint32_t>(cmdBuffers.size()),
-        .pCommandBuffers = cmdBuffers.data(),
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &curFrameData.swapchainImageAvailable,
+            .pWaitDstStageMask = &waitStage,
 
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &curFrameData.swapchainImageRenderFinished,
-    };
+            .commandBufferCount = static_cast<uint32_t>(buffers.size()),
+            .pCommandBuffers = buffers.data(),
 
-    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &curFrameData.swapchainImageRenderFinished,
+        };
+
+        assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
+    }
+    else
+    {
+        VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        VkSubmitInfo submitInfo{
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = nullptr,
+
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &curFrameData.swapchainImageAvailable,
+            .pWaitDstStageMask = &waitStage,
+
+            .commandBufferCount = static_cast<uint32_t>(cmdBuffers.size()),
+            .pCommandBuffers = cmdBuffers.data(),
+
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &curFrameData.swapchainImageRenderFinished,
+        };
+
+        assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
+    }
 }
 
 void VulkanDevice::presentSwapchain()
@@ -1943,7 +1996,7 @@ void VulkanDevice::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& fu
 }
 
 void VulkanDevice::LinearAllocator::reset() { offset = 0; }
-VulkanDevice::GPUAllocation VulkanDevice::LinearAllocator::allocate(size_t size)
+GPUAllocation VulkanDevice::LinearAllocator::allocate(size_t size)
 {
     if(offset + size > capacity)
     {
