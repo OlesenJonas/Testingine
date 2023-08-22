@@ -213,30 +213,57 @@ void VulkanDevice::initCommands()
             assertVkResult(
                 vkCreateCommandPool(device, &commandPoolCrInfo, nullptr, &perFrameData[i].commandPools[t]));
 
-            deleteQueue.pushBack([=]()
-                                 { vkDestroyCommandPool(device, perFrameData[i].commandPools[t], nullptr); });
+            deleteQueue.pushBack([=, pool = perFrameData[i].commandPools[t]]()
+                                 { vkDestroyCommandPool(device, pool, nullptr); });
+
+            // Per frame upload stuff
+            VkCommandPoolCreateInfo uploadCommandPoolCrInfo{
+                .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                .pNext = nullptr,
+
+                .flags = 0,
+                .queueFamilyIndex = graphicsAndComputeQueueFamily,
+            };
+            assertVkResult(
+                vkCreateCommandPool(device, &uploadCommandPoolCrInfo, nullptr, &frameData.uploadCommandPool));
+            deleteQueue.pushBack([device = device, pool = frameData.uploadCommandPool]()
+                                 { vkDestroyCommandPool(device, pool, nullptr); });
+
+            VkCommandBufferAllocateInfo cmdBuffAllocInfo{
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .pNext = nullptr,
+
+                .commandPool = frameData.uploadCommandPool,
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount = 1,
+            };
+            assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &frameData.uploadCommandBuffer));
         }
     }
 
-    VkCommandPoolCreateInfo uploadCommandPoolCrInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .pNext = nullptr,
+    // Immediate submit
+    {
+        VkCommandPoolCreateInfo uploadCommandPoolCrInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .pNext = nullptr,
 
-        .flags = 0,
-        .queueFamilyIndex = graphicsAndComputeQueueFamily,
-    };
-    assertVkResult(vkCreateCommandPool(device, &uploadCommandPoolCrInfo, nullptr, &uploadContext.commandPool));
-    deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, uploadContext.commandPool, nullptr); });
+            .flags = 0,
+            .queueFamilyIndex = graphicsAndComputeQueueFamily,
+        };
+        assertVkResult(vkCreateCommandPool(device, &uploadCommandPoolCrInfo, nullptr, &uploadContext.commandPool));
+        deleteQueue.pushBack([=, pool = uploadContext.commandPool]()
+                             { vkDestroyCommandPool(device, pool, nullptr); });
 
-    VkCommandBufferAllocateInfo cmdBuffAllocInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .pNext = nullptr,
+        VkCommandBufferAllocateInfo cmdBuffAllocInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .pNext = nullptr,
 
-        .commandPool = uploadContext.commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &uploadContext.commandBuffer));
+            .commandPool = uploadContext.commandPool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+        };
+        assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &uploadContext.commandBuffer));
+    }
 }
 
 void VulkanDevice::initSyncStructures()
@@ -258,7 +285,8 @@ void VulkanDevice::initSyncStructures()
     {
         assertVkResult(vkCreateFence(device, &fenceCreateInfo, nullptr, &perFrameData[i].commandsDone));
 
-        deleteQueue.pushBack([=]() { vkDestroyFence(device, perFrameData[i].commandsDone, nullptr); });
+        deleteQueue.pushBack([=, fence = perFrameData[i].commandsDone]()
+                             { vkDestroyFence(device, fence, nullptr); });
 
         assertVkResult(
             vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &perFrameData[i].swapchainImageAvailable));
@@ -266,10 +294,12 @@ void VulkanDevice::initSyncStructures()
             device, &semaphoreCreateInfo, nullptr, &perFrameData[i].swapchainImageRenderFinished));
 
         deleteQueue.pushBack(
-            [=]()
+            [=,
+             renderFinished = perFrameData[i].swapchainImageRenderFinished,
+             imgAvail = perFrameData[i].swapchainImageAvailable]()
             {
-                vkDestroySemaphore(device, perFrameData[i].swapchainImageRenderFinished, nullptr);
-                vkDestroySemaphore(device, perFrameData[i].swapchainImageAvailable, nullptr);
+                vkDestroySemaphore(device, renderFinished, nullptr);
+                vkDestroySemaphore(device, imgAvail, nullptr);
             });
     }
 
@@ -1258,6 +1288,19 @@ void VulkanDevice::startInitializationWork()
     curFrameData.stagingAllocator.reset();
 
     // no commmand buffers / pools to clear / reset yet
+
+    // begin upload command buffer
+    {
+        VkCommandBufferBeginInfo cmdBeginInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = nullptr,
+
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+            .pInheritanceInfo = nullptr,
+        };
+
+        assertVkResult(vkBeginCommandBuffer(curFrameData.uploadCommandBuffer, &cmdBeginInfo));
+    }
 }
 
 void VulkanDevice::submitInitializationWork(Span<const VkCommandBuffer> cmdBuffersToSubmit)
@@ -1266,45 +1309,25 @@ void VulkanDevice::submitInitializationWork(Span<const VkCommandBuffer> cmdBuffe
 
     auto& curFrameData = getCurrentFrameData();
 
-    if(curFrameData.uploadCommandBuffer != VK_NULL_HANDLE)
-    {
-        // uploads happended this frame
-        vkEndCommandBuffer(curFrameData.uploadCommandBuffer);
-        std::vector<VkCommandBuffer> buffers{cmdBuffersToSubmit.size() + 1};
-        std::copy(cmdBuffersToSubmit.begin(), cmdBuffersToSubmit.end(), ++buffers.begin());
-        buffers[0] = curFrameData.uploadCommandBuffer;
-        curFrameData.uploadCommandBuffer = VK_NULL_HANDLE;
+    // uploads happended this frame
+    vkEndCommandBuffer(curFrameData.uploadCommandBuffer);
+    std::vector<VkCommandBuffer> buffers{cmdBuffersToSubmit.size() + 1};
+    std::copy(cmdBuffersToSubmit.begin(), cmdBuffersToSubmit.end(), ++buffers.begin());
+    buffers[0] = curFrameData.uploadCommandBuffer;
 
-        VkSubmitInfo submitInfo{
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .pNext = nullptr,
+    VkSubmitInfo submitInfo{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = nullptr,
 
-            .waitSemaphoreCount = 0,
+        .waitSemaphoreCount = 0,
 
-            .commandBufferCount = static_cast<uint32_t>(buffers.size()),
-            .pCommandBuffers = buffers.data(),
+        .commandBufferCount = static_cast<uint32_t>(buffers.size()),
+        .pCommandBuffers = buffers.data(),
 
-            .signalSemaphoreCount = 0,
-        };
+        .signalSemaphoreCount = 0,
+    };
 
-        assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
-    }
-    else
-    {
-        VkSubmitInfo submitInfo{
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .pNext = nullptr,
-
-            .waitSemaphoreCount = 0,
-
-            .commandBufferCount = static_cast<uint32_t>(cmdBuffersToSubmit.size()),
-            .pCommandBuffers = cmdBuffersToSubmit.data(),
-
-            .signalSemaphoreCount = 0,
-        };
-
-        assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
-    }
+    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
 }
 
 void VulkanDevice::startNextFrame()
@@ -1346,12 +1369,20 @@ void VulkanDevice::startNextFrame()
     {
         assertVkResult(vkResetCommandPool(device, cmdPool, 0));
     }
-}
+    assertVkResult(vkResetCommandPool(device, curFrameData.uploadCommandPool, 0));
 
-void VulkanDevice::generateUploadCommandBuffer(uint32_t threadIndex)
-{
-    auto& curFrameData = getCurrentFrameData();
-    curFrameData.uploadCommandBuffer = beginCommandBuffer(threadIndex);
+    // begin upload command buffer
+    {
+        VkCommandBufferBeginInfo cmdBeginInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = nullptr,
+
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+            .pInheritanceInfo = nullptr,
+        };
+
+        assertVkResult(vkBeginCommandBuffer(curFrameData.uploadCommandBuffer, &cmdBeginInfo));
+    }
 }
 
 VkCommandBuffer VulkanDevice::beginCommandBuffer(uint32_t threadIndex)
@@ -1408,53 +1439,29 @@ void VulkanDevice::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
 {
     auto& curFrameData = getCurrentFrameData();
 
-    if(curFrameData.uploadCommandBuffer != VK_NULL_HANDLE)
-    {
-        // uploads happended this frame
-        vkEndCommandBuffer(curFrameData.uploadCommandBuffer);
-        std::vector<VkCommandBuffer> buffers{cmdBuffers.size() + 1};
-        std::copy(cmdBuffers.begin(), cmdBuffers.end(), ++buffers.begin());
-        buffers[0] = curFrameData.uploadCommandBuffer;
-        curFrameData.uploadCommandBuffer = VK_NULL_HANDLE;
+    // uploads happended this frame
+    vkEndCommandBuffer(curFrameData.uploadCommandBuffer);
+    std::vector<VkCommandBuffer> buffers{cmdBuffers.size() + 1};
+    std::copy(cmdBuffers.begin(), cmdBuffers.end(), ++buffers.begin());
+    buffers[0] = curFrameData.uploadCommandBuffer;
 
-        VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        VkSubmitInfo submitInfo{
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .pNext = nullptr,
+    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submitInfo{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = nullptr,
 
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &curFrameData.swapchainImageAvailable,
-            .pWaitDstStageMask = &waitStage,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &curFrameData.swapchainImageAvailable,
+        .pWaitDstStageMask = &waitStage,
 
-            .commandBufferCount = static_cast<uint32_t>(buffers.size()),
-            .pCommandBuffers = buffers.data(),
+        .commandBufferCount = static_cast<uint32_t>(buffers.size()),
+        .pCommandBuffers = buffers.data(),
 
-            .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &curFrameData.swapchainImageRenderFinished,
-        };
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &curFrameData.swapchainImageRenderFinished,
+    };
 
-        assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
-    }
-    else
-    {
-        VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        VkSubmitInfo submitInfo{
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .pNext = nullptr,
-
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &curFrameData.swapchainImageAvailable,
-            .pWaitDstStageMask = &waitStage,
-
-            .commandBufferCount = static_cast<uint32_t>(cmdBuffers.size()),
-            .pCommandBuffers = cmdBuffers.data(),
-
-            .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &curFrameData.swapchainImageRenderFinished,
-        };
-
-        assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
-    }
+    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
 }
 
 void VulkanDevice::presentSwapchain()

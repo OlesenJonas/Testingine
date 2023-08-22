@@ -69,8 +69,6 @@ class VulkanDevice
     // Dont really like these functions, but have to do for now until a framegraph is implemented
     void startNextFrame();
 
-    void generateUploadCommandBuffer(uint32_t threadIndex = 0);
-
     VkCommandBuffer beginCommandBuffer(uint32_t threadIndex = 0);
     void endCommandBuffer(VkCommandBuffer cmd);
 
@@ -162,7 +160,8 @@ class VulkanDevice
         std::vector<std::vector<VkCommandBuffer>> usedCommandBuffersPerPool{};
 
         LinearAllocator stagingAllocator;
-        VkCommandBuffer uploadCommandBuffer = VK_NULL_HANDLE;
+        VkCommandPool uploadCommandPool;
+        VkCommandBuffer uploadCommandBuffer;
     };
     PerFrameData perFrameData[FRAMES_IN_FLIGHT];
     inline PerFrameData& getCurrentFrameData() { return perFrameData[frameNumber % FRAMES_IN_FLIGHT]; }

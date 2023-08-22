@@ -21,8 +21,6 @@ Editor::Editor()
 {
     gfxDevice.startInitializationWork();
 
-    gfxDevice.generateUploadCommandBuffer(0);
-
     gfxDevice.defaultDepthFormat = toVkFormat(depthFormat);
 
     inputManager.init(mainWindow.glfwWindow);

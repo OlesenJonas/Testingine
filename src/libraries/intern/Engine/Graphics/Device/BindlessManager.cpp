@@ -115,12 +115,12 @@ void BindlessManager::init()
         bindlessDescriptorSets[entry.second.setIndex] = set;
     }
 
-    gfxDevice.deleteQueue.pushBack(
-        [=]() { vkDestroyDescriptorPool(gfxDevice.device, bindlessDescriptorPool, nullptr); });
+    gfxDevice.deleteQueue.pushBack([device = gfxDevice.device, pool = bindlessDescriptorPool]()
+                                   { vkDestroyDescriptorPool(device, pool, nullptr); });
     for(auto setLayout : bindlessSetLayouts)
     {
-        gfxDevice.deleteQueue.pushBack([=]()
-                                       { vkDestroyDescriptorSetLayout(gfxDevice.device, setLayout, nullptr); });
+        gfxDevice.deleteQueue.pushBack([device = gfxDevice.device, layout = setLayout]()
+                                       { vkDestroyDescriptorSetLayout(device, layout, nullptr); });
     }
 
     for(auto& entry : descriptorTypeTable)
