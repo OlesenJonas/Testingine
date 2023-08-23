@@ -181,17 +181,23 @@ Editor::Editor()
             uint32_t level;
         };
         DebugMipFillPushConstants constants{
-            .targetIndex = mipTestTex->mipResourceIndex(0),
+            .targetIndex = 0xFFFFFFFF,
             .level = 0,
         };
 
         uint32_t mipCount = mipTestTex->descriptor.mipLevels;
         for(uint32_t mip = 0; mip < mipCount; mip++)
         {
+            Handle<TextureView> mipView = gfxDevice.createTextureView(TextureView::CreateInfo{
+                .parent = mipTestTexH,
+                .allStates = ResourceState::StorageCompute,
+                .baseMipLevel = mip,
+            });
+
             uint32_t mipSize = glm::max(128u >> mip, 1u);
 
             constants = {
-                .targetIndex = mipTestTex->mipResourceIndex(mip),
+                .targetIndex = gfxDevice.get(mipView)->resourceIndex,
                 .level = mip,
             };
 
@@ -199,6 +205,8 @@ Editor::Editor()
 
             // TODO: dont hardcode sizes! retrieve programmatically (workrgoup size form spirv)
             gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
+
+            gfxDevice.destroy(mipView);
         }
 
         // transfer dst texture from general to shader read only layout
@@ -241,7 +249,7 @@ Editor::Editor()
 
     auto unlitTexturedMaterial = resourceManager.createMaterialInstance(unlitTexturedMaterialH);
     resourceManager.get(unlitTexturedMaterial)
-        ->setResource("texture", resourceManager.get(mipTestTexH)->fullResourceIndex());
+        ->setResource("texture", resourceManager.get(mipTestTexH)->resourceIndex);
 
     auto newRenderable = ecs.createEntity();
     {
@@ -291,8 +299,9 @@ Editor::Editor()
             uint32_t sourceIndex;
             uint32_t targetIndex;
         } constants = {
-            .sourceIndex = resourceManager.get(hdri)->fullResourceIndex(),
-            .targetIndex = resourceManager.get(hdriCube)->mipResourceIndex(0),
+            .sourceIndex = resourceManager.get(hdri)->resourceIndex,
+            // TODO: Not sure if writing into image view with all levels correctly writes into 0th level
+            .targetIndex = resourceManager.get(hdriCube)->resourceIndex,
         };
         gfxDevice.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
 
@@ -335,8 +344,8 @@ Editor::Editor()
             uint32_t targetIndex;
         };
         ConversionPushConstants constants{
-            .sourceIndex = resourceManager.get(hdriCube)->fullResourceIndex(),
-            .targetIndex = irradianceTex->mipResourceIndex(0),
+            .sourceIndex = resourceManager.get(hdriCube)->resourceIndex,
+            .targetIndex = irradianceTex->resourceIndex,
         };
 
         gfxDevice.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
@@ -381,25 +390,34 @@ Editor::Editor()
             float roughness;
         };
         PrefilterPushConstants constants{
-            .sourceIndex = resourceManager.get(hdriCube)->fullResourceIndex(),
-            .targetIndex = prefilteredEnv->mipResourceIndex(0),
+            .sourceIndex = 0xFFFFFFFF,
+            .targetIndex = 0xFFFFFFFF,
             .roughness = 0.0,
         };
 
         uint32_t mipCount = prefilteredEnv->descriptor.mipLevels;
         for(uint32_t mip = 0; mip < mipCount; mip++)
         {
+            Handle<TextureView> mipView = gfxDevice.createTextureView(TextureView::CreateInfo{
+                .parent = prefilteredEnvMap,
+                .type = Texture::Type::tCube,
+                .allStates = ResourceState::StorageCompute,
+                .baseMipLevel = mip,
+            });
+
             uint32_t mipSize = glm::max(prefilteredEnvMapBaseSize >> mip, 1u);
 
             constants = {
-                .sourceIndex = resourceManager.get(hdriCube)->fullResourceIndex(),
-                .targetIndex = prefilteredEnv->mipResourceIndex(mip),
+                .sourceIndex = resourceManager.get(hdriCube)->resourceIndex,
+                .targetIndex = gfxDevice.get(mipView)->resourceIndex,
                 .roughness = float(mip) / float(mipCount - 1),
             };
 
             gfxDevice.pushConstants(mainCmdBuffer, sizeof(PrefilterPushConstants), &constants);
 
             gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
+
+            gfxDevice.destroy(mipView);
         }
 
         // transfer dst texture from general to shader read only layout
@@ -436,7 +454,7 @@ Editor::Editor()
         {
             uint32_t outTexture;
         };
-        IntegratePushConstants constants{brdfIntegral->mipResourceIndex(0)};
+        IntegratePushConstants constants{brdfIntegral->resourceIndex};
 
         gfxDevice.pushConstants(mainCmdBuffer, sizeof(IntegratePushConstants), &constants);
 
@@ -457,9 +475,9 @@ Editor::Editor()
 
     // TODO: getPtrTmp() function (explicitetly state temporary!)
     auto* basicPBRMaterial = resourceManager.get(resourceManager.getMaterial("PBRBasic"));
-    basicPBRMaterial->setResource("irradianceTex", resourceManager.get(irradianceTexHandle)->fullResourceIndex());
-    basicPBRMaterial->setResource("prefilterTex", resourceManager.get(prefilteredEnvMap)->fullResourceIndex());
-    basicPBRMaterial->setResource("brdfLUT", resourceManager.get(brdfIntegralMap)->fullResourceIndex());
+    basicPBRMaterial->setResource("irradianceTex", resourceManager.get(irradianceTexHandle)->resourceIndex);
+    basicPBRMaterial->setResource("prefilterTex", resourceManager.get(prefilteredEnvMap)->resourceIndex);
+    basicPBRMaterial->setResource("brdfLUT", resourceManager.get(brdfIntegralMap)->resourceIndex);
 
     auto defaultCube = resourceManager.getMesh("DefaultCube");
 
@@ -475,7 +493,7 @@ Editor::Editor()
     auto equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
     {
         auto* inst = resourceManager.get(equiSkyboxMatInst);
-        inst->setResource("equirectangularMap", resourceManager.get(hdri)->fullResourceIndex());
+        inst->setResource("equirectangularMap", resourceManager.get(hdri)->resourceIndex);
     }
 
     auto cubeSkyboxMat = resourceManager.createMaterial({
@@ -487,7 +505,7 @@ Editor::Editor()
     auto cubeSkyboxMatInst = resourceManager.createMaterialInstance(cubeSkyboxMat);
     {
         auto* inst = resourceManager.get(cubeSkyboxMatInst);
-        inst->setResource("cubeMap", resourceManager.get(hdriCube)->fullResourceIndex());
+        inst->setResource("cubeMap", resourceManager.get(hdriCube)->resourceIndex);
         // inst->setResource("cubeMap", resourceManager.get(irradianceTexHandle)->sampledResourceIndex);
     }
 

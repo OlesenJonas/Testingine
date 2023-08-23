@@ -58,6 +58,10 @@ class ResourceManager
     inline Texture* get(Handle<Texture> handle) { return VulkanDevice::get()->get(handle); };
     CREATE_NAME_TO_HANDLE_GETTER(Texture, nameToTextureLUT);
 
+    Handle<TextureView> createTextureView(TextureView::CreateInfo&& createInfo);
+    void destroy(Handle<TextureView> handle);
+    inline TextureView* get(Handle<TextureView> handle) { return VulkanDevice::get()->get(handle); };
+
     Handle<Material> createMaterial(Material::CreateInfo&& crInfo);
     void destroy(Handle<Material> handle);
     inline Material* get(Handle<Material> handle) { return materialPool.get(handle); };

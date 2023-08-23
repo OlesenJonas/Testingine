@@ -69,15 +69,18 @@ struct ResourceStateMulti
         return *this;
     }
 
-    constexpr inline operator bool() const // NOLINT
-    {
-        return value != 0u;
-    }
+    constexpr inline explicit operator bool() const { return value != 0u; }
 
     constexpr void unset(const ResourceStateMulti& rhs) { value &= ~static_cast<U>(rhs.value); }
     bool containsUniformBufferUsage();
     bool containsStorageBufferUsage();
 };
+
+constexpr inline ResourceStateMulti operator~(ResourceStateMulti lhs)
+{
+    lhs.value = ~lhs.value;
+    return lhs;
+}
 
 constexpr inline ResourceStateMulti operator|(ResourceStateMulti lhs, ResourceState rhs)
 {
@@ -88,6 +91,12 @@ constexpr inline ResourceStateMulti operator|(ResourceStateMulti lhs, ResourceSt
 constexpr inline ResourceStateMulti operator&(ResourceStateMulti lhs, ResourceState rhs)
 {
     lhs.value &= static_cast<ResourceStateMulti::U>(rhs);
+    return lhs;
+}
+
+constexpr inline ResourceStateMulti operator&(ResourceStateMulti lhs, ResourceStateMulti rhs)
+{
+    lhs.value &= rhs.value;
     return lhs;
 }
 

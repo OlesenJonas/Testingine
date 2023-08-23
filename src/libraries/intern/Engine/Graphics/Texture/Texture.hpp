@@ -110,12 +110,10 @@ struct Texture
     static LoadResult loadHDR(Texture::LoadInfo&& loadInfo);
     static LoadResult loadDefault(Texture::LoadInfo&& loadInfo);
 
-    uint32_t fullResourceIndex() const;
-    uint32_t mipResourceIndex(uint32_t level) const;
-    // TODO: own textureView abstraction
-    VkImageView fullResourceView() const;
-    VkImageView mipResourceView(uint32_t level) const;
-
     Descriptor descriptor;
-    VulkanTexture gpuTexture;
+
+    VmaAllocation allocation = VK_NULL_HANDLE;
+    VkImage image = VK_NULL_HANDLE;
+    VkImageView imageView = VK_NULL_HANDLE;
+    uint32_t resourceIndex = 0xFFFFFFFF;
 };

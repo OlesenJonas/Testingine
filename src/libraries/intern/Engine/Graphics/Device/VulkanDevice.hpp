@@ -12,8 +12,8 @@
 #include <atomic>
 #include <vulkan/vulkan_core.h>
 
-// TODO: full headers just for the create infos?
 #include "../Buffer/Buffer.hpp"
+#include "../Texture/TextureView.hpp"
 
 struct GLFWwindow;
 struct Material;
@@ -44,6 +44,10 @@ class VulkanDevice
     Handle<Texture> createTexture(Texture::CreateInfo&& createInfo);
     void destroy(Handle<Texture> handle);
     inline Texture* get(Handle<Texture> handle) { return texturePool.get(handle); }
+
+    Handle<TextureView> createTextureView(TextureView::CreateInfo&& createInfo);
+    void destroy(Handle<TextureView> handle);
+    inline TextureView* get(Handle<TextureView> handle) { return textureViewPool.get(handle); }
 
     // TODO: wrap in handles aswell?
     VkPipeline
@@ -209,6 +213,7 @@ class VulkanDevice
 
     Pool<Buffer> bufferPool;
     Pool<Texture> texturePool;
+    Pool<TextureView> textureViewPool;
     // this value needs to match "GLOBAL_SAMPLER_COUNT" in the bindless shader code! Pass as eg. spec constant?
     PoolLimited<BindlessManager::samplerLimit, Sampler> samplerPool;
 

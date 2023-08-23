@@ -315,7 +315,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         const Handle<Sampler> normalSamplerHandle = samplers[normalTextureGLTF.samplerIndex];
         Texture* normalTex = rm->get(normalTextureHandle);
         Sampler* normalSampler = rm->get(normalSamplerHandle);
-        matInst->setResource("normalTexture", normalTex->fullResourceIndex());
+        matInst->setResource("normalTexture", normalTex->resourceIndex);
         matInst->setResource("normalSampler", normalSampler->sampler.resourceIndex);
 
         const glTF::Texture& baseColorTextureGLTF =
@@ -324,7 +324,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         const Handle<Sampler> baseColorSamplerHandle = samplers[baseColorTextureGLTF.samplerIndex];
         Texture* baseColorTex = rm->get(baseColorTextureHandle);
         Sampler* baseColorSampler = rm->get(baseColorSamplerHandle);
-        matInst->setResource("baseColorTexture", baseColorTex->fullResourceIndex());
+        matInst->setResource("baseColorTexture", baseColorTex->resourceIndex);
         matInst->setResource("baseColorSampler", baseColorSampler->sampler.resourceIndex);
 
         const glTF::Texture& metalRoughTextureGLTF =
@@ -333,7 +333,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         const Handle<Sampler> metalRoughSamplerHandle = samplers[metalRoughTextureGLTF.samplerIndex];
         Texture* metalRoughTex = rm->get(metalRoughTextureHandle);
         Sampler* metalRoughSampler = rm->get(metalRoughSamplerHandle);
-        matInst->setResource("metalRoughTexture", metalRoughTex->fullResourceIndex());
+        matInst->setResource("metalRoughTexture", metalRoughTex->resourceIndex);
         matInst->setResource("metalRoughSampler", metalRoughSampler->sampler.resourceIndex);
 
         const glTF::Texture& occlusionTextureGLTF = gltf.textures[material.occlusionTexture.index];
@@ -341,7 +341,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         const Handle<Sampler> occlusionSamplerHandle = samplers[occlusionTextureGLTF.samplerIndex];
         Texture* occlusionTex = rm->get(occlusionTextureHandle);
         Sampler* occlusionSampler = rm->get(occlusionSamplerHandle);
-        matInst->setResource("occlusionTexture", occlusionTex->fullResourceIndex());
+        matInst->setResource("occlusionTexture", occlusionTex->resourceIndex);
         matInst->setResource("occlusionSampler", occlusionSampler->sampler.resourceIndex);
 
         materialInstances[i] = materialInstanceHandle;

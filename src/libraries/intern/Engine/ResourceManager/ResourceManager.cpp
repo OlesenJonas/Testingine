@@ -242,6 +242,13 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 
 void ResourceManager::destroy(Handle<Texture> handle) { VulkanDevice::get()->destroy(handle); }
 
+Handle<TextureView> ResourceManager::createTextureView(TextureView::CreateInfo&& createInfo)
+{
+    return VulkanDevice::get()->createTextureView(std::move(createInfo));
+}
+
+void ResourceManager::destroy(Handle<TextureView> handle) { VulkanDevice::get()->destroy(handle); }
+
 Handle<Material> ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
 {
     std::string_view fileView{crInfo.fragmentShader.sourcePath};
