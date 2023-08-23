@@ -17,6 +17,8 @@ class Editor final : public Application
   private:
     void update();
 
+    VkCommandBuffer updateDirtyMaterialParameters();
+
     uint32_t frameNumber = 0xFFFFFFFF;
 
     InputManager inputManager;

@@ -507,79 +507,7 @@ Editor::Editor()
 
     gfxDevice.endCommandBuffer(mainCmdBuffer);
 
-    VkCommandBuffer materialUpdateCmds = gfxDevice.beginCommandBuffer();
-    auto& materials = resourceManager.getMaterialPool();
-    // TODO: MERGE ALL BARRIER SUBMITS !!
-    for(auto iter = materials.begin(); iter != materials.end(); iter++)
-    {
-        auto* material = *iter;
-        if(!material->dirty)
-            continue;
-        gfxDevice.insertBarriers(
-            materialUpdateCmds,
-            {
-                Barrier::FromBuffer{
-                    .buffer = resourceManager.get(material->parameters.deviceBuffer),
-                    .stateBefore = ResourceState::UniformBuffer,
-                    .stateAfter = ResourceState::TransferDst,
-                },
-            });
-        auto gpuAlloc = gfxDevice.allocateStagingData(material->parameters.bufferSize);
-        memcpy(gpuAlloc.ptr, material->parameters.writeBuffer, material->parameters.bufferSize);
-        gfxDevice.copyBuffer(
-            materialUpdateCmds,
-            gpuAlloc.buffer,
-            gpuAlloc.offset,
-            material->parameters.deviceBuffer,
-            0,
-            material->parameters.bufferSize);
-        material->dirty = false;
-        gfxDevice.insertBarriers(
-            materialUpdateCmds,
-            {
-                Barrier::FromBuffer{
-                    .buffer = resourceManager.get(material->parameters.deviceBuffer),
-                    .stateBefore = ResourceState::TransferDst,
-                    .stateAfter = ResourceState::UniformBuffer,
-                },
-            });
-    }
-    auto& materialInstances = resourceManager.getMaterialInstancePool();
-    for(auto iter = materialInstances.begin(); iter != materialInstances.end(); iter++)
-    {
-        auto* materialInst = *iter;
-        if(!materialInst->dirty)
-            continue;
-        gfxDevice.insertBarriers(
-            materialUpdateCmds,
-            {
-                Barrier::FromBuffer{
-                    .buffer = resourceManager.get(materialInst->parameters.deviceBuffer),
-                    .stateBefore = ResourceState::UniformBuffer,
-                    .stateAfter = ResourceState::TransferDst,
-                },
-            });
-        auto gpuAlloc = gfxDevice.allocateStagingData(materialInst->parameters.bufferSize);
-        memcpy(gpuAlloc.ptr, materialInst->parameters.writeBuffer, materialInst->parameters.bufferSize);
-        gfxDevice.copyBuffer(
-            materialUpdateCmds,
-            gpuAlloc.buffer,
-            gpuAlloc.offset,
-            materialInst->parameters.deviceBuffer,
-            0,
-            materialInst->parameters.bufferSize);
-        materialInst->dirty = false;
-        gfxDevice.insertBarriers(
-            materialUpdateCmds,
-            {
-                Barrier::FromBuffer{
-                    .buffer = resourceManager.get(materialInst->parameters.deviceBuffer),
-                    .stateBefore = ResourceState::TransferDst,
-                    .stateAfter = ResourceState::UniformBuffer,
-                },
-            });
-    }
-    gfxDevice.endCommandBuffer(materialUpdateCmds);
+    VkCommandBuffer materialUpdateCmds = updateDirtyMaterialParameters();
 
     gfxDevice.submitInitializationWork({materialUpdateCmds, mainCmdBuffer});
 
@@ -788,15 +716,97 @@ void Editor::update()
         return onscreenCmdBuffer;
     };
 
+    VkCommandBuffer materialParamUpdates = updateDirtyMaterialParameters();
+
     auto offscreenFuture = threadPool.queueJob(recordSceneDrawingCommands);
     auto onscreenFuture = threadPool.queueJob(recordUIdrawingCommands);
 
     VkCommandBuffer offscreenCmdBuffer = offscreenFuture.get();
     VkCommandBuffer onscreenCmdBuffer = onscreenFuture.get();
 
-    gfxDevice.submitCommandBuffers({offscreenCmdBuffer, onscreenCmdBuffer});
+    gfxDevice.submitCommandBuffers({materialParamUpdates, offscreenCmdBuffer, onscreenCmdBuffer});
 
     gfxDevice.presentSwapchain();
 
     // ------------------------------
+}
+
+VkCommandBuffer Editor::updateDirtyMaterialParameters()
+{
+    VkCommandBuffer materialUpdateCmds = gfxDevice.beginCommandBuffer();
+
+    auto& materials = resourceManager.getMaterialPool();
+    // TODO: MERGE ALL BARRIER SUBMITS !!
+    for(auto iter = materials.begin(); iter != materials.end(); iter++)
+    {
+        auto* material = *iter;
+        if(!material->dirty)
+            continue;
+        gfxDevice.insertBarriers(
+            materialUpdateCmds,
+            {
+                Barrier::FromBuffer{
+                    .buffer = resourceManager.get(material->parameters.deviceBuffer),
+                    .stateBefore = ResourceState::UniformBuffer,
+                    .stateAfter = ResourceState::TransferDst,
+                },
+            });
+        auto gpuAlloc = gfxDevice.allocateStagingData(material->parameters.bufferSize);
+        memcpy(gpuAlloc.ptr, material->parameters.writeBuffer, material->parameters.bufferSize);
+        gfxDevice.copyBuffer(
+            materialUpdateCmds,
+            gpuAlloc.buffer,
+            gpuAlloc.offset,
+            material->parameters.deviceBuffer,
+            0,
+            material->parameters.bufferSize);
+        material->dirty = false;
+        gfxDevice.insertBarriers(
+            materialUpdateCmds,
+            {
+                Barrier::FromBuffer{
+                    .buffer = resourceManager.get(material->parameters.deviceBuffer),
+                    .stateBefore = ResourceState::TransferDst,
+                    .stateAfter = ResourceState::UniformBuffer,
+                },
+            });
+    }
+    auto& materialInstances = resourceManager.getMaterialInstancePool();
+    for(auto iter = materialInstances.begin(); iter != materialInstances.end(); iter++)
+    {
+        auto* materialInst = *iter;
+        if(!materialInst->dirty)
+            continue;
+        gfxDevice.insertBarriers(
+            materialUpdateCmds,
+            {
+                Barrier::FromBuffer{
+                    .buffer = resourceManager.get(materialInst->parameters.deviceBuffer),
+                    .stateBefore = ResourceState::UniformBuffer,
+                    .stateAfter = ResourceState::TransferDst,
+                },
+            });
+        auto gpuAlloc = gfxDevice.allocateStagingData(materialInst->parameters.bufferSize);
+        memcpy(gpuAlloc.ptr, materialInst->parameters.writeBuffer, materialInst->parameters.bufferSize);
+        gfxDevice.copyBuffer(
+            materialUpdateCmds,
+            gpuAlloc.buffer,
+            gpuAlloc.offset,
+            materialInst->parameters.deviceBuffer,
+            0,
+            materialInst->parameters.bufferSize);
+        materialInst->dirty = false;
+        gfxDevice.insertBarriers(
+            materialUpdateCmds,
+            {
+                Barrier::FromBuffer{
+                    .buffer = resourceManager.get(materialInst->parameters.deviceBuffer),
+                    .stateBefore = ResourceState::TransferDst,
+                    .stateAfter = ResourceState::UniformBuffer,
+                },
+            });
+    }
+    gfxDevice.endCommandBuffer(materialUpdateCmds);
+
+    return materialUpdateCmds;
 }
