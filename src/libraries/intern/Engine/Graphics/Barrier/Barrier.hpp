@@ -37,7 +37,7 @@ struct Barrier
 
     struct FromImage
     {
-        Texture* texture;
+        Handle<Texture> texture;
         ResourceState stateBefore = ResourceState::None;
         ResourceState stateAfter = ResourceState::None;
         int32_t mipLevel = 0;
@@ -49,7 +49,7 @@ struct Barrier
 
     struct FromBuffer
     {
-        Buffer* buffer;
+        Handle<Buffer> buffer;
         ResourceState stateBefore = ResourceState::None;
         ResourceState stateAfter = ResourceState::None;
         size_t offset = 0;

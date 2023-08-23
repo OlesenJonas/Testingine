@@ -80,7 +80,7 @@ class VulkanDevice
 
     // TODO: turn the functions into member functions of the command buffer instead ?
 
-    void fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state);
+    void fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state);
 
     void copyBuffer(VkCommandBuffer cmd, Handle<Buffer> src, Handle<Buffer> dest);
     void copyBuffer(

@@ -1445,9 +1445,9 @@ void VulkanDevice::presentSwapchain()
     assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
 }
 
-void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state)
+void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state)
 {
-    return fillMipLevels(cmd, texture->gpuTexture.image, texture->descriptor, state);
+    return fillMipLevels(cmd, get(texture)->gpuTexture.image, get(texture)->descriptor, state);
 }
 
 void VulkanDevice::copyBuffer(VkCommandBuffer cmd, Handle<Buffer> src, Handle<Buffer> dest)
@@ -1592,7 +1592,7 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
     {
         if(barrier.type == Barrier::Type::Buffer)
         {
-            const Buffer* buf = barrier.buffer.buffer;
+            const Buffer* buf = get(barrier.buffer.buffer);
             if(buf == nullptr)
             {
                 BREAKPOINT;
@@ -1620,7 +1620,7 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
         }
         else if(barrier.type == Barrier::Type::Image)
         {
-            const Texture* tex = barrier.image.texture;
+            const Texture* tex = get(barrier.image.texture);
             if(tex == nullptr)
             {
                 BREAKPOINT;

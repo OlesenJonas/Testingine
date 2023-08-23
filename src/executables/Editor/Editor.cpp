@@ -206,7 +206,7 @@ Editor::Editor()
             mainCmdBuffer,
             {
                 Barrier::FromImage{
-                    .texture = resourceManager.get(mipTestTexH),
+                    .texture = mipTestTexH,
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 },
@@ -302,13 +302,13 @@ Editor::Editor()
             mainCmdBuffer,
             {
                 Barrier::FromImage{
-                    .texture = resourceManager.get(hdriCube),
+                    .texture = hdriCube,
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 },
             });
 
-        gfxDevice.fillMipLevels(mainCmdBuffer, resourceManager.get(hdriCube), ResourceState::SampleSource);
+        gfxDevice.fillMipLevels(mainCmdBuffer, hdriCube, ResourceState::SampleSource);
     }
 
     Handle<ComputeShader> calcIrradianceComp = resourceManager.createComputeShader(
@@ -348,7 +348,7 @@ Editor::Editor()
             mainCmdBuffer,
             {
                 Barrier::FromImage{
-                    .texture = resourceManager.get(irradianceTexHandle),
+                    .texture = irradianceTexHandle,
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 },
@@ -407,7 +407,7 @@ Editor::Editor()
             mainCmdBuffer,
             {
                 Barrier::FromImage{
-                    .texture = resourceManager.get(prefilteredEnvMap),
+                    .texture = prefilteredEnvMap,
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 },
@@ -448,7 +448,7 @@ Editor::Editor()
             mainCmdBuffer,
             {
                 Barrier::FromImage{
-                    .texture = resourceManager.get(brdfIntegralMap),
+                    .texture = brdfIntegralMap,
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 },
@@ -575,7 +575,7 @@ void Editor::update()
             offscreenCmdBuffer,
             {
                 Barrier::FromImage{
-                    .texture = resourceManager.get(depthTexture),
+                    .texture = depthTexture,
                     .stateBefore = ResourceState::DepthStencilTarget,
                     .stateAfter = ResourceState::DepthStencilTarget,
                     .allowDiscardOriginal = true,
@@ -746,7 +746,7 @@ VkCommandBuffer Editor::updateDirtyMaterialParameters()
             materialUpdateCmds,
             {
                 Barrier::FromBuffer{
-                    .buffer = resourceManager.get(material->parameters.deviceBuffer),
+                    .buffer = material->parameters.deviceBuffer,
                     .stateBefore = ResourceState::UniformBuffer,
                     .stateAfter = ResourceState::TransferDst,
                 },
@@ -765,7 +765,7 @@ VkCommandBuffer Editor::updateDirtyMaterialParameters()
             materialUpdateCmds,
             {
                 Barrier::FromBuffer{
-                    .buffer = resourceManager.get(material->parameters.deviceBuffer),
+                    .buffer = material->parameters.deviceBuffer,
                     .stateBefore = ResourceState::TransferDst,
                     .stateAfter = ResourceState::UniformBuffer,
                 },
@@ -781,7 +781,7 @@ VkCommandBuffer Editor::updateDirtyMaterialParameters()
             materialUpdateCmds,
             {
                 Barrier::FromBuffer{
-                    .buffer = resourceManager.get(materialInst->parameters.deviceBuffer),
+                    .buffer = materialInst->parameters.deviceBuffer,
                     .stateBefore = ResourceState::UniformBuffer,
                     .stateAfter = ResourceState::TransferDst,
                 },
@@ -800,7 +800,7 @@ VkCommandBuffer Editor::updateDirtyMaterialParameters()
             materialUpdateCmds,
             {
                 Barrier::FromBuffer{
-                    .buffer = resourceManager.get(materialInst->parameters.deviceBuffer),
+                    .buffer = materialInst->parameters.deviceBuffer,
                     .stateBefore = ResourceState::TransferDst,
                     .stateAfter = ResourceState::UniformBuffer,
                 },
