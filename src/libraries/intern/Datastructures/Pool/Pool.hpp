@@ -8,7 +8,7 @@
 #include <functional>
 #include <type_traits>
 
-// Handle and Pool types as shown in https://twitter.com/SebAaltonen/status/1562747716584648704 and realted tweets
+// Handle and Pool types as shown in https://twitter.com/SebAaltonen/status/1562747716584648704 and related tweets
 /*
     not sure this is correct yet, will see
         https://stackoverflow.com/questions/222557/what-uses-are-there-for-placement-new

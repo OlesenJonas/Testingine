@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Datastructures/Pool/Handle.hpp>
 #include <Datastructures/Span.hpp>
 #include <Engine/Graphics/Device/HelperTypes.hpp>
 #include <Engine/Graphics/Graphics.hpp>
@@ -7,9 +8,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-
-template <typename T>
-struct Handle;
 
 struct Texture
 {

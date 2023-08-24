@@ -4,7 +4,7 @@
 #include <type_traits>
 
 // Handle and Pool types as shown in https://twitter.com/SebAaltonen/status/1562747716584648704 and realted tweets
-template <typename T>
+template <typename... Ts>
 class Handle
 {
   public:
@@ -13,11 +13,11 @@ class Handle
     static Handle Invalid() { return {0, 0}; }
     static Handle Null() { return Invalid(); }
     [[nodiscard]] bool isValid() const { return generation != 0u || index != 0u; }
-    bool operator==(const Handle<T>& other) const
+    bool operator==(const Handle<Ts...>& other) const
     {
         return index == other.index && generation == other.generation;
     }
-    bool operator!=(const Handle<T>& other) const
+    bool operator!=(const Handle<Ts...>& other) const
     {
         return index != other.index || generation != other.generation;
     }
