@@ -37,7 +37,7 @@ struct Barrier
 
     struct FromImage
     {
-        Handle<Texture> texture;
+        Texture::Handle texture;
         ResourceState stateBefore = ResourceState::None;
         ResourceState stateAfter = ResourceState::None;
         int32_t mipLevel = 0;

@@ -8,7 +8,7 @@ struct TextureView
     struct CreateInfo
     {
         std::string debugName = ""; // NOLINT
-        Handle<Texture> parent;
+        Texture::Handle parent;
         Texture::Type type = Texture::Type::t2D;
         ResourceStateMulti allStates = ResourceState::None;
         uint32_t baseMipLevel = 0;
@@ -19,7 +19,7 @@ struct TextureView
 
     struct Descriptor
     {
-        Handle<Texture> parent;
+        Texture::Handle parent;
         Texture::Type type = Texture::Type::t2D;
         ResourceStateMulti allStates = ResourceState::None;
         uint32_t baseMipLevel = 0;

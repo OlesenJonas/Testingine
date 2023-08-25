@@ -170,8 +170,6 @@ Editor::Editor()
         .mipLevels = Texture::MipLevels::All,
     });
     {
-        Texture* mipTestTex = resourceManager.get(mipTestTexH);
-
         gfxDevice.startDebugRegion(mainCmdBuffer, "Mip test tex filling");
         gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(debugMipFillShaderH)->pipeline);
 
@@ -185,7 +183,7 @@ Editor::Editor()
             .level = 0,
         };
 
-        uint32_t mipCount = mipTestTex->descriptor.mipLevels;
+        uint32_t mipCount = resourceManager.get<Texture::Descriptor>(mipTestTexH)->mipLevels;
         for(uint32_t mip = 0; mip < mipCount; mip++)
         {
             Handle<TextureView> mipView = gfxDevice.createTextureView(TextureView::CreateInfo{
@@ -249,7 +247,7 @@ Editor::Editor()
 
     auto unlitTexturedMaterial = resourceManager.createMaterialInstance(unlitTexturedMaterialH);
     resourceManager.get(unlitTexturedMaterial)
-        ->setResource("texture", resourceManager.get(mipTestTexH)->resourceIndex);
+        ->setResource("texture", *resourceManager.get<ResourceIndex>(mipTestTexH));
 
     auto newRenderable = ecs.createEntity();
     {
@@ -281,7 +279,7 @@ Editor::Editor()
         // specifying non-default values only
         .debugName = "HdriCubemap",
         .type = Texture::Type::tCube,
-        .format = resourceManager.get(hdri)->descriptor.format,
+        .format = resourceManager.get<Texture::Descriptor>(hdri)->format,
         .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
         .initialState = ResourceState::StorageCompute,
         .size = {.width = hdriCubeRes, .height = hdriCubeRes},
@@ -299,9 +297,9 @@ Editor::Editor()
             uint32_t sourceIndex;
             uint32_t targetIndex;
         } constants = {
-            .sourceIndex = resourceManager.get(hdri)->resourceIndex,
+            .sourceIndex = *resourceManager.get<ResourceIndex>(hdri),
             // TODO: Not sure if writing into image view with all levels correctly writes into 0th level
-            .targetIndex = resourceManager.get(hdriCube)->resourceIndex,
+            .targetIndex = *resourceManager.get<ResourceIndex>(hdriCube),
         };
         gfxDevice.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
 
@@ -334,8 +332,6 @@ Editor::Editor()
         .size = {irradianceRes, irradianceRes, 1},
     });
     {
-        Texture* irradianceTex = resourceManager.get(irradianceTexHandle);
-
         gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(calcIrradianceComp)->pipeline);
 
         struct ConversionPushConstants
@@ -344,8 +340,8 @@ Editor::Editor()
             uint32_t targetIndex;
         };
         ConversionPushConstants constants{
-            .sourceIndex = resourceManager.get(hdriCube)->resourceIndex,
-            .targetIndex = irradianceTex->resourceIndex,
+            .sourceIndex = *resourceManager.get<ResourceIndex>(hdriCube),
+            .targetIndex = *resourceManager.get<ResourceIndex>(irradianceTexHandle),
         };
 
         gfxDevice.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
@@ -379,8 +375,6 @@ Editor::Editor()
         .mipLevels = 5,
     });
     {
-        Texture* prefilteredEnv = resourceManager.get(prefilteredEnvMap);
-
         gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(prefilterEnvShaderHandle)->pipeline);
 
         struct PrefilterPushConstants
@@ -395,7 +389,7 @@ Editor::Editor()
             .roughness = 0.0,
         };
 
-        uint32_t mipCount = prefilteredEnv->descriptor.mipLevels;
+        uint32_t mipCount = resourceManager.get<Texture::Descriptor>(prefilteredEnvMap)->mipLevels;
         for(uint32_t mip = 0; mip < mipCount; mip++)
         {
             Handle<TextureView> mipView = gfxDevice.createTextureView(TextureView::CreateInfo{
@@ -408,7 +402,7 @@ Editor::Editor()
             uint32_t mipSize = glm::max(prefilteredEnvMapBaseSize >> mip, 1u);
 
             constants = {
-                .sourceIndex = resourceManager.get(hdriCube)->resourceIndex,
+                .sourceIndex = *resourceManager.get<ResourceIndex>(hdriCube),
                 .targetIndex = gfxDevice.get(mipView)->resourceIndex,
                 .roughness = float(mip) / float(mipCount - 1),
             };
@@ -446,15 +440,13 @@ Editor::Editor()
         .mipLevels = 1,
     });
     {
-        Texture* brdfIntegral = resourceManager.get(brdfIntegralMap);
-
         gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(integrateBrdfShaderHandle)->pipeline);
 
         struct IntegratePushConstants
         {
             uint32_t outTexture;
         };
-        IntegratePushConstants constants{brdfIntegral->resourceIndex};
+        IntegratePushConstants constants{*resourceManager.get<ResourceIndex>(brdfIntegralMap)};
 
         gfxDevice.pushConstants(mainCmdBuffer, sizeof(IntegratePushConstants), &constants);
 
@@ -475,9 +467,9 @@ Editor::Editor()
 
     // TODO: getPtrTmp() function (explicitetly state temporary!)
     auto* basicPBRMaterial = resourceManager.get(resourceManager.getMaterial("PBRBasic"));
-    basicPBRMaterial->setResource("irradianceTex", resourceManager.get(irradianceTexHandle)->resourceIndex);
-    basicPBRMaterial->setResource("prefilterTex", resourceManager.get(prefilteredEnvMap)->resourceIndex);
-    basicPBRMaterial->setResource("brdfLUT", resourceManager.get(brdfIntegralMap)->resourceIndex);
+    basicPBRMaterial->setResource("irradianceTex", *resourceManager.get<ResourceIndex>(irradianceTexHandle));
+    basicPBRMaterial->setResource("prefilterTex", *resourceManager.get<ResourceIndex>(prefilteredEnvMap));
+    basicPBRMaterial->setResource("brdfLUT", *resourceManager.get<ResourceIndex>(brdfIntegralMap));
 
     auto defaultCube = resourceManager.getMesh("DefaultCube");
 
@@ -493,7 +485,7 @@ Editor::Editor()
     auto equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
     {
         auto* inst = resourceManager.get(equiSkyboxMatInst);
-        inst->setResource("equirectangularMap", resourceManager.get(hdri)->resourceIndex);
+        inst->setResource("equirectangularMap", *resourceManager.get<ResourceIndex>(hdri));
     }
 
     auto cubeSkyboxMat = resourceManager.createMaterial({
@@ -505,7 +497,7 @@ Editor::Editor()
     auto cubeSkyboxMatInst = resourceManager.createMaterialInstance(cubeSkyboxMat);
     {
         auto* inst = resourceManager.get(cubeSkyboxMatInst);
-        inst->setResource("cubeMap", resourceManager.get(hdriCube)->resourceIndex);
+        inst->setResource("cubeMap", *resourceManager.get<ResourceIndex>(hdriCube));
         // inst->setResource("cubeMap", resourceManager.get(irradianceTexHandle)->sampledResourceIndex);
     }
 
@@ -604,8 +596,8 @@ void Editor::update()
 
         gfxDevice.beginRendering(
             offscreenCmdBuffer,
-            {RenderTarget{.texture = RenderTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Clear}},
-            RenderTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
+            {ColorTarget{.texture = ColorTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Clear}},
+            DepthTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
 
         // Render scene ------------------------------
 
@@ -721,8 +713,8 @@ void Editor::update()
         VkCommandBuffer onscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
         gfxDevice.beginRendering(
             onscreenCmdBuffer,
-            {RenderTarget{.texture = RenderTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Load}},
-            RenderTarget{.texture = Handle<Texture>::Null()});
+            {ColorTarget{.texture = ColorTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Load}},
+            DepthTarget{.texture = Texture::Handle::Null()});
         gfxDevice.drawImGui(onscreenCmdBuffer);
         gfxDevice.endRendering(onscreenCmdBuffer);
 

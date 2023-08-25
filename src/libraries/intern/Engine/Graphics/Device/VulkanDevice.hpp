@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../Graphics.hpp"
+#include "../RenderTargets.hpp"
 #include "BindlessManager.hpp"
 #include "HelperTypes.hpp"
 #include "VulkanConversions.hpp"
@@ -8,6 +10,7 @@
 
 #include <Datastructures/FunctionQueue.hpp>
 #include <Datastructures/Pool/Pool.hpp>
+#include <Datastructures/Pool/PoolMulti.hpp>
 #include <Datastructures/Span.hpp>
 #include <atomic>
 #include <vulkan/vulkan_core.h>
@@ -41,9 +44,13 @@ class VulkanDevice
     void destroy(Handle<Sampler> sampler);
     inline Sampler* get(Handle<Sampler> handle) { return samplerPool.get(handle); }
 
-    Handle<Texture> createTexture(Texture::CreateInfo&& createInfo);
-    void destroy(Handle<Texture> handle);
-    inline Texture* get(Handle<Texture> handle) { return texturePool.get(handle); }
+    Texture::Handle createTexture(Texture::CreateInfo&& createInfo);
+    void destroy(Texture::Handle handle);
+    template <typename T>
+    T* get(Texture::Handle handle)
+    {
+        return texturePool.get<T>(handle);
+    }
 
     Handle<TextureView> createTextureView(TextureView::CreateInfo&& createInfo);
     void destroy(Handle<TextureView> handle);
@@ -84,7 +91,7 @@ class VulkanDevice
 
     // TODO: turn the functions into member functions of the command buffer instead ?
 
-    void fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state);
+    void fillMipLevels(VkCommandBuffer cmd, Texture::Handle texture, ResourceState state);
 
     void copyBuffer(VkCommandBuffer cmd, Handle<Buffer> src, Handle<Buffer> dest);
     void copyBuffer(
@@ -97,7 +104,8 @@ class VulkanDevice
 
     void dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ);
 
-    void beginRendering(VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget);
+    void
+    beginRendering(VkCommandBuffer cmd, Span<const ColorTarget>&& colorTargets, const DepthTarget&& depthTarget);
     void endRendering(VkCommandBuffer cmd);
 
     void insertSwapchainImageBarrier(VkCommandBuffer cmd, ResourceState currentState, ResourceState targetState);
@@ -212,7 +220,7 @@ class VulkanDevice
     // --------- Resources
 
     Pool<Buffer> bufferPool;
-    Pool<Texture> texturePool;
+    MultiPool<Texture::Descriptor, Texture::GPU, ResourceIndex, Texture::Allocation> texturePool;
     Pool<TextureView> textureViewPool;
     // this value needs to match "GLOBAL_SAMPLER_COUNT" in the bindless shader code! Pass as eg. spec constant?
     PoolLimited<BindlessManager::samplerLimit, Sampler> samplerPool;

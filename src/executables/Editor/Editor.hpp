@@ -32,7 +32,7 @@ class Editor final : public Application
     Camera mainCamera;
 
     Texture::Format depthFormat = Texture::Format::d32_float;
-    Handle<Texture> depthTexture;
+    Texture::Handle depthTexture;
 
     // TODO: store somewhere else and keep synced with shader code version of struct
     struct RenderPassData

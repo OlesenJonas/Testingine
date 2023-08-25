@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../RenderTargets.hpp"
 #include <Engine/Graphics/Graphics.hpp>
 #include <concepts>
 #include <type_traits>

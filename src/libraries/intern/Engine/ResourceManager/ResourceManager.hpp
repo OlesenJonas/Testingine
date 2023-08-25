@@ -28,6 +28,12 @@ class ResourceManager
         const auto iterator = LUT.find(name);                                                                     \
         return (iterator == LUT.end()) ? Handle<T>::Null() : iterator->second;                                    \
     }
+#define CREATE_NAME_TO_MULTI_HANDLE_GETTER(T, LUT)                                                                \
+    inline T::Handle get##T(std::string_view name)                                                                \
+    {                                                                                                             \
+        const auto iterator = LUT.find(name);                                                                     \
+        return (iterator == LUT.end()) ? T::Handle::Null() : iterator->second;                                    \
+    }
 
   public:
     void init();
@@ -52,11 +58,15 @@ class ResourceManager
     Handle<Sampler> createSampler(Sampler::Info&& info);
     inline Sampler* get(Handle<Sampler> handle) { return VulkanDevice::get()->get(handle); };
 
-    Handle<Texture> createTexture(Texture::CreateInfo&& createInfo);
-    Handle<Texture> createTexture(Texture::LoadInfo&& loadInfo);
-    void destroy(Handle<Texture> handle);
-    inline Texture* get(Handle<Texture> handle) { return VulkanDevice::get()->get(handle); };
-    CREATE_NAME_TO_HANDLE_GETTER(Texture, nameToTextureLUT);
+    Texture::Handle createTexture(Texture::CreateInfo&& createInfo);
+    Texture::Handle createTexture(Texture::LoadInfo&& loadInfo);
+    void destroy(Texture::Handle handle);
+    template <typename T>
+    T* get(Texture::Handle handle)
+    {
+        return VulkanDevice::get()->get<T>(handle);
+    };
+    CREATE_NAME_TO_MULTI_HANDLE_GETTER(Texture, nameToTextureLUT);
 
     Handle<TextureView> createTextureView(TextureView::CreateInfo&& createInfo);
     void destroy(Handle<TextureView> handle);
@@ -92,7 +102,7 @@ class ResourceManager
 
     // just using standard unordered_map here, because I dont want to think about yet another datastructure atm
     std::unordered_map<std::string, Handle<Mesh>, StringHash, std::equal_to<>> nameToMeshLUT;
-    std::unordered_map<std::string, Handle<Texture>, StringHash, std::equal_to<>> nameToTextureLUT;
+    std::unordered_map<std::string, Texture::Handle, StringHash, std::equal_to<>> nameToTextureLUT;
     std::unordered_map<std::string, Handle<Material>, StringHash, std::equal_to<>> nameToMaterialLUT;
 };
 

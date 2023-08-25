@@ -106,31 +106,6 @@ constexpr inline ResourceStateMulti operator|(ResourceState lhs, ResourceState r
     return lhsM | rhs;
 }
 
-struct Texture;
-struct RenderTarget
-{
-    // dont like this, but it works for now
-    struct SwapchainImage
-    {
-    };
-    std::variant<Handle<Texture>, SwapchainImage> texture;
-
-    enum struct LoadOp
-    {
-        Load,
-        Clear,
-        DontCare,
-    };
-    LoadOp loadOp = LoadOp::Load;
-
-    enum struct StoreOp
-    {
-        Store,
-        DontCare,
-    };
-    StoreOp storeOp = StoreOp::Store;
-};
-
 struct Buffer;
 
 struct GPUAllocation
@@ -140,3 +115,5 @@ struct GPUAllocation
     size_t size = 0;
     void* ptr = nullptr;
 };
+
+using ResourceIndex = uint32_t;

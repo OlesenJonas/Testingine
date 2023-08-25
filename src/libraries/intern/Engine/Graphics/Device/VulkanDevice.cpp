@@ -57,9 +57,16 @@ void VulkanDevice::destroyResources()
             destroy(iter.asHandle());
         }
     };
+    auto clearMultiPool = [&](auto&& pool)
+    {
+        for(auto iter = pool.begin(); iter != pool.end(); iter++)
+        {
+            destroy(*iter);
+        }
+    };
     clearPool(samplerPool);
     clearPool(textureViewPool);
-    clearPool(texturePool);
+    clearMultiPool(texturePool);
     clearPool(bufferPool);
 }
 
@@ -636,7 +643,7 @@ void VulkanDevice::destroy(Handle<Sampler> sampler)
     samplerPool.remove(sampler);
 }
 
-Handle<Texture> VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
+Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
 {
     // High level setup
 
@@ -830,45 +837,46 @@ Handle<Texture> VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
         resourceIndex = bindlessManager.createImageBinding(view, BindlessManager::ImageUsage::Storage);
     }
 
-    Handle<Texture> newHandle = texturePool.insert(Texture{
-        .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
-        .allocation = allocation,
-        .image = image,
-        .imageView = view,
-        .resourceIndex = resourceIndex,
-    });
+    Texture::Handle newHandle = texturePool.insert(
+        Texture::Descriptor::fromCreateInfo(createInfo),
+        Texture::GPU{
+            .image = image,
+            .imageView = view,
+        },
+        resourceIndex,
+        Texture::Allocation{.allocation = allocation} //
+    );
 
     return newHandle;
 }
 
-void VulkanDevice::destroy(Handle<Texture> handle)
+void VulkanDevice::destroy(Texture::Handle handle)
 {
-    Texture* texture = get(handle);
-    VkImage image = texture->image;
-    VmaAllocation vmaAllocation = texture->allocation;
+    VkImageView imageView = get<Texture::GPU>(handle)->imageView;
+    deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
+
+    VkImage image = get<Texture::GPU>(handle)->image;
+    VmaAllocation vmaAllocation = get<Texture::Allocation>(handle)->allocation;
 
     deleteQueue.pushBack([=]() { vmaDestroyImage(allocator, image, vmaAllocation); });
-
-    VkImageView imageView = texture->imageView;
-    deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
 
     texturePool.remove(handle);
 }
 
 Handle<TextureView> VulkanDevice::createTextureView(TextureView::CreateInfo&& createInfo)
 {
-    Texture* parent = get(createInfo.parent);
+    auto* parentDesc = get<Texture::Descriptor>(createInfo.parent);
 
-    assert(!(createInfo.allStates & (~parent->descriptor.allStates)));
+    assert(!(createInfo.allStates & (~parentDesc->allStates)));
 
     VkImageViewType viewType =
         createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
     VkImageViewCreateInfo imageViewCrInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
-        .image = get(createInfo.parent)->image,
+        .image = get<Texture::GPU>(createInfo.parent)->image,
         .viewType = viewType,
-        .format = toVkFormat(parent->descriptor.format),
+        .format = toVkFormat(parentDesc->format),
         .components =
             VkComponentMapping{
                 .r = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -878,7 +886,7 @@ Handle<TextureView> VulkanDevice::createTextureView(TextureView::CreateInfo&& cr
             },
         .subresourceRange =
             {
-                .aspectMask = toVkImageAspect(parent->descriptor.format),
+                .aspectMask = toVkImageAspect(parentDesc->format),
                 .baseMipLevel = createInfo.baseMipLevel,
                 .levelCount = createInfo.mipCount,
                 .baseArrayLayer = createInfo.baseArrayLayer,
@@ -1406,9 +1414,9 @@ void VulkanDevice::presentSwapchain()
     assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
 }
 
-void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Handle<Texture> texture, ResourceState state)
+void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Texture::Handle texture, ResourceState state)
 {
-    return fillMipLevels(cmd, get(texture)->image, get(texture)->descriptor, state);
+    return fillMipLevels(cmd, get<Texture::GPU>(texture)->image, *get<Texture::Descriptor>(texture), state);
 }
 
 void VulkanDevice::copyBuffer(VkCommandBuffer cmd, Handle<Buffer> src, Handle<Buffer> dest)
@@ -1475,7 +1483,7 @@ void VulkanDevice::insertSwapchainImageBarrier(
 
 // TODO: overload to just not take a depth target, instead of having to pass null inside render target?
 void VulkanDevice::beginRendering(
-    VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget)
+    VkCommandBuffer cmd, Span<const ColorTarget>&& colorTargets, const DepthTarget&& depthTarget)
 {
     VkClearValue clearValue{.color = {1.0f, 1.0f, 1.0f, 1.0f}};
     VkClearValue depthStencilClear{.depthStencil = {.depth = 1.0f, .stencil = 0u}};
@@ -1484,8 +1492,8 @@ void VulkanDevice::beginRendering(
     colorAttachmentInfos.reserve(colorTargets.size());
     for(const auto& target : colorTargets)
     {
-        const VkImageView view = std::holds_alternative<Handle<Texture>>(target.texture)
-                                     ? get(std::get<Handle<Texture>>(depthTarget.texture))->imageView
+        const VkImageView view = std::holds_alternative<Texture::Handle>(target.texture)
+                                     ? get<Texture::GPU>(std::get<Texture::Handle>(target.texture))->imageView
                                      : swapchainImageViews[currentSwapchainImageIndex];
         colorAttachmentInfos.emplace_back(VkRenderingAttachmentInfo{
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -1498,14 +1506,13 @@ void VulkanDevice::beginRendering(
         });
     }
 
+    bool hasDepthAttachment = depthTarget.texture.isValid();
     VkRenderingAttachmentInfo depthAttachmentInfo;
-
-    bool hasDepthAttachment = std::get<Handle<Texture>>(depthTarget.texture).isValid();
     if(hasDepthAttachment)
         depthAttachmentInfo = {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = get(std::get<Handle<Texture>>(depthTarget.texture))->imageView,
+            .imageView = get<Texture::GPU>(depthTarget.texture)->imageView,
             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             .loadOp = toVkLoadOp(depthTarget.loadOp),
             .storeOp = toVkStoreOp(depthTarget.storeOp),
@@ -1581,15 +1588,15 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
         }
         else if(barrier.type == Barrier::Type::Image)
         {
-            const Texture* tex = get(barrier.image.texture);
-            if(tex == nullptr)
+            const auto* descriptor = get<Texture::Descriptor>(barrier.image.texture);
+            if(descriptor == nullptr)
             {
                 BREAKPOINT;
                 continue; // TODO: LOG warning
             }
-            assert(tex->descriptor.mipLevels > 0);
+            assert(descriptor->mipLevels > 0);
             int32_t mipCount = barrier.image.mipCount == Texture::MipLevels::All
-                                   ? tex->descriptor.mipLevels - barrier.image.mipLevel
+                                   ? descriptor->mipLevels - barrier.image.mipLevel
                                    : barrier.image.mipCount;
 
             VkImageMemoryBarrier2 vkBarrier{
@@ -1609,16 +1616,16 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
                 .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
                 .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
 
-                .image = tex->image,
+                .image = get<Texture::GPU>(barrier.image.texture)->image,
                 .subresourceRange =
                     {
-                        .aspectMask = toVkImageAspect(tex->descriptor.format),
+                        .aspectMask = toVkImageAspect(descriptor->format),
                         .baseMipLevel = static_cast<uint32_t>(barrier.image.mipLevel),
                         .levelCount = static_cast<uint32_t>(mipCount),
                         .baseArrayLayer = static_cast<uint32_t>(barrier.image.arrayLayer),
                         .layerCount = static_cast<uint32_t>(
-                            tex->descriptor.type == Texture::Type::tCube ? 6 * barrier.image.arrayLength
-                                                                         : barrier.image.arrayLength),
+                            descriptor->type == Texture::Type::tCube ? 6 * barrier.image.arrayLength
+                                                                     : barrier.image.arrayLength),
                     },
             };
 

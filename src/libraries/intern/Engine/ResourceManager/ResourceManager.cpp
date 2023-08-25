@@ -199,7 +199,7 @@ Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)
     return VulkanDevice::get()->createSampler(info);
 }
 
-Handle<Texture> ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
+Texture::Handle ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
 {
     std::string extension{PathHelpers::extension(loadInfo.path)};
 
@@ -218,14 +218,14 @@ Handle<Texture> ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
         std::tie(createInfo, cleanupFunc) = Texture::loadDefault(std::move(loadInfo));
     }
 
-    Handle<Texture> newTextureHandle = createTexture(std::move(createInfo));
+    Texture::Handle newTextureHandle = createTexture(std::move(createInfo));
 
     cleanupFunc();
 
     return newTextureHandle;
 }
 
-Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
+Texture::Handle ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 {
     // todo: handle naming collisions, also handle case where debugname is empty?
     auto iterator = nameToMeshLUT.find(createInfo.debugName);
@@ -240,7 +240,7 @@ Handle<Texture> ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
     return newHandle;
 }
 
-void ResourceManager::destroy(Handle<Texture> handle) { VulkanDevice::get()->destroy(handle); }
+void ResourceManager::destroy(Texture::Handle handle) { VulkanDevice::get()->destroy(handle); }
 
 Handle<TextureView> ResourceManager::createTextureView(TextureView::CreateInfo&& createInfo)
 {

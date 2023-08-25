@@ -108,10 +108,31 @@ struct Texture
     static LoadResult loadHDR(Texture::LoadInfo&& loadInfo);
     static LoadResult loadDefault(Texture::LoadInfo&& loadInfo);
 
-    Descriptor descriptor;
+    // -----------------------------------------------------
 
-    VmaAllocation allocation = VK_NULL_HANDLE;
-    VkImage image = VK_NULL_HANDLE;
-    VkImageView imageView = VK_NULL_HANDLE;
-    uint32_t resourceIndex = 0xFFFFFFFF;
+    // TODO: think about how to split this into pool components, could also duplicate data if it makes sense
+    /*
+        Descriptor
+        VmaAllocation
+        VkImage
+        VkImageView
+        ResourceIndex
+    */
+
+    // wrapping in structs like this could allow overloading for other gfx apis
+    //      pool internally stores eg Texture::GPUVulkan but pool.get just returns Texture::GPU*
+    struct GPU
+    {
+        VkImage image;
+        VkImageView imageView;
+    };
+    // Own struct since only used on create/destroy
+    struct Allocation
+    {
+        VmaAllocation allocation = VK_NULL_HANDLE;
+    };
+    // Descriptor
+    // ResourceIndex
+
+    using Handle = Handle<Texture::Descriptor, Texture::GPU, ResourceIndex, Texture::Allocation>;
 };
