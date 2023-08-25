@@ -21,7 +21,7 @@
     inline static T* ptr = nullptr;                                                                               \
                                                                                                                   \
   public:                                                                                                         \
-    [[nodiscard]] static inline T* get()                                                                          \
+    [[nodiscard]] static inline T* impl()                                                                         \
     {                                                                                                             \
         assert(ptr != nullptr && "Static pointer for type " #T " was not initialized!");                          \
         return ptr;                                                                                               \

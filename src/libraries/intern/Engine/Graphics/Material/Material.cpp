@@ -17,7 +17,7 @@ void Material::setResource(std::string_view name, uint32_t index)
 
 void MaterialInstance::setResource(std::string_view name, uint32_t index)
 {
-    Material* parent = ResourceManager::get()->get(parentMaterial);
+    Material* parent = ResourceManager::impl()->get(parentMaterial);
 
     const auto& iterator = parent->instanceParametersLUT.find(name);
     if(iterator == parent->instanceParametersLUT.end())

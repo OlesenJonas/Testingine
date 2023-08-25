@@ -62,7 +62,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             confirm its actually a gltf file
     */
 
-    auto* rm = ResourceManager::get();
+    auto* rm = ResourceManager::impl();
 
     std::filesystem::path basePath{path};
     basePath = basePath.parent_path();

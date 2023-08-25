@@ -42,7 +42,7 @@ class ResourceManager
 
     Handle<Buffer> createBuffer(Buffer::CreateInfo&& createInfo);
     void destroy(Handle<Buffer> handle);
-    inline Buffer* get(Handle<Buffer> handle) { return VulkanDevice::get()->get(handle); }
+    inline Buffer* get(Handle<Buffer> handle) { return VulkanDevice::impl()->get(handle); }
 
     Handle<Mesh> createMesh(const char* file, std::string_view name = "");
     // indices can be {}, but then a trivial index list will still be used!
@@ -56,7 +56,7 @@ class ResourceManager
     CREATE_NAME_TO_HANDLE_GETTER(Mesh, nameToMeshLUT);
 
     Handle<Sampler> createSampler(Sampler::Info&& info);
-    inline Sampler* get(Handle<Sampler> handle) { return VulkanDevice::get()->get(handle); };
+    inline Sampler* get(Handle<Sampler> handle) { return VulkanDevice::impl()->get(handle); };
 
     Texture::Handle createTexture(Texture::CreateInfo&& createInfo);
     Texture::Handle createTexture(Texture::LoadInfo&& loadInfo);
@@ -64,13 +64,13 @@ class ResourceManager
     template <typename T>
     T* get(Texture::Handle handle)
     {
-        return VulkanDevice::get()->get<T>(handle);
+        return VulkanDevice::impl()->get<T>(handle);
     };
     CREATE_NAME_TO_MULTI_HANDLE_GETTER(Texture, nameToTextureLUT);
 
     Handle<TextureView> createTextureView(TextureView::CreateInfo&& createInfo);
     void destroy(Handle<TextureView> handle);
-    inline TextureView* get(Handle<TextureView> handle) { return VulkanDevice::get()->get(handle); };
+    inline TextureView* get(Handle<TextureView> handle) { return VulkanDevice::impl()->get(handle); };
 
     Handle<Material> createMaterial(Material::CreateInfo&& crInfo);
     void destroy(Handle<Material> handle);

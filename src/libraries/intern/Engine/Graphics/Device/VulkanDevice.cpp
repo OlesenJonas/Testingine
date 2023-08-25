@@ -1941,14 +1941,14 @@ GPUAllocation VulkanDevice::LinearAllocator::allocate(size_t size)
         //       normal allocation mechanism
 
         // enqueue current buffer for deletion
-        VulkanDevice::get()->destroy(this->buffer);
+        VulkanDevice::impl()->destroy(this->buffer);
 
         // create new buffer
 
         // TODO: be smarter?
         size_t newSize = std::max(this->capacity, size);
 
-        this->buffer = VulkanDevice::get()->createBuffer(Buffer::CreateInfo{
+        this->buffer = VulkanDevice::impl()->createBuffer(Buffer::CreateInfo{
             .debugName = "StagingBufferReplacement",
             .size = newSize,
             .memoryType = Buffer::MemoryType::CPU,
@@ -1957,7 +1957,7 @@ GPUAllocation VulkanDevice::LinearAllocator::allocate(size_t size)
         });
         this->capacity = newSize;
         this->offset = 0;
-        this->ptr = static_cast<uint8_t*>(VulkanDevice::get()->get(this->buffer)->gpuBuffer.ptr);
+        this->ptr = static_cast<uint8_t*>(VulkanDevice::impl()->get(this->buffer)->gpuBuffer.ptr);
     }
     // TODO: alignment?
     size_t oldOffset = offset.fetch_add(size);

@@ -47,10 +47,10 @@ void ResourceManager::cleanup()
 
 Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo&& createInfo)
 {
-    return VulkanDevice::get()->createBuffer(std::move(createInfo));
+    return VulkanDevice::impl()->createBuffer(std::move(createInfo));
 }
 
-void ResourceManager::destroy(Handle<Buffer> handle) { VulkanDevice::get()->destroy(handle); }
+void ResourceManager::destroy(Handle<Buffer> handle) { VulkanDevice::impl()->destroy(handle); }
 
 Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name)
 {
@@ -187,7 +187,7 @@ Handle<Mesh> ResourceManager::createMesh(
 
 void ResourceManager::destroy(Handle<Mesh> handle)
 {
-    VulkanDevice* device = VulkanDevice::get();
+    VulkanDevice* device = VulkanDevice::impl();
     device->destroy(get(handle)->positionBuffer);
     device->destroy(get(handle)->attributeBuffer);
     device->destroy(get(handle)->indexBuffer);
@@ -196,7 +196,7 @@ void ResourceManager::destroy(Handle<Mesh> handle)
 
 Handle<Sampler> ResourceManager::createSampler(Sampler::Info&& info)
 {
-    return VulkanDevice::get()->createSampler(info);
+    return VulkanDevice::impl()->createSampler(info);
 }
 
 Texture::Handle ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
@@ -233,21 +233,21 @@ Texture::Handle ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
 
     std::string nameCpy = createInfo.debugName;
 
-    auto newHandle = VulkanDevice::get()->createTexture(std::move(createInfo));
+    auto newHandle = VulkanDevice::impl()->createTexture(std::move(createInfo));
 
     nameToTextureLUT.insert({std::string{nameCpy}, newHandle});
 
     return newHandle;
 }
 
-void ResourceManager::destroy(Texture::Handle handle) { VulkanDevice::get()->destroy(handle); }
+void ResourceManager::destroy(Texture::Handle handle) { VulkanDevice::impl()->destroy(handle); }
 
 Handle<TextureView> ResourceManager::createTextureView(TextureView::CreateInfo&& createInfo)
 {
-    return VulkanDevice::get()->createTextureView(std::move(createInfo));
+    return VulkanDevice::impl()->createTextureView(std::move(createInfo));
 }
 
-void ResourceManager::destroy(Handle<TextureView> handle) { VulkanDevice::get()->destroy(handle); }
+void ResourceManager::destroy(Handle<TextureView> handle) { VulkanDevice::impl()->destroy(handle); }
 
 Handle<Material> ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
 {
@@ -381,7 +381,7 @@ Handle<Material> ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
                                           .initialState = ResourceState::TransferDst,
                                       }),
             },
-        .pipeline = VulkanDevice::get()->createGraphicsPipeline(vertexBinary, fragmentBinary, crInfo.debugName),
+        .pipeline = VulkanDevice::impl()->createGraphicsPipeline(vertexBinary, fragmentBinary, crInfo.debugName),
         .dirty = parametersBufferSize > 0,
     });
 
@@ -404,7 +404,7 @@ void ResourceManager::destroy(Handle<Material> handle)
         return;
     }
 
-    VulkanDevice* gfxDevice = VulkanDevice::get();
+    VulkanDevice* gfxDevice = VulkanDevice::impl();
 
     // safe to instantly delete here? could this still be in flight?
     //      API to add to device delete queue aswell?
@@ -458,7 +458,7 @@ void ResourceManager::destroy(Handle<MaterialInstance> handle)
         return;
     }
 
-    VulkanDevice* gfxDevice = VulkanDevice::get();
+    VulkanDevice* gfxDevice = VulkanDevice::impl();
 
     // see note in destroy(Handle<Material> handle)
     delete[] matInst->parameters.writeBuffer;
@@ -484,7 +484,7 @@ ResourceManager::createComputeShader(Shaders::StageCreateInfo&& createInfo, std:
     Handle<ComputeShader> newComputeShaderHandle = computeShaderPool.insert();
     ComputeShader* computeShader = get(newComputeShaderHandle);
 
-    VulkanDevice& gfxDevice = *VulkanDevice::get();
+    VulkanDevice& gfxDevice = *VulkanDevice::impl();
 
     std::vector<uint32_t> shaderBinary;
 
@@ -526,7 +526,7 @@ void ResourceManager::destroy(Handle<ComputeShader> handle)
         return;
     }
 
-    VulkanDevice* gfxDevice = VulkanDevice::get();
+    VulkanDevice* gfxDevice = VulkanDevice::impl();
     gfxDevice->destroy(compShader->pipeline);
 
     computeShaderPool.remove(handle);
