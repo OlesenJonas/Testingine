@@ -134,5 +134,5 @@ struct Texture
     // Descriptor
     // ResourceIndex
 
-    using Handle = Handle<Texture::Descriptor, Texture::GPU, ResourceIndex, Texture::Allocation>;
+    using Handle = Handle<Descriptor, GPU, ResourceIndex, Allocation>;
 };

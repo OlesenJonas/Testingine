@@ -12,7 +12,7 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-// todo: just contain two/three Handle<Buffer> for index + position/(position+attributes) !!
+// todo: just contain two/three Buffer::Handle for index + position/(position+attributes) !!
 
 struct VertexInputDescription
 {
@@ -42,9 +42,9 @@ struct Mesh
     std::string name{};
 
     uint32_t indexCount = 0;
-    Handle<Buffer> indexBuffer;
-    Handle<Buffer> positionBuffer;
-    Handle<Buffer> attributeBuffer;
+    Buffer::Handle indexBuffer;
+    Buffer::Handle positionBuffer;
+    Buffer::Handle attributeBuffer;
 
     // for mikktspace
     struct MikkTSpaceUserData

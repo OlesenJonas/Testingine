@@ -5,7 +5,7 @@
 #include <Engine/Graphics/Graphics.hpp>
 #include <string>
 
-struct Buffer
+namespace Buffer
 {
     enum struct MemoryType
     {
@@ -37,7 +37,11 @@ struct Buffer
         ResourceStateMulti allStates = ResourceState::None;
     };
 
-    Descriptor descriptor;
+    struct Allocation
+    {
+        VmaAllocation allocation;
+        VmaAllocationInfo allocInfo;
+    };
 
-    VulkanBuffer gpuBuffer;
-};
+    using Handle = Handle<std::string, Descriptor, VkBuffer, void*, Allocation, ResourceIndex>;
+}; // namespace Buffer

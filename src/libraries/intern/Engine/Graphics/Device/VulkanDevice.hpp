@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../GPUAllocation.hpp"
 #include "../Graphics.hpp"
 #include "../RenderTargets.hpp"
 #include "BindlessManager.hpp"
@@ -27,6 +28,16 @@ class VulkanDevice
 {
     CREATE_STATIC_GETTER(VulkanDevice);
 
+    // --------- Resources
+
+    MultiPool<std::string, Buffer::Descriptor, VkBuffer, void*, Buffer::Allocation, ResourceIndex> bufferPool;
+    MultiPool<Texture::Descriptor, Texture::GPU, ResourceIndex, Texture::Allocation> texturePool;
+    Pool<TextureView> textureViewPool;
+    // this value needs to match "GLOBAL_SAMPLER_COUNT" in the bindless shader code! Pass as eg. spec constant?
+    PoolLimited<BindlessManager::samplerLimit, Sampler> samplerPool;
+
+    // ---------
+
   public:
     void init(GLFWwindow* window);
     void cleanup();
@@ -34,9 +45,14 @@ class VulkanDevice
 
     //-----------------------------------
 
-    Handle<Buffer> createBuffer(Buffer::CreateInfo&& createInfo);
-    void destroy(Handle<Buffer> handle);
-    inline Buffer* get(Handle<Buffer> handle) { return bufferPool.get(handle); }
+    Buffer::Handle createBuffer(Buffer::CreateInfo&& createInfo);
+    void destroy(Buffer::Handle handle);
+    template <typename T>
+        requires decltype(bufferPool)::holdsType<T>
+    inline T* get(Buffer::Handle handle)
+    {
+        return bufferPool.get<T>(handle);
+    }
 
     Handle<Sampler> createSampler(const Sampler::Info& info);
     void destroy(Handle<Sampler> sampler);
@@ -91,12 +107,12 @@ class VulkanDevice
 
     void fillMipLevels(VkCommandBuffer cmd, Texture::Handle texture, ResourceState state);
 
-    void copyBuffer(VkCommandBuffer cmd, Handle<Buffer> src, Handle<Buffer> dest);
+    void copyBuffer(VkCommandBuffer cmd, Buffer::Handle src, Buffer::Handle dest);
     void copyBuffer(
         VkCommandBuffer cmd,
-        Handle<Buffer> src,
+        Buffer::Handle src,
         size_t srcOffset,
-        Handle<Buffer> dest,
+        Buffer::Handle dest,
         size_t destOffset,
         size_t size);
 
@@ -113,12 +129,12 @@ class VulkanDevice
     void setComputePipelineState(VkCommandBuffer cmd, VkPipeline pipe);
     // this explicitely uses the bindless layout, so just call this function setBindlessIndices ??
     void pushConstants(VkCommandBuffer cmd, size_t size, void* data, size_t offset = 0);
-    void bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset = 0);
+    void bindIndexBuffer(VkCommandBuffer cmd, Buffer::Handle buffer, size_t offset = 0);
     void bindVertexBuffers(
         VkCommandBuffer cmd,
         uint32_t startBinding,
         uint32_t count,
-        Span<const Handle<Buffer>> buffers,
+        Span<const Buffer::Handle> buffers,
         Span<const uint64_t> offsets);
     void drawIndexed(
         VkCommandBuffer cmd,
@@ -153,7 +169,7 @@ class VulkanDevice
   private:
     struct LinearAllocator
     {
-        Handle<Buffer> buffer;
+        Buffer::Handle buffer;
         size_t capacity = 0;
         std::atomic<size_t> offset = 0;
         uint8_t* ptr = nullptr;
@@ -215,15 +231,6 @@ class VulkanDevice
     VkFormat defaultDepthFormat;
 
   private:
-    // --------- Resources
-
-    Pool<Buffer> bufferPool;
-    MultiPool<Texture::Descriptor, Texture::GPU, ResourceIndex, Texture::Allocation> texturePool;
-    Pool<TextureView> textureViewPool;
-    // this value needs to match "GLOBAL_SAMPLER_COUNT" in the bindless shader code! Pass as eg. spec constant?
-    PoolLimited<BindlessManager::samplerLimit, Sampler> samplerPool;
-
-    // ---------
     VkDebugUtilsMessengerEXT debugMessenger;
     PFN_vkSetDebugUtilsObjectNameEXT setObjectDebugName = nullptr;
 

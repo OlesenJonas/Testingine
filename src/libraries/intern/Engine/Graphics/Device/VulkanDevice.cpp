@@ -67,7 +67,7 @@ void VulkanDevice::destroyResources()
     clearPool(samplerPool);
     clearPool(textureViewPool);
     clearMultiPool(texturePool);
-    clearPool(bufferPool);
+    clearMultiPool(bufferPool);
 }
 
 uint32_t VulkanDevice::getSwapchainWidth() { return swapchainExtent.width; }
@@ -334,8 +334,7 @@ void VulkanDevice::initAllocators()
             .initialState = ResourceState::TransferSrc,
         });
         frameData.stagingAllocator.capacity = stagingBufferSize;
-        frameData.stagingAllocator.ptr =
-            static_cast<uint8_t*>(get(frameData.stagingAllocator.buffer)->gpuBuffer.ptr);
+        frameData.stagingAllocator.ptr = static_cast<uint8_t*>(*get<void*>(frameData.stagingAllocator.buffer));
     }
 }
 
@@ -468,7 +467,7 @@ void VulkanDevice::cleanup()
 
 void VulkanDevice::waitForWorkFinished() { vkDeviceWaitIdle(device); }
 
-Handle<Buffer> VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
+Buffer::Handle VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
 {
     assert(createInfo.initialData.size() <= createInfo.size);
     // High level setup
@@ -489,7 +488,11 @@ Handle<Buffer> VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
 
     // Low level creation
 
-    VulkanBuffer ret;
+    VkBuffer vkBuffer;
+    VmaAllocation allocation;
+    VmaAllocationInfo allocInfo;
+    ResourceIndex resourceIndex;
+    void* mappedPtr = nullptr;
 
     VkBufferCreateInfo bufferCrInfo{
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -500,12 +503,11 @@ Handle<Buffer> VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
     };
 
     VmaAllocationCreateInfo vmaAllocCrInfo = toVMAAllocCrInfo(createInfo.memoryType);
-    VkResult res =
-        vmaCreateBuffer(allocator, &bufferCrInfo, &vmaAllocCrInfo, &ret.buffer, &ret.allocation, &ret.allocInfo);
+    VkResult res = vmaCreateBuffer(allocator, &bufferCrInfo, &vmaAllocCrInfo, &vkBuffer, &allocation, &allocInfo);
 
     if(createInfo.memoryType == Buffer::MemoryType::CPU ||
        createInfo.memoryType == Buffer::MemoryType::GPU_BUT_CPU_VISIBLE)
-        ret.ptr = ret.allocInfo.pMappedData;
+        mappedPtr = allocInfo.pMappedData;
 
     assert(res == VK_SUCCESS);
 
@@ -520,14 +522,10 @@ Handle<Buffer> VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
             .size = createInfo.size,
         };
         vkCmdCopyBuffer(
-            getCurrentFrameData().uploadCommandBuffer,
-            get(stagingAlloc.buffer)->gpuBuffer.buffer,
-            ret.buffer,
-            1,
-            &copy);
+            getCurrentFrameData().uploadCommandBuffer, *get<VkBuffer>(stagingAlloc.buffer), vkBuffer, 1, &copy);
 
         VkBufferMemoryBarrier2 barrier = toVkBufferMemoryBarrier(VulkanBufferBarrier{
-            .buffer = ret.buffer,
+            .buffer = vkBuffer,
             .stateBefore = ResourceState::TransferDst,
             .stateAfter = createInfo.initialState,
         });
@@ -542,50 +540,58 @@ Handle<Buffer> VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
 
     if(!createInfo.debugName.empty())
     {
-        setDebugName(ret.buffer, createInfo.debugName.data());
+        setDebugName(vkBuffer, createInfo.debugName.data());
     }
 
     if((createInfo.allStates & ResourceState::UniformBuffer) ||
        (createInfo.allStates & ResourceState::UniformBufferGraphics) ||
        (createInfo.allStates & ResourceState::UniformBufferCompute))
     {
-        ret.resourceIndex = bindlessManager.createBufferBinding(ret.buffer, BindlessManager::BufferUsage::Uniform);
+        resourceIndex = bindlessManager.createBufferBinding(vkBuffer, BindlessManager::BufferUsage::Uniform);
     }
     else if(
         (createInfo.allStates & ResourceState::Storage) ||
         (createInfo.allStates & ResourceState::StorageGraphics) ||
         (createInfo.allStates & ResourceState::StorageCompute))
     {
-        ret.resourceIndex = bindlessManager.createBufferBinding(ret.buffer, BindlessManager::BufferUsage::Storage);
+        resourceIndex = bindlessManager.createBufferBinding(vkBuffer, BindlessManager::BufferUsage::Storage);
     }
 
     // TODO: lock pool?
-    Handle<Buffer> newHandle = bufferPool.insert(Buffer{
-        .descriptor =
-            {
-                .size = createInfo.size,
-                .memoryType = createInfo.memoryType,
-                .allStates = createInfo.allStates,
-            },
-        .gpuBuffer = ret,
-    });
+    Buffer::Handle newHandle = bufferPool.insert(
+        createInfo.debugName,
+        Buffer::Descriptor{
+            .size = createInfo.size,
+            .memoryType = createInfo.memoryType,
+            .allStates = createInfo.allStates,
+        },
+        vkBuffer,
+        mappedPtr,
+        Buffer::Allocation{
+            .allocation = allocation,
+            .allocInfo = allocInfo,
+        },
+        resourceIndex //
+    );
 
     return newHandle;
 }
 
-void VulkanDevice::destroy(Handle<Buffer> handle)
+void VulkanDevice::destroy(Buffer::Handle handle)
 {
     // TODO: Enqueue into a per frame queue
 
-    Buffer* buffer = bufferPool.get(handle);
     // its possible that this handle is outdated
-    if(buffer == nullptr)
+    if(!bufferPool.isHandleValid(handle))
     {
         return;
     }
-    deleteQueue.pushBack(
-        [allocator = allocator, buffer = buffer->gpuBuffer.buffer, alloc = buffer->gpuBuffer.allocation]()
-        { vmaDestroyBuffer(allocator, buffer, alloc); });
+
+    VkBuffer buffer = *get<VkBuffer>(handle);
+    VmaAllocation alloc = get<Buffer::Allocation>(handle)->allocation;
+
+    deleteQueue.pushBack([allocator = allocator, buffer = buffer, alloc = alloc]()
+                         { vmaDestroyBuffer(allocator, buffer, alloc); });
     bufferPool.remove(handle);
 }
 
@@ -740,7 +746,7 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
 
         vkCmdCopyBufferToImage(
             getCurrentFrameData().uploadCommandBuffer,
-            get(stagingAlloc.buffer)->gpuBuffer.buffer,
+            *get<VkBuffer>(stagingAlloc.buffer),
             image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1,
@@ -1419,22 +1425,20 @@ void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Texture::Handle texture, R
     return fillMipLevels(cmd, get<Texture::GPU>(texture)->image, *get<Texture::Descriptor>(texture), state);
 }
 
-void VulkanDevice::copyBuffer(VkCommandBuffer cmd, Handle<Buffer> src, Handle<Buffer> dest)
+void VulkanDevice::copyBuffer(VkCommandBuffer cmd, Buffer::Handle src, Buffer::Handle dest)
 {
-    size_t bufSize = get(src)->descriptor.size;
+    size_t bufSize = get<Buffer::Descriptor>(src)->size;
     copyBuffer(cmd, src, 0, dest, 0, bufSize);
 }
 void VulkanDevice::copyBuffer(
-    VkCommandBuffer cmd, Handle<Buffer> src, size_t srcOffset, Handle<Buffer> dest, size_t destOffset, size_t size)
+    VkCommandBuffer cmd, Buffer::Handle src, size_t srcOffset, Buffer::Handle dest, size_t destOffset, size_t size)
 {
-    Buffer* srcBuf = get(src);
-    Buffer* destBuf = get(dest);
     VkBufferCopy copyRegion{
         srcOffset,
         destOffset,
         size,
     };
-    vkCmdCopyBuffer(cmd, srcBuf->gpuBuffer.buffer, destBuf->gpuBuffer.buffer, 1, &copyRegion);
+    vkCmdCopyBuffer(cmd, *get<VkBuffer>(src), *get<VkBuffer>(dest), 1, &copyRegion);
 }
 
 void VulkanDevice::dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
@@ -1560,12 +1564,12 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
     {
         if(barrier.type == Barrier::Type::Buffer)
         {
-            const Buffer* buf = get(barrier.buffer.buffer);
-            if(buf == nullptr)
+            if(!bufferPool.isHandleValid(barrier.buffer.buffer))
             {
                 BREAKPOINT;
                 continue; // TODO: LOG warning
             }
+            auto* descriptor = get<Buffer::Descriptor>(barrier.buffer.buffer);
             VkBufferMemoryBarrier2 vkBarrier{
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .pNext = nullptr,
@@ -1579,7 +1583,7 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
                 .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
                 .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
 
-                .buffer = buf->gpuBuffer.buffer,
+                .buffer = *get<VkBuffer>(barrier.buffer.buffer),
                 .offset = barrier.buffer.offset,
                 .size = barrier.buffer.size,
             };
@@ -1673,23 +1677,23 @@ void VulkanDevice::pushConstants(VkCommandBuffer cmd, size_t size, void* data, s
     vkCmdPushConstants(cmd, bindlessPipelineLayout, VK_SHADER_STAGE_ALL, offset, size, data);
 }
 
-void VulkanDevice::bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset)
+void VulkanDevice::bindIndexBuffer(VkCommandBuffer cmd, Buffer::Handle buffer, size_t offset)
 {
-    vkCmdBindIndexBuffer(cmd, get(buffer)->gpuBuffer.buffer, offset, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(cmd, *get<VkBuffer>(buffer), offset, VK_INDEX_TYPE_UINT32);
 }
 
 void VulkanDevice::bindVertexBuffers(
     VkCommandBuffer cmd,
     uint32_t startBinding,
     uint32_t count,
-    Span<const Handle<Buffer>> buffers,
+    Span<const Buffer::Handle> buffers,
     Span<const uint64_t> offsets)
 {
     assert(buffers.size() == offsets.size());
     std::vector<VkBuffer> vkBuffers{buffers.size()};
     for(int i = 0; i < buffers.size(); i++)
     {
-        vkBuffers[i] = get(buffers[i])->gpuBuffer.buffer;
+        vkBuffers[i] = *get<VkBuffer>(buffers[i]);
         assert(vkBuffers[i]);
     }
     vkCmdBindVertexBuffers(cmd, startBinding, count, &vkBuffers[0], offsets.data());
@@ -1957,7 +1961,7 @@ GPUAllocation VulkanDevice::LinearAllocator::allocate(size_t size)
         });
         this->capacity = newSize;
         this->offset = 0;
-        this->ptr = static_cast<uint8_t*>(VulkanDevice::impl()->get(this->buffer)->gpuBuffer.ptr);
+        this->ptr = static_cast<uint8_t*>(*VulkanDevice::impl()->get<void*>(this->buffer));
     }
     // TODO: alignment?
     size_t oldOffset = offset.fetch_add(size);

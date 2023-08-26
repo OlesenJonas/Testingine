@@ -31,15 +31,6 @@ struct QueueFamilyIndices
 
 #include <memory>
 
-struct VulkanBuffer
-{
-    VkBuffer buffer = VK_NULL_HANDLE;
-    VmaAllocation allocation = VK_NULL_HANDLE;
-    VmaAllocationInfo allocInfo{};
-    uint32_t resourceIndex = 0xFFFFFFFF;
-    void* ptr = nullptr;
-};
-
 struct VulkanSampler
 {
     VkSampler sampler = VK_NULL_HANDLE;

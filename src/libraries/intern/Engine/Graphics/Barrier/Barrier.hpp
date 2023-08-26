@@ -49,7 +49,7 @@ struct Barrier
 
     struct FromBuffer
     {
-        Handle<Buffer> buffer;
+        Buffer::Handle buffer;
         ResourceState stateBefore = ResourceState::None;
         ResourceState stateAfter = ResourceState::None;
         size_t offset = 0;

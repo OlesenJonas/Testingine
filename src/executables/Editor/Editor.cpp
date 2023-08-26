@@ -624,13 +624,10 @@ void Editor::update()
         renderPassData.projView = mainCamera.getProjView();
         renderPassData.cameraPositionWS = mainCamera.getPosition();
 
-        Buffer* renderPassDataBuffer = resourceManager.get(getCurrentFrameData().renderPassDataBuffer);
+        void* renderPassDataPtr = *resourceManager.get<void*>(getCurrentFrameData().renderPassDataBuffer);
+        memcpy(renderPassDataPtr, &renderPassData, sizeof(renderPassData));
 
-        memcpy(renderPassDataBuffer->gpuBuffer.ptr, &renderPassData, sizeof(renderPassData));
-
-        Buffer* objectBuffer = resourceManager.get(getCurrentFrameData().objectBuffer);
-
-        void* objectData = objectBuffer->gpuBuffer.ptr;
+        void* objectData = *resourceManager.get<void*>(getCurrentFrameData().objectBuffer);
         // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
         auto* objectSSBO = (GPUObjectData*)objectData;
         for(int i = 0; i < renderables.size(); i++)
@@ -642,8 +639,9 @@ void Editor::update()
         //---
 
         BindlessIndices pushConstants;
-        pushConstants.RenderInfoBuffer = renderPassDataBuffer->gpuBuffer.resourceIndex;
-        pushConstants.transformBuffer = objectBuffer->gpuBuffer.resourceIndex;
+        pushConstants.RenderInfoBuffer =
+            *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
+        pushConstants.transformBuffer = *resourceManager.get<ResourceIndex>(getCurrentFrameData().objectBuffer);
 
         Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
         Material::Handle lastMaterial = Material::Handle::Invalid();
@@ -666,20 +664,18 @@ void Editor::update()
                         offscreenCmdBuffer, *resourceManager.get<VkPipeline>(newMaterial));
 
                     auto* parameters = resourceManager.get<Material::ParameterBuffer>(newMaterial);
-                    Handle<Buffer> paramBuffer = parameters->deviceBuffer;
+                    Buffer::Handle paramBuffer = parameters->deviceBuffer;
                     if(paramBuffer.isValid())
-                        pushConstants.materialParamsBuffer =
-                            resourceManager.get(paramBuffer)->gpuBuffer.resourceIndex;
+                        pushConstants.materialParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
                     else
                         pushConstants.materialParamsBuffer = 0xFFFFFFFF;
                     lastMaterial = newMaterial;
                 }
 
-                Handle<Buffer> paramBuffer =
+                Buffer::Handle paramBuffer =
                     resourceManager.get<MaterialInstance::ParameterBuffer>(objectMaterialInstance)->deviceBuffer;
                 if(paramBuffer.isValid())
-                    pushConstants.materialInstanceParamsBuffer =
-                        resourceManager.get(paramBuffer)->gpuBuffer.resourceIndex;
+                    pushConstants.materialInstanceParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
                 else
                     pushConstants.materialInstanceParamsBuffer = 0xFFFFFFFF;
             }
@@ -691,9 +687,6 @@ void Editor::update()
             {
                 Mesh* newMesh = resourceManager.get(objectMesh);
                 indexCount = newMesh->indexCount;
-                Buffer* indexBuffer = resourceManager.get(newMesh->indexBuffer);
-                Buffer* positionBuffer = resourceManager.get(newMesh->positionBuffer);
-                Buffer* attributeBuffer = resourceManager.get(newMesh->attributeBuffer);
                 gfxDevice.bindIndexBuffer(offscreenCmdBuffer, newMesh->indexBuffer);
                 gfxDevice.bindVertexBuffers(
                     offscreenCmdBuffer, 0, 2, {newMesh->positionBuffer, newMesh->attributeBuffer}, {0, 0});

@@ -256,6 +256,9 @@ class MultiPoolImpl
     DirectIterator<true> end() const { return cend(); }
     DirectIterator<false> end() { return {0xFFFFFFFF, this}; }
 
+    template <typename Type>
+    constexpr static bool holdsType = PoolHelper::TypeInPack<Type, Ts...>;
+
   private:
     void grow()
     {

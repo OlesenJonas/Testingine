@@ -40,9 +40,13 @@ class ResourceManager
 
     // todo: track resource usage so no stuff thats in use gets deleted
 
-    Handle<Buffer> createBuffer(Buffer::CreateInfo&& createInfo);
-    void destroy(Handle<Buffer> handle);
-    inline Buffer* get(Handle<Buffer> handle) { return VulkanDevice::impl()->get(handle); }
+    Buffer::Handle createBuffer(Buffer::CreateInfo&& createInfo);
+    void destroy(Buffer::Handle handle);
+    template <typename T>
+    inline T* get(Buffer::Handle handle)
+    {
+        return VulkanDevice::impl()->get<T>(handle);
+    }
 
     Handle<Mesh> createMesh(const char* file, std::string_view name = "");
     // indices can be {}, but then a trivial index list will still be used!

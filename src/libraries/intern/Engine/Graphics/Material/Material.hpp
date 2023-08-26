@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Buffer/Buffer.hpp"
 #include "../Graphics.hpp"
 #include <Datastructures/Pool/Handle.hpp>
 #include <Datastructures/Pool/PoolHelpers.hpp>
@@ -8,8 +9,6 @@
 
 // TODO: find abstraction for VkPipeline and remove include
 #include <vulkan/vulkan_core.h>
-
-struct Buffer;
 
 namespace Material
 {
@@ -25,7 +24,7 @@ namespace Material
     {
         uint32_t size = 0;
         uint8_t* writeBuffer = nullptr;
-        Handle<Buffer> deviceBuffer = Handle<Buffer>::Invalid();
+        Buffer::Handle deviceBuffer = Buffer::Handle::Invalid();
     };
 
     struct ParameterInfo

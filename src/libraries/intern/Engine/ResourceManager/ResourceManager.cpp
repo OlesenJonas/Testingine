@@ -52,12 +52,12 @@ void ResourceManager::cleanup()
     clearPool(computeShaderPool);
 }
 
-Handle<Buffer> ResourceManager::createBuffer(Buffer::CreateInfo&& createInfo)
+Buffer::Handle ResourceManager::createBuffer(Buffer::CreateInfo&& createInfo)
 {
     return VulkanDevice::impl()->createBuffer(std::move(createInfo));
 }
 
-void ResourceManager::destroy(Handle<Buffer> handle) { VulkanDevice::impl()->destroy(handle); }
+void ResourceManager::destroy(Buffer::Handle handle) { VulkanDevice::impl()->destroy(handle); }
 
 Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name)
 {
@@ -153,7 +153,7 @@ Handle<Mesh> ResourceManager::createMesh(
         indices = trivialIndices;
     }
 
-    Handle<Buffer> positionBufferHandle = createBuffer(Buffer::CreateInfo{
+    Buffer::Handle positionBufferHandle = createBuffer(Buffer::CreateInfo{
         .debugName = (std::string{name} + "_positionsBuffer"),
         .size = vertexPositions.size() * sizeof(glm::vec3),
         .memoryType = Buffer::MemoryType::GPU,
@@ -162,7 +162,7 @@ Handle<Mesh> ResourceManager::createMesh(
         .initialData = {(uint8_t*)vertexPositions.data(), vertexPositions.size() * sizeof(vertexPositions[0])},
     });
 
-    Handle<Buffer> attributesBufferHandle = createBuffer(Buffer::CreateInfo{
+    Buffer::Handle attributesBufferHandle = createBuffer(Buffer::CreateInfo{
         .debugName = (std::string{name} + "_attributesBuffer"),
         .size = vertexAttributes.size() * sizeof(vertexAttributes[0]),
         .memoryType = Buffer::MemoryType::GPU,
@@ -171,7 +171,7 @@ Handle<Mesh> ResourceManager::createMesh(
         .initialData = {(uint8_t*)vertexAttributes.data(), vertexAttributes.size() * sizeof(vertexAttributes[0])},
     });
 
-    Handle<Buffer> indexBufferHandle = createBuffer(Buffer::CreateInfo{
+    Buffer::Handle indexBufferHandle = createBuffer(Buffer::CreateInfo{
         .debugName = (std::string{name} + "_indexBuffer"),
         .size = indices.size() * sizeof(indices[0]),
         .memoryType = Buffer::MemoryType::GPU,
@@ -383,7 +383,7 @@ Material::Handle ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
             .writeBuffer = new uint8_t[parametersBufferSize],
             // Dont need to manage names for this, so could create directly through gfx device
             .deviceBuffer = parametersBufferSize == 0
-                                ? Handle<Buffer>::Null()
+                                ? Buffer::Handle::Null()
                                 : createBuffer(Buffer::CreateInfo{
                                       .debugName = (std::string{crInfo.debugName} + "ParamsGPU"),
                                       .size = parametersBufferSize,
@@ -441,7 +441,7 @@ MaterialInstance::Handle ResourceManager::createMaterialInstance(Material::Handl
             .writeBuffer = new uint8_t[bufferSize],
             // Dont need to manage names for this, so could create directly through gfx device
             .deviceBuffer = bufferSize == 0
-                                ? Handle<Buffer>::Null()
+                                ? Buffer::Handle::Null()
                                 : createBuffer(Buffer::CreateInfo{
                                       .debugName = *get<std::string>(parent) + "InstanceParamsGPU",
                                       .size = bufferSize,

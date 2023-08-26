@@ -106,14 +106,4 @@ constexpr inline ResourceStateMulti operator|(ResourceState lhs, ResourceState r
     return lhsM | rhs;
 }
 
-struct Buffer;
-
-struct GPUAllocation
-{
-    Handle<Buffer> buffer;
-    size_t offset = 0;
-    size_t size = 0;
-    void* ptr = nullptr;
-};
-
 using ResourceIndex = uint32_t;
