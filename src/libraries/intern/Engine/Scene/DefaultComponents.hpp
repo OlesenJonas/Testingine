@@ -2,11 +2,11 @@
 
 #include <Datastructures/Pool/Pool.hpp>
 #include <ECS/ECS.hpp>
+#include <Engine/Graphics/Material/Material.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <vector>
 
-struct MaterialInstance;
 struct Mesh;
 
 struct Transform
@@ -30,5 +30,5 @@ struct Hierarchy
 struct RenderInfo
 {
     Handle<Mesh> mesh;
-    Handle<MaterialInstance> materialInstance;
+    MaterialInstance::Handle materialInstance;
 };

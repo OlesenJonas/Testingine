@@ -19,10 +19,8 @@
 #include "../Texture/TextureView.hpp"
 
 struct GLFWwindow;
-struct Material;
 struct Barrier;
 struct ComputeShader;
-struct MaterialInstance;
 struct Mesh;
 
 class VulkanDevice

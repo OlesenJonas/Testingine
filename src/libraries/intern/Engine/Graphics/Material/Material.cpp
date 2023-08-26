@@ -1,34 +1,44 @@
 #include "Material.hpp"
 #include <Engine/ResourceManager/ResourceManager.hpp>
 
-void Material::setResource(std::string_view name, uint32_t index)
+namespace Material
 {
-    const auto& iterator = parametersLUT.find(name);
-    if(iterator == parametersLUT.end())
+    void setResource(Handle handle, std::string_view name, ResourceIndex index)
     {
-        // todo: emit some warning
-        return;
-    }
-    const auto& parameterInfo = iterator->second;
-    auto* ptr = (uint32_t*)(&parameters.writeBuffer[parameterInfo.byteOffsetInBuffer]);
-    *ptr = index;
-    dirty = true;
-}
+        const auto& parameterLUT = ResourceManager::impl()->get<Material::ParameterMap>(handle)->map;
+        const auto& iterator = parameterLUT.find(name);
+        if(iterator == parameterLUT.end())
+        {
+            // todo: emit some warning
+            return;
+        }
+        const auto& parameterInfo = iterator->second;
 
-void MaterialInstance::setResource(std::string_view name, uint32_t index)
+        auto* paramBuffer = ResourceManager::impl()->get<Material::ParameterBuffer>(handle);
+        auto* ptr = (uint32_t*)(&paramBuffer->writeBuffer[parameterInfo.byteOffsetInBuffer]);
+        *ptr = index;
+        *ResourceManager::impl()->get<bool>(handle) = true;
+    }
+} // namespace Material
+
+namespace MaterialInstance
 {
-    Material* parent = ResourceManager::impl()->get(parentMaterial);
-
-    const auto& iterator = parent->instanceParametersLUT.find(name);
-    if(iterator == parent->instanceParametersLUT.end())
+    void setResource(Handle handle, std::string_view name, ResourceIndex index)
     {
-        // todo: emit some warning
-        return;
-    }
-    const auto& parameterInfo = iterator->second;
-    auto* ptr = (uint32_t*)(&parameters.writeBuffer[parameterInfo.byteOffsetInBuffer]);
-    *ptr = index;
-    dirty = true;
-}
+        Material::Handle parent = *ResourceManager::impl()->get<Material::Handle>(handle);
 
-// void MaterialInstance::setResource(std::string_view name, uint32_t index) {}
+        const auto& parameterLUT = ResourceManager::impl()->get<Material::InstanceParameterMap>(parent)->map;
+        const auto& iterator = parameterLUT.find(name);
+        if(iterator == parameterLUT.end())
+        {
+            // todo: emit some warning
+            return;
+        }
+        const auto& parameterInfo = iterator->second;
+
+        auto* paramBuffer = ResourceManager::impl()->get<MaterialInstance::ParameterBuffer>(handle);
+        auto* ptr = (uint32_t*)(&paramBuffer->writeBuffer[parameterInfo.byteOffsetInBuffer]);
+        *ptr = index;
+        *ResourceManager::impl()->get<bool>(handle) = true;
+    }
+} // namespace MaterialInstance

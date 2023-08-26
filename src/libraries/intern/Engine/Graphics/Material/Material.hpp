@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Graphics.hpp"
 #include <Datastructures/Pool/Handle.hpp>
 #include <Datastructures/Pool/PoolHelpers.hpp>
 #include <Datastructures/StringMap.hpp>
@@ -10,14 +11,7 @@
 
 struct Buffer;
 
-struct ParameterBuffer
-{
-    uint32_t bufferSize = 0;
-    uint8_t* writeBuffer = nullptr;
-    Handle<Buffer> deviceBuffer = Handle<Buffer>::Invalid();
-};
-
-struct Material
+namespace Material
 {
     struct CreateInfo
     {
@@ -27,42 +21,44 @@ struct Material
         std::string_view debugName;
     };
 
+    struct ParameterBuffer
+    {
+        uint32_t size = 0;
+        uint8_t* writeBuffer = nullptr;
+        Handle<Buffer> deviceBuffer = Handle<Buffer>::Invalid();
+    };
+
     struct ParameterInfo
     {
         // todo: use some bits to store type information etc. so I can do at least *some* tests
         uint16_t byteSize = 0;
         uint16_t byteOffsetInBuffer = 0;
     };
-    using ParameterMap = StringMap<ParameterInfo>;
 
-    std::string name;
+    // TODO: need to wrap because otherwise TypeIndexInPack cant decide which index to return if pack contains
+    // duplicate type
+    //       TODO: could enable/allow accessing Pool through handle and index instead!
+    struct ParameterMap
+    {
+        size_t bufferSize = 0;
+        StringMap<ParameterInfo> map;
+    };
+    struct InstanceParameterMap
+    {
+        size_t bufferSize = 0;
+        StringMap<ParameterInfo> map;
+    };
 
-    ParameterMap parametersLUT;
-    size_t parametersBufferSize = 0;
-    ParameterMap instanceParametersLUT;
-    size_t instanceParametersBufferSize = 0;
+    using Handle = Handle<std::string, VkPipeline, ParameterMap, InstanceParameterMap, ParameterBuffer, bool>;
 
-    ParameterBuffer parameters;
+    void setResource(Handle handle, std::string_view name, ResourceIndex index);
 
-    VkPipeline pipeline = VK_NULL_HANDLE;
+}; // namespace Material
 
-    bool dirty = false;
-
-    void setResource(std::string_view name, uint32_t index);
-};
-
-static_assert(std::is_move_constructible<Material>::value);
-
-struct MaterialInstance
+namespace MaterialInstance
 {
-    Handle<Material> parentMaterial;
+    using ParameterBuffer = Material::ParameterBuffer;
+    using Handle = Handle<std::string, Material::Handle, ParameterBuffer, bool>;
 
-    ParameterBuffer parameters;
-
-    bool dirty = false;
-
-    void setResource(std::string_view name, uint32_t index);
-};
-
-static_assert(std::is_move_constructible<MaterialInstance>::value);
-static_assert(PoolHelper::is_trivially_relocatable<MaterialInstance>);
+    void setResource(Handle handle, std::string_view name, ResourceIndex index);
+}; // namespace MaterialInstance

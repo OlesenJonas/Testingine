@@ -246,8 +246,8 @@ Editor::Editor()
     });
 
     auto unlitTexturedMaterial = resourceManager.createMaterialInstance(unlitTexturedMaterialH);
-    resourceManager.get(unlitTexturedMaterial)
-        ->setResource("texture", *resourceManager.get<ResourceIndex>(mipTestTexH));
+    MaterialInstance::setResource(
+        unlitTexturedMaterial, "texture", *resourceManager.get<ResourceIndex>(mipTestTexH));
 
     auto newRenderable = ecs.createEntity();
     {
@@ -466,10 +466,10 @@ Editor::Editor()
     }
 
     // TODO: getPtrTmp() function (explicitetly state temporary!)
-    auto* basicPBRMaterial = resourceManager.get(resourceManager.getMaterial("PBRBasic"));
-    basicPBRMaterial->setResource("irradianceTex", *resourceManager.get<ResourceIndex>(irradianceTexHandle));
-    basicPBRMaterial->setResource("prefilterTex", *resourceManager.get<ResourceIndex>(prefilteredEnvMap));
-    basicPBRMaterial->setResource("brdfLUT", *resourceManager.get<ResourceIndex>(brdfIntegralMap));
+    Material::Handle pbrMat = resourceManager.getMaterial("PBRBasic");
+    Material::setResource(pbrMat, "irradianceTex", *resourceManager.get<ResourceIndex>(irradianceTexHandle));
+    Material::setResource(pbrMat, "prefilterTex", *resourceManager.get<ResourceIndex>(prefilteredEnvMap));
+    Material::setResource(pbrMat, "brdfLUT", *resourceManager.get<ResourceIndex>(brdfIntegralMap));
 
     auto defaultCube = resourceManager.getMesh("DefaultCube");
 
@@ -484,8 +484,8 @@ Editor::Editor()
     });
     auto equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
     {
-        auto* inst = resourceManager.get(equiSkyboxMatInst);
-        inst->setResource("equirectangularMap", *resourceManager.get<ResourceIndex>(hdri));
+        MaterialInstance::setResource(
+            equiSkyboxMatInst, "equirectangularMap", *resourceManager.get<ResourceIndex>(hdri));
     }
 
     auto cubeSkyboxMat = resourceManager.createMaterial({
@@ -496,9 +496,7 @@ Editor::Editor()
 
     auto cubeSkyboxMatInst = resourceManager.createMaterialInstance(cubeSkyboxMat);
     {
-        auto* inst = resourceManager.get(cubeSkyboxMatInst);
-        inst->setResource("cubeMap", *resourceManager.get<ResourceIndex>(hdriCube));
-        // inst->setResource("cubeMap", resourceManager.get(irradianceTexHandle)->sampledResourceIndex);
+        MaterialInstance::setResource(cubeSkyboxMatInst, "cubeMap", *resourceManager.get<ResourceIndex>(hdriCube));
     }
 
     // todo: createEntity takes initial set of components as arguments and returns all the pointers as []-thingy
@@ -604,7 +602,7 @@ void Editor::update()
         struct RenderObject
         {
             Handle<Mesh> mesh;
-            Handle<MaterialInstance> materialInstance;
+            MaterialInstance::Handle materialInstance;
             glm::mat4 transformMatrix;
         };
         std::vector<RenderObject> renderables;
@@ -648,8 +646,8 @@ void Editor::update()
         pushConstants.transformBuffer = objectBuffer->gpuBuffer.resourceIndex;
 
         Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
-        Handle<Material> lastMaterial = Handle<Material>::Invalid();
-        Handle<MaterialInstance> lastMaterialInstance = Handle<MaterialInstance>::Invalid();
+        Material::Handle lastMaterial = Material::Handle::Invalid();
+        MaterialInstance::Handle lastMaterialInstance = MaterialInstance::Handle::Invalid();
         uint32_t indexCount = 0;
 
         for(int i = 0; i < renderables.size(); i++)
@@ -657,27 +655,31 @@ void Editor::update()
             RenderObject& object = renderables[i];
 
             Handle<Mesh> objectMesh = object.mesh;
-            Handle<MaterialInstance> objectMaterialInstance = object.materialInstance;
+            MaterialInstance::Handle objectMaterialInstance = object.materialInstance;
 
             if(objectMaterialInstance != lastMaterialInstance)
             {
-                MaterialInstance* newMatInst = resourceManager.get(objectMaterialInstance);
-                if(newMatInst->parentMaterial != lastMaterial)
+                Material::Handle newMaterial = *resourceManager.get<Material::Handle>(objectMaterialInstance);
+                if(newMaterial != lastMaterial)
                 {
-                    Material* newMat = resourceManager.get(newMatInst->parentMaterial);
-                    gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, newMat->pipeline);
-                    Buffer* materialParamsBuffer = resourceManager.get(newMat->parameters.deviceBuffer);
-                    if(materialParamsBuffer != nullptr)
-                        pushConstants.materialParamsBuffer = materialParamsBuffer->gpuBuffer.resourceIndex;
+                    gfxDevice.setGraphicsPipelineState(
+                        offscreenCmdBuffer, *resourceManager.get<VkPipeline>(newMaterial));
+
+                    auto* parameters = resourceManager.get<Material::ParameterBuffer>(newMaterial);
+                    Handle<Buffer> paramBuffer = parameters->deviceBuffer;
+                    if(paramBuffer.isValid())
+                        pushConstants.materialParamsBuffer =
+                            resourceManager.get(paramBuffer)->gpuBuffer.resourceIndex;
                     else
                         pushConstants.materialParamsBuffer = 0xFFFFFFFF;
-                    lastMaterial = newMatInst->parentMaterial;
+                    lastMaterial = newMaterial;
                 }
 
-                Buffer* materialInstanceParamsBuffer = resourceManager.get(newMatInst->parameters.deviceBuffer);
-                if(materialInstanceParamsBuffer != nullptr)
+                Handle<Buffer> paramBuffer =
+                    resourceManager.get<MaterialInstance::ParameterBuffer>(objectMaterialInstance)->deviceBuffer;
+                if(paramBuffer.isValid())
                     pushConstants.materialInstanceParamsBuffer =
-                        materialInstanceParamsBuffer->gpuBuffer.resourceIndex;
+                        resourceManager.get(paramBuffer)->gpuBuffer.resourceIndex;
                 else
                     pushConstants.materialInstanceParamsBuffer = 0xFFFFFFFF;
             }
@@ -749,33 +751,30 @@ VkCommandBuffer Editor::updateDirtyMaterialParameters()
     // TODO: MERGE ALL BARRIER SUBMITS !!
     for(auto iter = materials.begin(); iter != materials.end(); iter++)
     {
-        auto* material = *iter;
-        if(!material->dirty)
+        auto handle = *iter;
+        bool* dirtyFlag = resourceManager.get<bool>(handle);
+        if(!*dirtyFlag)
             continue;
+        Material::ParameterBuffer& paramBuffer = *resourceManager.get<Material::ParameterBuffer>(handle);
         gfxDevice.insertBarriers(
             materialUpdateCmds,
             {
                 Barrier::FromBuffer{
-                    .buffer = material->parameters.deviceBuffer,
+                    .buffer = paramBuffer.deviceBuffer,
                     .stateBefore = ResourceState::UniformBuffer,
                     .stateAfter = ResourceState::TransferDst,
                 },
             });
-        auto gpuAlloc = gfxDevice.allocateStagingData(material->parameters.bufferSize);
-        memcpy(gpuAlloc.ptr, material->parameters.writeBuffer, material->parameters.bufferSize);
+        auto gpuAlloc = gfxDevice.allocateStagingData(paramBuffer.size);
+        memcpy(gpuAlloc.ptr, paramBuffer.writeBuffer, paramBuffer.size);
         gfxDevice.copyBuffer(
-            materialUpdateCmds,
-            gpuAlloc.buffer,
-            gpuAlloc.offset,
-            material->parameters.deviceBuffer,
-            0,
-            material->parameters.bufferSize);
-        material->dirty = false;
+            materialUpdateCmds, gpuAlloc.buffer, gpuAlloc.offset, paramBuffer.deviceBuffer, 0, paramBuffer.size);
+        *dirtyFlag = false;
         gfxDevice.insertBarriers(
             materialUpdateCmds,
             {
                 Barrier::FromBuffer{
-                    .buffer = material->parameters.deviceBuffer,
+                    .buffer = paramBuffer.deviceBuffer,
                     .stateBefore = ResourceState::TransferDst,
                     .stateAfter = ResourceState::UniformBuffer,
                 },
@@ -784,33 +783,31 @@ VkCommandBuffer Editor::updateDirtyMaterialParameters()
     auto& materialInstances = resourceManager.getMaterialInstancePool();
     for(auto iter = materialInstances.begin(); iter != materialInstances.end(); iter++)
     {
-        auto* materialInst = *iter;
-        if(!materialInst->dirty)
+        auto handle = *iter;
+        bool* dirtyFlag = resourceManager.get<bool>(handle);
+        if(!*dirtyFlag)
             continue;
+        MaterialInstance::ParameterBuffer& paramBuffer =
+            *resourceManager.get<MaterialInstance::ParameterBuffer>(handle);
         gfxDevice.insertBarriers(
             materialUpdateCmds,
             {
                 Barrier::FromBuffer{
-                    .buffer = materialInst->parameters.deviceBuffer,
+                    .buffer = paramBuffer.deviceBuffer,
                     .stateBefore = ResourceState::UniformBuffer,
                     .stateAfter = ResourceState::TransferDst,
                 },
             });
-        auto gpuAlloc = gfxDevice.allocateStagingData(materialInst->parameters.bufferSize);
-        memcpy(gpuAlloc.ptr, materialInst->parameters.writeBuffer, materialInst->parameters.bufferSize);
+        auto gpuAlloc = gfxDevice.allocateStagingData(paramBuffer.size);
+        memcpy(gpuAlloc.ptr, paramBuffer.writeBuffer, paramBuffer.size);
         gfxDevice.copyBuffer(
-            materialUpdateCmds,
-            gpuAlloc.buffer,
-            gpuAlloc.offset,
-            materialInst->parameters.deviceBuffer,
-            0,
-            materialInst->parameters.bufferSize);
-        materialInst->dirty = false;
+            materialUpdateCmds, gpuAlloc.buffer, gpuAlloc.offset, paramBuffer.deviceBuffer, 0, paramBuffer.size);
+        *dirtyFlag = false;
         gfxDevice.insertBarriers(
             materialUpdateCmds,
             {
                 Barrier::FromBuffer{
-                    .buffer = materialInst->parameters.deviceBuffer,
+                    .buffer = paramBuffer.deviceBuffer,
                     .stateBefore = ResourceState::TransferDst,
                     .stateAfter = ResourceState::UniformBuffer,
                 },

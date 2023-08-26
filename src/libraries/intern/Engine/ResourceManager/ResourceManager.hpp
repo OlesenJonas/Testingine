@@ -72,14 +72,22 @@ class ResourceManager
     void destroy(Handle<TextureView> handle);
     inline TextureView* get(Handle<TextureView> handle) { return VulkanDevice::impl()->get(handle); };
 
-    Handle<Material> createMaterial(Material::CreateInfo&& crInfo);
-    void destroy(Handle<Material> handle);
-    inline Material* get(Handle<Material> handle) { return materialPool.get(handle); };
-    CREATE_NAME_TO_HANDLE_GETTER(Material, nameToMaterialLUT);
+    Material::Handle createMaterial(Material::CreateInfo&& crInfo);
+    void destroy(Material::Handle handle);
+    template <typename T>
+    T* get(Material::Handle handle)
+    {
+        return materialPool.get<T>(handle);
+    };
+    CREATE_NAME_TO_MULTI_HANDLE_GETTER(Material, nameToMaterialLUT);
 
-    Handle<MaterialInstance> createMaterialInstance(Handle<Material> parent);
-    void destroy(Handle<MaterialInstance> handle);
-    inline MaterialInstance* get(Handle<MaterialInstance> handle) { return materialInstancePool.get(handle); };
+    MaterialInstance::Handle createMaterialInstance(Material::Handle parent);
+    void destroy(MaterialInstance::Handle handle);
+    template <typename T>
+    T* get(MaterialInstance::Handle handle)
+    {
+        return materialInstancePool.get<T>(handle);
+    };
 
     Handle<ComputeShader> createComputeShader(Shaders::StageCreateInfo&& createInfo, std::string_view debugName);
     void destroy(Handle<ComputeShader> handle);
@@ -96,14 +104,21 @@ class ResourceManager
     bool _initialized = false;
 
     Pool<Mesh> meshPool;
-    Pool<Material> materialPool;
-    Pool<MaterialInstance> materialInstancePool;
+    MultiPool<
+        std::string,
+        VkPipeline,
+        Material::ParameterMap,
+        Material::InstanceParameterMap,
+        Material::ParameterBuffer,
+        bool>
+        materialPool;
+    MultiPool<std::string, Material::Handle, MaterialInstance::ParameterBuffer, bool> materialInstancePool;
     Pool<ComputeShader> computeShaderPool;
 
     // just using standard unordered_map here, because I dont want to think about yet another datastructure atm
     std::unordered_map<std::string, Handle<Mesh>, StringHash, std::equal_to<>> nameToMeshLUT;
     std::unordered_map<std::string, Texture::Handle, StringHash, std::equal_to<>> nameToTextureLUT;
-    std::unordered_map<std::string, Handle<Material>, StringHash, std::equal_to<>> nameToMaterialLUT;
+    std::unordered_map<std::string, Material::Handle, StringHash, std::equal_to<>> nameToMaterialLUT;
 };
 
 #undef HANDLE_TO_PTR_GETTER
