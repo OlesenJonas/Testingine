@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../GPUAllocation.hpp"
+#include "../Graphics.hpp"
+#include "../RenderTargets.hpp"
 #include "BindlessManager.hpp"
 #include "HelperTypes.hpp"
 #include "VulkanConversions.hpp"
@@ -7,46 +10,87 @@
 #include <Engine/Misc/Macros.hpp>
 
 #include <Datastructures/FunctionQueue.hpp>
+#include <Datastructures/Pool/Pool.hpp>
+#include <Datastructures/Pool/PoolMulti.hpp>
 #include <Datastructures/Span.hpp>
+#include <atomic>
 #include <vulkan/vulkan_core.h>
 
-// TODO: full headers just for the create infos?
-#include <Engine/Graphics/Buffer/Buffer.hpp>
+#include "../Buffer/Buffer.hpp"
+#include "../Texture/TextureView.hpp"
 
 struct GLFWwindow;
-struct Material;
 struct Barrier;
 struct ComputeShader;
+struct Mesh;
 
 class VulkanDevice
 {
     CREATE_STATIC_GETTER(VulkanDevice);
 
+    // --------- Resources
+
+    MultiPool<std::string, Buffer::Descriptor, VkBuffer, void*, Buffer::Allocation, ResourceIndex> bufferPool;
+    MultiPool<std::string, Texture::Descriptor, Texture::GPU, ResourceIndex, Texture::Allocation> texturePool;
+    Pool<TextureView> textureViewPool;
+    // this value needs to match "GLOBAL_SAMPLER_COUNT" in the bindless shader code! Pass as eg. spec constant?
+    PoolLimited<BindlessManager::samplerLimit, Sampler> samplerPool;
+
+    // ---------
+
   public:
     void init(GLFWwindow* window);
     void cleanup();
+    void destroyResources();
 
     //-----------------------------------
 
-    VulkanBuffer createBuffer(const Buffer::CreateInfo& createInfo);
-    void deleteBuffer(Buffer* buffer);
+    Buffer::Handle createBuffer(Buffer::CreateInfo&& createInfo);
+    void destroy(Buffer::Handle handle);
+    template <typename T>
+        requires decltype(bufferPool)::holdsType<T>
+    inline T* get(Buffer::Handle handle)
+    {
+        return bufferPool.get<T>(handle);
+    }
 
-    VulkanSampler createSampler(const Sampler::Info& info);
-    void deleteSampler(Sampler* sampler);
+    Handle<Sampler> createSampler(const Sampler::Info& info);
+    void destroy(Handle<Sampler> sampler);
+    inline Sampler* get(Handle<Sampler> handle) { return samplerPool.get(handle); }
 
-    VulkanTexture createTexture(const Texture::CreateInfo& createInfo);
-    void deleteTexture(Texture* texture);
+    Texture::Handle createTexture(Texture::CreateInfo&& createInfo);
+    void destroy(Texture::Handle handle);
+    template <typename T>
+    T* get(Texture::Handle handle)
+    {
+        return texturePool.get<T>(handle);
+    }
 
-    VkPipeline createComputePipeline(Span<uint32_t> spirv, std::string_view debugName);
-    void deleteComputePipeline(ComputeShader* shader);
+    Handle<TextureView> createTextureView(TextureView::CreateInfo&& createInfo);
+    void destroy(Handle<TextureView> handle);
+    inline TextureView* get(Handle<TextureView> handle) { return textureViewPool.get(handle); }
 
-    // TODO: not sure how to handle the material abstraction since a material could contain multiple pipeline
-    // states depending on vertex layout etc
+    // TODO: wrap in handles aswell?
     VkPipeline
     createGraphicsPipeline(Span<uint32_t> vertexSpirv, Span<uint32_t> fragmentSpirv, std::string_view debugName);
-    void deleteGraphicsPipeline(Material* material);
+    VkPipeline createComputePipeline(Span<uint32_t> spirv, std::string_view debugName);
+    void destroy(VkPipeline pipeline);
 
     //-----------------------------------
+
+    /*
+        Allocates CPU but GPU visible memory intended for subsequent copies on the GPU
+        Assume that this is only alive for the duration of the frame
+        ! NOT THREAD SAFE IF BUFFER RUNS OUT OF MEMORY !
+    */
+    GPUAllocation allocateStagingData(size_t size);
+
+    //-----------------------------------
+
+    // Initialization happens during the 0th frame, this ensures all necessary fences etc are correctly set-up
+    // ie: a normal frame minus swapchain related things
+    void startInitializationWork();
+    void submitInitializationWork(Span<const VkCommandBuffer> cmdBuffersToSubmit);
 
     // Dont really like these functions, but have to do for now until a framegraph is implemented
     void startNextFrame();
@@ -61,22 +105,36 @@ class VulkanDevice
 
     // TODO: turn the functions into member functions of the command buffer instead ?
 
-    void beginRendering(VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget);
+    void fillMipLevels(VkCommandBuffer cmd, Texture::Handle texture, ResourceState state);
+
+    void copyBuffer(VkCommandBuffer cmd, Buffer::Handle src, Buffer::Handle dest);
+    void copyBuffer(
+        VkCommandBuffer cmd,
+        Buffer::Handle src,
+        size_t srcOffset,
+        Buffer::Handle dest,
+        size_t destOffset,
+        size_t size);
+
+    void dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ);
+
+    void
+    beginRendering(VkCommandBuffer cmd, Span<const ColorTarget>&& colorTargets, const DepthTarget&& depthTarget);
     void endRendering(VkCommandBuffer cmd);
 
     void insertSwapchainImageBarrier(VkCommandBuffer cmd, ResourceState currentState, ResourceState targetState);
     void insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers);
 
-    void setGraphicsPipelineState(VkCommandBuffer cmd, Handle<Material> mat);
-    void setComputePipelineState(VkCommandBuffer cmd, Handle<ComputeShader> shader);
+    void setGraphicsPipelineState(VkCommandBuffer cmd, VkPipeline pipe);
+    void setComputePipelineState(VkCommandBuffer cmd, VkPipeline pipe);
     // this explicitely uses the bindless layout, so just call this function setBindlessIndices ??
     void pushConstants(VkCommandBuffer cmd, size_t size, void* data, size_t offset = 0);
-    void bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset = 0);
+    void bindIndexBuffer(VkCommandBuffer cmd, Buffer::Handle buffer, size_t offset = 0);
     void bindVertexBuffers(
         VkCommandBuffer cmd,
         uint32_t startBinding,
         uint32_t count,
-        Span<const Handle<Buffer>> buffers,
+        Span<const Buffer::Handle> buffers,
         Span<const uint64_t> offsets);
     void drawIndexed(
         VkCommandBuffer cmd,
@@ -86,8 +144,6 @@ class VulkanDevice
         uint32_t vertexOffset,
         uint32_t firstInstance);
     void drawImGui(VkCommandBuffer cmd);
-
-    void dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ);
 
     void presentSwapchain();
 
@@ -104,8 +160,6 @@ class VulkanDevice
     // Waits until all currently submitted GPU commands are executed
     void waitForWorkFinished();
 
-    void fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state);
-
     //-----------------------------------
 
     uint32_t getSwapchainWidth();
@@ -113,6 +167,17 @@ class VulkanDevice
     static constexpr int FRAMES_IN_FLIGHT = 2;
 
   private:
+    struct LinearAllocator
+    {
+        Buffer::Handle buffer;
+        size_t capacity = 0;
+        std::atomic<size_t> offset = 0;
+        uint8_t* ptr = nullptr;
+
+        void reset();
+        GPUAllocation allocate(size_t size);
+    };
+
     struct PerFrameData
     {
         VkSemaphore swapchainImageAvailable = VK_NULL_HANDLE;
@@ -120,12 +185,13 @@ class VulkanDevice
         VkFence commandsDone = VK_NULL_HANDLE;
         std::vector<VkCommandPool> commandPools{};
         std::vector<std::vector<VkCommandBuffer>> usedCommandBuffersPerPool{};
+
+        LinearAllocator stagingAllocator;
+        VkCommandPool uploadCommandPool;
+        VkCommandBuffer uploadCommandBuffer;
     };
     PerFrameData perFrameData[FRAMES_IN_FLIGHT];
-    inline PerFrameData& getCurrentFrameData()
-    {
-        return perFrameData[frameNumber % FRAMES_IN_FLIGHT];
-    }
+    inline PerFrameData& getCurrentFrameData() { return perFrameData[frameNumber % FRAMES_IN_FLIGHT]; }
     uint32_t currentSwapchainImageIndex = 0xFFFFFFFF;
 
     // TODO: move into variable part on refactor
@@ -133,7 +199,8 @@ class VulkanDevice
     //       not sure if I want to cover scenario where window pointer can change in the future
     GLFWwindow* mainWindow;
 
-    int frameNumber = -1;
+    bool inInitialization = true;
+    int frameNumber = 0;
 
     bool _initialized = false;
 
@@ -164,7 +231,6 @@ class VulkanDevice
     VkFormat defaultDepthFormat;
 
   private:
-    // ---------
     VkDebugUtilsMessengerEXT debugMessenger;
     PFN_vkSetDebugUtilsObjectNameEXT setObjectDebugName = nullptr;
 
@@ -198,6 +264,7 @@ class VulkanDevice
     void initSwapchain();
     void initCommands();
     void initSyncStructures();
+    void initAllocators();
     void initBindless();
     void initPipelineCache();
     void initImGui();
@@ -259,6 +326,35 @@ class VulkanDevice
                         barrier.descriptor.type == Texture::Type::tCube ? 6 * barrier.arrayLength
                                                                         : barrier.arrayLength),
                 },
+        };
+    }
+
+    struct VulkanBufferBarrier
+    {
+        VkBuffer buffer;
+        ResourceState stateBefore = ResourceState::None;
+        ResourceState stateAfter = ResourceState::None;
+        size_t offset = 0;
+        size_t size = VK_WHOLE_SIZE;
+    };
+    constexpr VkBufferMemoryBarrier2 toVkBufferMemoryBarrier(VulkanBufferBarrier&& barrier)
+    {
+        return VkBufferMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+
+            .srcStageMask = toVkPipelineStage(barrier.stateBefore),
+            .srcAccessMask = toVkAccessFlags(barrier.stateBefore),
+
+            .dstStageMask = toVkPipelineStage(barrier.stateAfter),
+            .dstAccessMask = toVkAccessFlags(barrier.stateAfter),
+
+            .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
+            .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
+
+            .buffer = barrier.buffer,
+            .offset = barrier.offset,
+            .size = barrier.size,
         };
     }
 };

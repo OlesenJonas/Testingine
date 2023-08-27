@@ -1,121 +1,143 @@
 #pragma once
 
-// todo: only forward declarations where possible
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 #include <Datastructures/Span.hpp>
 #include <Engine/Graphics/Buffer/Buffer.hpp>
 #include <Engine/Graphics/Compute/ComputeShader.hpp>
+#include <Engine/Graphics/Device/VulkanDevice.hpp>
 #include <Engine/Graphics/Material/Material.hpp>
-#include <Engine/Graphics/Material/MaterialInstance.hpp>
 #include <Engine/Graphics/Mesh/Mesh.hpp>
 #include <Engine/Graphics/Texture/Sampler.hpp>
 #include <Engine/Graphics/Texture/Texture.hpp>
 #include <Engine/Graphics/Texture/TextureView.hpp>
 #include <Engine/Misc/Macros.hpp>
-#include <Engine/Misc/StringHash.hpp>
 #include <unordered_map>
 #include <vulkan/vulkan_core.h>
 
 /*
-    ResourceManager needs to ensure that the GPU representations of all the objects are properly created &
-    destroyed
-    The objects themselves should only hold CPU information and POD meta data
-        //todo: that is probably violated in some structs, need to clean this and decide better what to put where!
+    responsible for managing resources on a higher level, like mapping names to handles
 */
 
 class ResourceManager
 {
     CREATE_STATIC_GETTER(ResourceManager);
 
+#define CREATE_NAME_TO_MULTI_HANDLE_GETTER(T, LUT)                                                                \
+    inline T::Handle get##T(std::string_view name)                                                                \
+    {                                                                                                             \
+        const auto iterator = LUT.find(name);                                                                     \
+        return (iterator == LUT.end()) ? T::Handle::Null() : iterator->second;                                    \
+    }
+
   public:
     void init();
 
-    Handle<Buffer> createBuffer(Buffer::CreateInfo&& createInfo);
+    // todo: track resource usage so no stuff thats in use gets deleted
 
-    Handle<Mesh> createMesh(const char* file, std::string_view name = "");
+    // --------- Buffer -----------------------------------
+
+    Buffer::Handle createBuffer(Buffer::CreateInfo&& createInfo);
+    void destroy(Buffer::Handle handle);
+    template <typename T>
+    inline T* get(Buffer::Handle handle)
+    {
+        return VulkanDevice::impl()->get<T>(handle);
+    }
+
+    // --------- Mesh -----------------------------------
+
+    Mesh::Handle createMesh(const char* file, std::string name = "");
     // indices can be {}, but then a trivial index list will still be used!
-    Handle<Mesh> createMesh(
+    Mesh::Handle createMesh(
         Span<const Mesh::PositionType> vertexPositions,
         Span<const Mesh::VertexAttributes> vertexAttributes,
         Span<const uint32_t> indices,
-        std::string_view name);
+        std::string name);
+    void destroy(Mesh::Handle handle);
+    template <typename T>
+    inline T* get(Mesh::Handle handle)
+    {
+        return meshPool.get<T>(handle);
+    }
+    CREATE_NAME_TO_MULTI_HANDLE_GETTER(Mesh, nameToMeshLUT);
 
-    Handle<Texture> createTexture(Texture::CreateInfo&& createInfo);
-    Handle<Texture> createTexture(Texture::LoadInfo&& loadInfo);
-
-    // Handle<Texture> createTextureView(Handle<Texture> texture, TextureView::Info info, std::string_view name);
-
-    Handle<Material> createMaterial(Material::CreateInfo crInfo, std::string_view name = "");
-    Handle<MaterialInstance> createMaterialInstance(Handle<Material> material);
-
-    Handle<ComputeShader> createComputeShader(Shaders::StageCreateInfo&& createInfo, std::string_view debugName);
+    // --------- Sampler -----------------------------------
 
     Handle<Sampler> createSampler(Sampler::Info&& info);
+    inline Sampler* get(Handle<Sampler> handle) { return VulkanDevice::impl()->get(handle); };
 
-    // todo: track resource usage so no stuff thats in use gets deleted
-    void free(Handle<Buffer> handle);
-    void free(Handle<Mesh> handle);
-    void free(Handle<Texture> handle);
-    void free(Handle<Material> handle);
-    void free(Handle<MaterialInstance> handle);
-    void free(Handle<ComputeShader> handle);
-    // no explicit free function for samplers, since they could be used in multiple places
-    // and usages arent tracked yet!
+    // --------- Texture -----------------------------------
 
-  private:
-    Pool<Buffer> bufferPool{10};
-    Pool<Mesh> meshPool{10};
-    Pool<Texture> texturePool{10};
-    Pool<Material> materialPool{10};
-    Pool<MaterialInstance> materialInstancePool{10};
-    Pool<ComputeShader> computeShaderPool{10};
-
-  public:
-    // Accessing -----------------
-
-#define HANDLE_TO_PTR_GETTER(T, pool)                                                                             \
-    inline T* get(Handle<T> handle)                                                                               \
-    {                                                                                                             \
-        return pool.get(handle);                                                                                  \
-    }
-    HANDLE_TO_PTR_GETTER(Buffer, bufferPool);
-    HANDLE_TO_PTR_GETTER(Mesh, meshPool);
-    HANDLE_TO_PTR_GETTER(Texture, texturePool);
-    HANDLE_TO_PTR_GETTER(Material, materialPool);
-    HANDLE_TO_PTR_GETTER(MaterialInstance, materialInstancePool);
-    HANDLE_TO_PTR_GETTER(ComputeShader, computeShaderPool);
-    // Samplers dont use pool, so special getter needed
-    inline Sampler* get(Handle<Sampler> handle)
+    Texture::Handle createTexture(Texture::CreateInfo&& createInfo);
+    Texture::Handle createTexture(Texture::LoadInfo&& loadInfo);
+    void destroy(Texture::Handle handle);
+    template <typename T>
+    T* get(Texture::Handle handle)
     {
-        return &samplerArray[handle.index];
-    }
+        return VulkanDevice::impl()->get<T>(handle);
+    };
+    CREATE_NAME_TO_MULTI_HANDLE_GETTER(Texture, nameToTextureLUT);
 
-#define NAME_TO_HANDLE_GETTER(T, LUT)                                                                             \
-    inline Handle<T> get##T(std::string_view name)                                                                \
-    {                                                                                                             \
-        const auto iterator = LUT.find(name);                                                                     \
-        return (iterator == LUT.end()) ? Handle<T>{} : iterator->second;                                          \
-    }
-    NAME_TO_HANDLE_GETTER(Mesh, nameToMeshLUT);
-    NAME_TO_HANDLE_GETTER(Texture, nameToTextureLUT);
-    NAME_TO_HANDLE_GETTER(Material, nameToMaterialLUT);
+    // --------- Texture View -----------------------------------
+
+    Handle<TextureView> createTextureView(TextureView::CreateInfo&& createInfo);
+    void destroy(Handle<TextureView> handle);
+    inline TextureView* get(Handle<TextureView> handle) { return VulkanDevice::impl()->get(handle); };
+
+    // --------- Material -----------------------------------
+
+    Material::Handle createMaterial(Material::CreateInfo&& crInfo);
+    void destroy(Material::Handle handle);
+    template <typename T>
+    T* get(Material::Handle handle)
+    {
+        return materialPool.get<T>(handle);
+    };
+    CREATE_NAME_TO_MULTI_HANDLE_GETTER(Material, nameToMaterialLUT);
+
+    // --------- Material Instance -----------------------------------
+
+    MaterialInstance::Handle createMaterialInstance(Material::Handle parent);
+    void destroy(MaterialInstance::Handle handle);
+    template <typename T>
+    T* get(MaterialInstance::Handle handle)
+    {
+        return materialInstancePool.get<T>(handle);
+    };
+
+    // --------- Compute Shader -----------------------------------
+
+    Handle<ComputeShader> createComputeShader(Shaders::StageCreateInfo&& createInfo, std::string_view debugName);
+    void destroy(Handle<ComputeShader> handle);
+    inline ComputeShader* get(Handle<ComputeShader> handle) { return computeShaderPool.get(handle); };
+
+    // Accessing -----------------
 
     void cleanup();
 
-    constexpr static uint32_t samplerLimit = 32;
+    auto& getMaterialPool() { return materialPool; }
+    auto& getMaterialInstancePool() { return materialInstancePool; }
 
   private:
     bool _initialized = false;
 
-    // just using standard unordered_map here, because I dont want to think about yet another datastructure atm
-    std::unordered_map<std::string, Handle<Mesh>, StringHash, std::equal_to<>> nameToMeshLUT;
-    std::unordered_map<std::string, Handle<Texture>, StringHash, std::equal_to<>> nameToTextureLUT;
-    std::unordered_map<std::string, Handle<Material>, StringHash, std::equal_to<>> nameToMaterialLUT;
+    MultiPool<std::string, Mesh::RenderData> meshPool;
+    MultiPool<
+        std::string,
+        VkPipeline,
+        Material::ParameterMap,
+        Material::InstanceParameterMap,
+        Material::ParameterBuffer,
+        bool>
+        materialPool;
+    MultiPool<std::string, Material::Handle, MaterialInstance::ParameterBuffer, bool> materialInstancePool;
+    Pool<ComputeShader> computeShaderPool;
 
-    // this value needs to match the one in bindless.glsl!
-    // todo: could pass this as a define to shader compilation I guess
-    std::array<Sampler, samplerLimit> samplerArray;
-    // since samplers are never deleted, a simple linear index is enough
-    // todo: free entries after they arent in use for some time, then need mechanism to reclaim that entry
-    uint32_t freeSamplerIndex = 0;
+    // just using standard unordered_map here, because I dont want to think about yet another datastructure atm
+    std::unordered_map<std::string, Mesh::Handle, StringHash, std::equal_to<>> nameToMeshLUT;
+    std::unordered_map<std::string, Texture::Handle, StringHash, std::equal_to<>> nameToTextureLUT;
+    std::unordered_map<std::string, Material::Handle, StringHash, std::equal_to<>> nameToMaterialLUT;
 };
+
+#undef HANDLE_TO_PTR_GETTER
+#undef NAME_TO_HANDLE_GETTER

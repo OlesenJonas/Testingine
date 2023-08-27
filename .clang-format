@@ -2,7 +2,7 @@
 # sorted alphabetically
 AlignAfterOpenBracket: AlwaysBreak
 AllowAllParametersOfDeclarationOnNextLine: true
-AllowShortFunctionsOnASingleLine: None
+AllowShortFunctionsOnASingleLine: All
 AllowShortLambdasOnASingleLine: Inline
 AlwaysBreakTemplateDeclarations: 'Yes'
 BinPackArguments: false

@@ -17,6 +17,8 @@ class Editor final : public Application
   private:
     void update();
 
+    VkCommandBuffer updateDirtyMaterialParameters();
+
     uint32_t frameNumber = 0xFFFFFFFF;
 
     InputManager inputManager;
@@ -30,7 +32,7 @@ class Editor final : public Application
     Camera mainCamera;
 
     Texture::Format depthFormat = Texture::Format::d32_float;
-    Handle<Texture> depthTexture;
+    Texture::Handle depthTexture;
 
     // TODO: store somewhere else and keep synced with shader code version of struct
     struct RenderPassData
@@ -61,9 +63,9 @@ class Editor final : public Application
 
     struct PerFrameData
     {
-        Handle<Buffer> renderPassDataBuffer;
+        Buffer::Handle renderPassDataBuffer;
         // TODO: dont need to upload this every frame, most objects are static!!
-        Handle<Buffer> objectBuffer;
+        Buffer::Handle objectBuffer;
     };
 
     PerFrameData perFrameData[VulkanDevice::FRAMES_IN_FLIGHT];

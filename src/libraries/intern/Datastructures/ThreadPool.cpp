@@ -3,6 +3,7 @@
 #include <cassert>
 #include <iostream>
 #include <mutex>
+#include <string>
 
 void ThreadPool::start(uint32_t numThreads)
 {
@@ -17,6 +18,7 @@ void ThreadPool::start(uint32_t numThreads)
 void ThreadPool::threadLoop()
 {
     int index = getThreadPoolThreadIndex();
+    nameCurrentThread({"ThreadPoolWorker" + std::to_string(index)});
     while(true)
     {
         std::function<void(int)> job;
@@ -64,3 +66,24 @@ int ThreadPool::getThreadPoolThreadIndex()
     const thread_local int myIndex = freeThreadIndex.fetch_add(1);
     return myIndex;
 }
+
+#ifdef _WIN32
+    #define WIN32_LEAN_AND_MEAN // Exclude rarely-used stuff from Windows headers
+    #include <windows.h>
+    // NEED TO KEEP THIS ORDER OF INCLUDES !!
+    #include <processthreadsapi.h>
+
+void ThreadPool::nameCurrentThread(std::string_view name)
+{
+    const std::wstring wname{name.begin(), name.end()};
+    HRESULT res;
+    res = SetThreadDescription(GetCurrentThread(), wname.data());
+}
+#else
+
+void ThreadPool::nameCurrentThread(std::string name)
+{
+    // TODO: warn not implemented
+}
+
+#endif

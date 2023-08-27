@@ -21,6 +21,8 @@ class BindlessManager
     const VkDescriptorSetLayout* getDescriptorSetLayouts();
 
     uint32_t createSamplerBinding(VkSampler sampler);
+    void freeSamplerBinding(uint32_t index);
+
     enum class ImageUsage
     {
         Sampled,
@@ -28,26 +30,29 @@ class BindlessManager
         Both,
     };
     uint32_t createImageBinding(VkImageView view, ImageUsage possibleImageUsages);
+    void freeImageBinding(uint32_t index, ImageUsage usage);
+
     enum class BufferUsage
     {
         Uniform,
         Storage,
     };
     uint32_t createBufferBinding(VkBuffer buffer, BufferUsage possibleBufferUsage);
+    void freeBufferBinding(uint32_t index, BufferUsage usage);
 
     // TODO: find a better way to determine / set this, but IDK yet
     //        Maybe pass on construction?
     //        At least seperate into compute and graphics?
     static constexpr auto maxBindlessPushConstantSize = sizeof(uint32_t) * 8;
 
-  private:
     // todo: check against limit from physicalDeviceProperties.limits
-    static const uint32_t samplerLimit = 32;
-    static const uint32_t sampledImagesLimit = 128;
-    static const uint32_t storageImagesLimit = 128;
-    static const uint32_t uniformBuffersLimit = 128;
-    static const uint32_t storageBuffersLimit = 128;
+    static constexpr uint32_t samplerLimit = 32;
+    static constexpr uint32_t sampledImagesLimit = 128;
+    static constexpr uint32_t storageImagesLimit = 128;
+    static constexpr uint32_t uniformBuffersLimit = 128;
+    static constexpr uint32_t storageBuffersLimit = 128;
 
+  private:
     struct BindlessSet
     {
         uint32_t setIndex = 0xFFFFFFFF;

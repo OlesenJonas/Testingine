@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Datastructures/Pool/Handle.hpp>
 #include <Datastructures/Span.hpp>
 #include <Engine/Graphics/Device/HelperTypes.hpp>
 #include <Engine/Graphics/Graphics.hpp>
@@ -7,9 +8,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-
-template <typename T>
-struct Handle;
 
 struct Texture
 {
@@ -110,12 +108,31 @@ struct Texture
     static LoadResult loadHDR(Texture::LoadInfo&& loadInfo);
     static LoadResult loadDefault(Texture::LoadInfo&& loadInfo);
 
-    uint32_t fullResourceIndex() const;
-    uint32_t mipResourceIndex(uint32_t level) const;
-    // TODO: own textureView abstraction
-    VkImageView fullResourceView() const;
-    VkImageView mipResourceView(uint32_t level) const;
+    // -----------------------------------------------------
 
-    Descriptor descriptor;
-    VulkanTexture gpuTexture;
+    // TODO: think about how to split this into pool components, could also duplicate data if it makes sense
+    /*
+        Descriptor
+        VmaAllocation
+        VkImage
+        VkImageView
+        ResourceIndex
+    */
+
+    // wrapping in structs like this could allow overloading for other gfx apis
+    //      pool internally stores eg Texture::GPUVulkan but pool.get just returns Texture::GPU*
+    struct GPU
+    {
+        VkImage image;
+        VkImageView imageView;
+    };
+    // Own struct since only used on create/destroy
+    struct Allocation
+    {
+        VmaAllocation allocation = VK_NULL_HANDLE;
+    };
+    // Descriptor
+    // ResourceIndex
+
+    using Handle = Handle<std::string, Descriptor, GPU, ResourceIndex, Allocation>;
 };

@@ -1,9 +1,10 @@
 #pragma once
 
-#include <Datastructures/Pool.hpp>
+#include "../Buffer/Buffer.hpp"
+#include "../Texture/Texture.hpp"
+#include <Datastructures/Pool/Pool.hpp>
 #include <Datastructures/Span.hpp>
 #include <Engine/Graphics/Graphics.hpp>
-#include <Engine/Graphics/Texture/Texture.hpp>
 
 /*
     Based on WickedEngine's barrier abstraction
@@ -34,9 +35,9 @@ struct Barrier
     };
     Type type = Type::Buffer;
 
-    struct Image
+    struct FromImage
     {
-        Texture* texture;
+        Texture::Handle texture;
         ResourceState stateBefore = ResourceState::None;
         ResourceState stateAfter = ResourceState::None;
         int32_t mipLevel = 0;
@@ -46,28 +47,21 @@ struct Barrier
         bool allowDiscardOriginal = false;
     };
 
-    struct Buffer
+    struct FromBuffer
     {
-        Buffer* buffer;
+        Buffer::Handle buffer;
         ResourceState stateBefore = ResourceState::None;
         ResourceState stateAfter = ResourceState::None;
-        // TODO: Buffer abstraction!
-        uint64_t offset = 0;
-        uint64_t size = VK_WHOLE_SIZE;
+        size_t offset = 0;
+        size_t size = VK_WHOLE_SIZE;
     };
 
     union
     {
-        Image image;
-        Buffer buffer;
+        FromImage image;
+        FromBuffer buffer;
     };
 
-    static inline Barrier from(Image&& barrierInfo)
-    {
-        return Barrier{.type = Type::Image, .image = barrierInfo};
-    }
-    static inline Barrier from(Buffer&& barrierInfo)
-    {
-        return Barrier{.type = Type::Buffer, .buffer = barrierInfo};
-    }
+    Barrier(FromImage&& barrierInfo) { type = Type::Image, image = barrierInfo; }
+    Barrier(FromBuffer&& barrierInfo) { type = Type::Buffer, buffer = barrierInfo; }
 };

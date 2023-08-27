@@ -1,13 +1,13 @@
 #include "VulkanDevice.hpp"
-#include "VulkanDebug.hpp"
-
-#include "Graphics/Barrier/Barrier.hpp"
+#include "../Barrier/Barrier.hpp"
+#include "../Mesh/Mesh.hpp"
 #include "Init/VulkanDeviceFinder.hpp"
 #include "Init/VulkanInit.hpp"
 #include "Init/VulkanSwapchainSetup.hpp"
-#include "ResourceManager/ResourceManager.hpp"
+#include "VulkanConversions.hpp"
+#include "VulkanDebug.hpp"
+
 #include <Datastructures/ArrayHelpers.hpp>
-#include <Engine/Graphics/Device/VulkanConversions.hpp>
 
 #include <GLFW/glfw3.h>
 #include <ImGui/imgui.h>
@@ -26,15 +26,19 @@ void VulkanDevice::init(GLFWwindow* window)
     INIT_STATIC_GETTER();
     mainWindow = window;
 
+    bufferPool.init(10);
+    texturePool.init(10);
+    textureViewPool.init(10);
+    samplerPool.init(BindlessManager::samplerLimit);
+
     initVulkan();
     initPipelineCache();
-
-    // everything went fine
 
     // per frame stuff
     initSwapchain();
     initCommands();
     initSyncStructures();
+    initAllocators();
 
     // TODO: where to put this?
     initBindless();
@@ -44,14 +48,30 @@ void VulkanDevice::init(GLFWwindow* window)
     _initialized = true;
 }
 
-uint32_t VulkanDevice::getSwapchainWidth()
+void VulkanDevice::destroyResources()
 {
-    return swapchainExtent.width;
+    auto clearPool = [&](auto&& pool)
+    {
+        for(auto iter = pool.begin(); iter != pool.end(); iter++)
+        {
+            destroy(iter.asHandle());
+        }
+    };
+    auto clearMultiPool = [&](auto&& pool)
+    {
+        for(auto iter = pool.begin(); iter != pool.end(); iter++)
+        {
+            destroy(*iter);
+        }
+    };
+    clearPool(samplerPool);
+    clearPool(textureViewPool);
+    clearMultiPool(texturePool);
+    clearMultiPool(bufferPool);
 }
-uint32_t VulkanDevice::getSwapchainHeight()
-{
-    return swapchainExtent.height;
-}
+
+uint32_t VulkanDevice::getSwapchainWidth() { return swapchainExtent.width; }
+uint32_t VulkanDevice::getSwapchainHeight() { return swapchainExtent.height; }
 
 void VulkanDevice::initVulkan()
 {
@@ -200,30 +220,57 @@ void VulkanDevice::initCommands()
             assertVkResult(
                 vkCreateCommandPool(device, &commandPoolCrInfo, nullptr, &perFrameData[i].commandPools[t]));
 
-            deleteQueue.pushBack([=]()
-                                 { vkDestroyCommandPool(device, perFrameData[i].commandPools[t], nullptr); });
+            deleteQueue.pushBack([=, pool = perFrameData[i].commandPools[t]]()
+                                 { vkDestroyCommandPool(device, pool, nullptr); });
+
+            // Per frame upload stuff
+            VkCommandPoolCreateInfo uploadCommandPoolCrInfo{
+                .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                .pNext = nullptr,
+
+                .flags = 0,
+                .queueFamilyIndex = graphicsAndComputeQueueFamily,
+            };
+            assertVkResult(
+                vkCreateCommandPool(device, &uploadCommandPoolCrInfo, nullptr, &frameData.uploadCommandPool));
+            deleteQueue.pushBack([device = device, pool = frameData.uploadCommandPool]()
+                                 { vkDestroyCommandPool(device, pool, nullptr); });
+
+            VkCommandBufferAllocateInfo cmdBuffAllocInfo{
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .pNext = nullptr,
+
+                .commandPool = frameData.uploadCommandPool,
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount = 1,
+            };
+            assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &frameData.uploadCommandBuffer));
         }
     }
 
-    VkCommandPoolCreateInfo uploadCommandPoolCrInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .pNext = nullptr,
+    // Immediate submit
+    {
+        VkCommandPoolCreateInfo uploadCommandPoolCrInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .pNext = nullptr,
 
-        .flags = 0,
-        .queueFamilyIndex = graphicsAndComputeQueueFamily,
-    };
-    assertVkResult(vkCreateCommandPool(device, &uploadCommandPoolCrInfo, nullptr, &uploadContext.commandPool));
-    deleteQueue.pushBack([=]() { vkDestroyCommandPool(device, uploadContext.commandPool, nullptr); });
+            .flags = 0,
+            .queueFamilyIndex = graphicsAndComputeQueueFamily,
+        };
+        assertVkResult(vkCreateCommandPool(device, &uploadCommandPoolCrInfo, nullptr, &uploadContext.commandPool));
+        deleteQueue.pushBack([=, pool = uploadContext.commandPool]()
+                             { vkDestroyCommandPool(device, pool, nullptr); });
 
-    VkCommandBufferAllocateInfo cmdBuffAllocInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .pNext = nullptr,
+        VkCommandBufferAllocateInfo cmdBuffAllocInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .pNext = nullptr,
 
-        .commandPool = uploadContext.commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &uploadContext.commandBuffer));
+            .commandPool = uploadContext.commandPool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+        };
+        assertVkResult(vkAllocateCommandBuffers(device, &cmdBuffAllocInfo, &uploadContext.commandBuffer));
+    }
 }
 
 void VulkanDevice::initSyncStructures()
@@ -245,7 +292,8 @@ void VulkanDevice::initSyncStructures()
     {
         assertVkResult(vkCreateFence(device, &fenceCreateInfo, nullptr, &perFrameData[i].commandsDone));
 
-        deleteQueue.pushBack([=]() { vkDestroyFence(device, perFrameData[i].commandsDone, nullptr); });
+        deleteQueue.pushBack([=, fence = perFrameData[i].commandsDone]()
+                             { vkDestroyFence(device, fence, nullptr); });
 
         assertVkResult(
             vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &perFrameData[i].swapchainImageAvailable));
@@ -253,10 +301,12 @@ void VulkanDevice::initSyncStructures()
             device, &semaphoreCreateInfo, nullptr, &perFrameData[i].swapchainImageRenderFinished));
 
         deleteQueue.pushBack(
-            [=]()
+            [=,
+             renderFinished = perFrameData[i].swapchainImageRenderFinished,
+             imgAvail = perFrameData[i].swapchainImageAvailable]()
             {
-                vkDestroySemaphore(device, perFrameData[i].swapchainImageRenderFinished, nullptr);
-                vkDestroySemaphore(device, perFrameData[i].swapchainImageAvailable, nullptr);
+                vkDestroySemaphore(device, renderFinished, nullptr);
+                vkDestroySemaphore(device, imgAvail, nullptr);
             });
     }
 
@@ -266,6 +316,26 @@ void VulkanDevice::initSyncStructures()
     };
     assertVkResult(vkCreateFence(device, &uploadFenceCreateInfo, nullptr, &uploadContext.uploadFence));
     deleteQueue.pushBack([=]() { vkDestroyFence(device, uploadContext.uploadFence, nullptr); });
+}
+
+#define MB(x) ((size_t)(x) << 20)
+
+void VulkanDevice::initAllocators()
+{
+    for(int i = 0; i < FRAMES_IN_FLIGHT; i++)
+    {
+        auto& frameData = perFrameData[i];
+        constexpr size_t stagingBufferSize = MB(50);
+        frameData.stagingAllocator.buffer = createBuffer(Buffer::CreateInfo{
+            .debugName = "StagingBuffer" + std::to_string(i),
+            .size = stagingBufferSize,
+            .memoryType = Buffer::MemoryType::CPU,
+            .allStates = ResourceState::TransferSrc,
+            .initialState = ResourceState::TransferSrc,
+        });
+        frameData.stagingAllocator.capacity = stagingBufferSize;
+        frameData.stagingAllocator.ptr = static_cast<uint8_t*>(*get<void*>(frameData.stagingAllocator.buffer));
+    }
 }
 
 void VulkanDevice::initBindless()
@@ -376,6 +446,8 @@ void VulkanDevice::cleanup()
 
     savePipelineCache();
 
+    destroyResources();
+
     deleteQueue.flushReverse();
 
     vmaDestroyAllocator(allocator);
@@ -393,14 +465,34 @@ void VulkanDevice::cleanup()
     glfwTerminate();
 }
 
-void VulkanDevice::waitForWorkFinished()
-{
-    vkDeviceWaitIdle(device);
-}
+void VulkanDevice::waitForWorkFinished() { vkDeviceWaitIdle(device); }
 
-VulkanBuffer VulkanDevice::createBuffer(const Buffer::CreateInfo& createInfo)
+Buffer::Handle VulkanDevice::createBuffer(Buffer::CreateInfo&& createInfo)
 {
-    VulkanBuffer ret;
+    assert(createInfo.initialData.size() <= createInfo.size);
+    // High level setup
+
+    if(createInfo.allStates.containsStorageBufferUsage() && createInfo.allStates.containsUniformBufferUsage())
+    {
+        // TODO: LOGGER: Cant use both, using just storage
+        createInfo.allStates.unset(
+            ResourceState::UniformBuffer | ResourceState::UniformBufferGraphics |
+            ResourceState::UniformBufferCompute);
+        assert(!createInfo.allStates.containsUniformBufferUsage());
+    }
+    if(!createInfo.initialData.empty() && !(createInfo.allStates & ResourceState::TransferDst))
+    {
+        // TODO: Log: Trying to create buffer with initial data but without transfer dst bit set
+        createInfo.allStates |= ResourceState::TransferDst;
+    }
+
+    // Low level creation
+
+    VkBuffer vkBuffer;
+    VmaAllocation allocation;
+    VmaAllocationInfo allocInfo;
+    ResourceIndex resourceIndex;
+    void* mappedPtr = nullptr;
 
     VkBufferCreateInfo bufferCrInfo{
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -411,97 +503,124 @@ VulkanBuffer VulkanDevice::createBuffer(const Buffer::CreateInfo& createInfo)
     };
 
     VmaAllocationCreateInfo vmaAllocCrInfo = toVMAAllocCrInfo(createInfo.memoryType);
-    VkResult res =
-        vmaCreateBuffer(allocator, &bufferCrInfo, &vmaAllocCrInfo, &ret.buffer, &ret.allocation, &ret.allocInfo);
+    VkResult res = vmaCreateBuffer(allocator, &bufferCrInfo, &vmaAllocCrInfo, &vkBuffer, &allocation, &allocInfo);
 
     if(createInfo.memoryType == Buffer::MemoryType::CPU ||
        createInfo.memoryType == Buffer::MemoryType::GPU_BUT_CPU_VISIBLE)
-        ret.ptr = ret.allocInfo.pMappedData;
+        mappedPtr = allocInfo.pMappedData;
 
     assert(res == VK_SUCCESS);
 
     if(!createInfo.initialData.empty())
     {
-        /*
-            todo:
-                - Currently waits for GPU Idle after upload
-                - try asynchronous transfer queue
-                - dont re-create staging buffers all the time!
-                    keep a few large ones around?
-                    or at least keep the last created ones around for a few frames in case theyre needed again?
-        */
+        auto stagingAlloc = allocateStagingData(createInfo.initialData.size());
+        memcpy(stagingAlloc.ptr, createInfo.initialData.data(), createInfo.initialData.size());
 
-        // allocate staging buffer
-        VkBufferCreateInfo stagingBufferInfo = {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .pNext = nullptr,
+        VkBufferCopy copy{
+            .srcOffset = stagingAlloc.offset,
+            .dstOffset = 0,
             .size = createInfo.size,
-            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         };
-        VmaAllocationCreateInfo vmaallocCrInfo = {
-            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-            .usage = VMA_MEMORY_USAGE_AUTO,
-            .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        vkCmdCopyBuffer(
+            getCurrentFrameData().uploadCommandBuffer, *get<VkBuffer>(stagingAlloc.buffer), vkBuffer, 1, &copy);
+
+        VkBufferMemoryBarrier2 barrier = toVkBufferMemoryBarrier(VulkanBufferBarrier{
+            .buffer = vkBuffer,
+            .stateBefore = ResourceState::TransferDst,
+            .stateAfter = createInfo.initialState,
+        });
+        VkDependencyInfo dependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .bufferMemoryBarrierCount = 1,
+            .pBufferMemoryBarriers = &barrier,
         };
-        VulkanBuffer stagingBuffer;
-        VkResult res = vmaCreateBuffer(
-            allocator,
-            &stagingBufferInfo,
-            &vmaallocCrInfo,
-            &stagingBuffer.buffer,
-            &stagingBuffer.allocation,
-            &stagingBuffer.allocInfo);
-        assert(res == VK_SUCCESS);
-
-        memcpy(stagingBuffer.allocInfo.pMappedData, createInfo.initialData.data(), createInfo.initialData.size());
-
-        immediateSubmit(
-            [=](VkCommandBuffer cmd)
-            {
-                VkBufferCopy copy{
-                    .srcOffset = 0,
-                    .dstOffset = 0,
-                    .size = createInfo.size,
-                };
-                vkCmdCopyBuffer(cmd, stagingBuffer.buffer, ret.buffer, 1, &copy);
-            });
-
-        // since immediateSubmit also waits until the commands have executed, we can safely delete the staging
-        // buffer immediately here
-        //  todo: again, dont like the wait here. So once I fix that this call also has to be changed
-        vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
     }
 
     if(!createInfo.debugName.empty())
     {
-        setDebugName(ret.buffer, createInfo.debugName.data());
+        setDebugName(vkBuffer, createInfo.debugName.data());
     }
 
     if((createInfo.allStates & ResourceState::UniformBuffer) ||
        (createInfo.allStates & ResourceState::UniformBufferGraphics) ||
        (createInfo.allStates & ResourceState::UniformBufferCompute))
     {
-        ret.resourceIndex = bindlessManager.createBufferBinding(ret.buffer, BindlessManager::BufferUsage::Uniform);
+        resourceIndex = bindlessManager.createBufferBinding(vkBuffer, BindlessManager::BufferUsage::Uniform);
     }
     else if(
         (createInfo.allStates & ResourceState::Storage) ||
         (createInfo.allStates & ResourceState::StorageGraphics) ||
         (createInfo.allStates & ResourceState::StorageCompute))
     {
-        ret.resourceIndex = bindlessManager.createBufferBinding(ret.buffer, BindlessManager::BufferUsage::Storage);
+        resourceIndex = bindlessManager.createBufferBinding(vkBuffer, BindlessManager::BufferUsage::Storage);
     }
 
-    return ret;
+    // TODO: lock pool?
+    Buffer::Handle newHandle = bufferPool.insert(
+        createInfo.debugName,
+        Buffer::Descriptor{
+            .size = createInfo.size,
+            .memoryType = createInfo.memoryType,
+            .allStates = createInfo.allStates,
+        },
+        vkBuffer,
+        mappedPtr,
+        Buffer::Allocation{
+            .allocation = allocation,
+            .allocInfo = allocInfo,
+        },
+        resourceIndex //
+    );
+
+    return newHandle;
 }
 
-void VulkanDevice::deleteBuffer(Buffer* buffer)
+void VulkanDevice::destroy(Buffer::Handle handle)
 {
-    deleteQueue.pushBack([=]()
-                         { vmaDestroyBuffer(allocator, buffer->gpuBuffer.buffer, buffer->gpuBuffer.allocation); });
+    // TODO: Enqueue into a per frame queue
+
+    // its possible that this handle is outdated
+    if(!bufferPool.isHandleValid(handle))
+    {
+        return;
+    }
+
+    ResourceStateMulti states = get<Buffer::Descriptor>(handle)->allStates;
+    auto resourceIndex = *get<ResourceIndex>(handle);
+    if(states &
+       (ResourceState::UniformBuffer | ResourceState::UniformBufferCompute | ResourceState::UniformBufferGraphics))
+    {
+        bindlessManager.freeBufferBinding(resourceIndex, BindlessManager::BufferUsage::Uniform);
+    }
+    if(states & (ResourceState::Storage | ResourceState::StorageCompute | ResourceState::StorageGraphics))
+    {
+        bindlessManager.freeBufferBinding(resourceIndex, BindlessManager::BufferUsage::Storage);
+    }
+
+    VkBuffer buffer = *get<VkBuffer>(handle);
+    VmaAllocation alloc = get<Buffer::Allocation>(handle)->allocation;
+
+    deleteQueue.pushBack([allocator = allocator, buffer = buffer, alloc = alloc]()
+                         { vmaDestroyBuffer(allocator, buffer, alloc); });
+    bufferPool.remove(handle);
 }
 
-VulkanSampler VulkanDevice::createSampler(const Sampler::Info& info)
+Handle<Sampler> VulkanDevice::createSampler(const Sampler::Info& info)
 {
+    // Check if such a sampler already exists
+
+    // since the sampler limit is quite low atm, and sampler creation should be a rare thing
+    // just doing a linear search here. Could of course hash the creation info and do some lookup
+    // in the future
+
+    Handle<Sampler> newHandle = samplerPool.find([&](Sampler* sampler) { return sampler->info == info; });
+    if(newHandle.isValid())
+        return newHandle;
+
+    // Otherwise create a new sampler
+
     VkSamplerCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext = nullptr,
@@ -527,17 +646,55 @@ VulkanSampler VulkanDevice::createSampler(const Sampler::Info& info)
     vkCreateSampler(device, &createInfo, nullptr, &sampler.sampler);
     sampler.resourceIndex = bindlessManager.createSamplerBinding(sampler.sampler);
 
-    return sampler;
+    newHandle = samplerPool.insert(Sampler{
+        .info = info,
+        .sampler = sampler,
+    });
+
+    return newHandle;
 }
 
-void VulkanDevice::deleteSampler(Sampler* sampler)
+void VulkanDevice::destroy(Handle<Sampler> sampler)
 {
-    deleteQueue.pushBack([=]() { vkDestroySampler(device, sampler->sampler.sampler, nullptr); });
+    bindlessManager.freeSamplerBinding(get(sampler)->sampler.resourceIndex);
+
+    VulkanSampler vksampler = get(sampler)->sampler;
+    deleteQueue.pushBack([=]() { vkDestroySampler(device, vksampler.sampler, nullptr); });
+    samplerPool.remove(sampler);
 }
 
-VulkanTexture VulkanDevice::createTexture(const Texture::CreateInfo& createInfo)
+Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
 {
-    VulkanTexture ret;
+    // High level setup
+
+    const uint32_t maxDimension = std::max({createInfo.size.width, createInfo.size.height, createInfo.size.depth});
+    const uint32_t maxMipLevels = int32_t(floor(log2(maxDimension))) + 1;
+    // TODO: warn if clamping to max happened
+    int32_t actualMipLevels = createInfo.mipLevels == Texture::MipLevels::All
+                                  ? maxMipLevels
+                                  : std::min<int32_t>(createInfo.mipLevels, maxMipLevels);
+    assert(actualMipLevels > 0);
+    createInfo.mipLevels = actualMipLevels;
+
+    if(!createInfo.initialData.empty())
+    {
+        // TODO: LOG: warn
+        createInfo.allStates |= ResourceState::TransferDst;
+    }
+
+    if(createInfo.mipLevels > 1)
+    {
+        // TODO: LOG: warn (needed for automatic mip fill)
+        createInfo.allStates |= ResourceState::TransferSrc;
+        createInfo.allStates |= ResourceState::TransferDst;
+    }
+
+    // Low level creation
+
+    VmaAllocation allocation;
+    VkImage image;
+    VkImageView view;
+    uint32_t resourceIndex;
 
     VkImageCreateFlags flags = createInfo.type == Texture::Type::tCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
 
@@ -556,7 +713,7 @@ VulkanTexture VulkanDevice::createTexture(const Texture::CreateInfo& createInfo)
             },
 
         .mipLevels = static_cast<uint32_t>(createInfo.mipLevels),
-        .arrayLayers = toVkArrayLayers(createInfo),
+        .arrayLayers = toVkArrayLayers(createInfo.arrayLength, createInfo.type),
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = toVkImageUsage(createInfo.allStates),
@@ -565,368 +722,269 @@ VulkanTexture VulkanDevice::createTexture(const Texture::CreateInfo& createInfo)
         .usage = VMA_MEMORY_USAGE_AUTO,
         .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
     };
-    VkResult res = vmaCreateImage(allocator, &imageCrInfo, &imgAllocInfo, &ret.image, &ret.allocation, nullptr);
+    VkResult res = vmaCreateImage(allocator, &imageCrInfo, &imgAllocInfo, &image, &allocation, nullptr);
     assert(res == VK_SUCCESS);
 
     if(!createInfo.initialData.empty())
     {
-        // allocate staging buffer
-        VkBufferCreateInfo stagingBufferInfo = {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        auto stagingAlloc = allocateStagingData(createInfo.initialData.size());
+        memcpy(stagingAlloc.ptr, createInfo.initialData.data(), createInfo.initialData.size());
+
+        VkImageMemoryBarrier2 imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+            .texture = image,
+            .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
+            .stateBefore = ResourceState::Undefined,
+            .stateAfter = ResourceState::TransferDst,
+        });
+        VkDependencyInfo dependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .pNext = nullptr,
-            .size = createInfo.initialData.size(),
-            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &imgBarrier,
         };
-        VmaAllocationCreateInfo vmaallocCrInfo = {
-            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-            .usage = VMA_MEMORY_USAGE_AUTO,
-            .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        };
-        VulkanBuffer stagingBuffer;
-        VkResult res = vmaCreateBuffer(
-            allocator,
-            &stagingBufferInfo,
-            &vmaallocCrInfo,
-            &stagingBuffer.buffer,
-            &stagingBuffer.allocation,
-            &stagingBuffer.allocInfo);
-        assert(res == VK_SUCCESS);
+        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
 
-        memcpy(stagingBuffer.allocInfo.pMappedData, createInfo.initialData.data(), createInfo.initialData.size());
-
-        immediateSubmit(
-            [&](VkCommandBuffer cmd)
-            {
-                VkImageMemoryBarrier2 imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
-                    .texture = ret.image,
-                    // TODO: store in variable
-                    .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
-                    .stateBefore = ResourceState::Undefined,
-                    .stateAfter = ResourceState::TransferDst,
-                });
-                VkDependencyInfo dependencyInfo{
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .imageMemoryBarrierCount = 1,
-                    .pImageMemoryBarriers = &imgBarrier,
-                };
-                vkCmdPipelineBarrier2(cmd, &dependencyInfo);
-
-                VkBufferImageCopy copyRegion{
-                    .bufferOffset = 0,
-                    .bufferRowLength = 0,
-                    .bufferImageHeight = 0,
-                    .imageSubresource =
-                        {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                         .mipLevel = 0,
-                         .baseArrayLayer = 0,
-                         .layerCount = 1},
-                    .imageExtent =
-                        {
-                            .width = createInfo.size.width,
-                            .height = createInfo.size.height,
-                            .depth = createInfo.size.depth,
-                        },
-                };
-
-                vkCmdCopyBufferToImage(
-                    cmd, stagingBuffer.buffer, ret.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
-                imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
-                    .texture = ret.image,
-                    .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
-                    .stateBefore = ResourceState::TransferDst,
-                    .stateAfter = createInfo.initialState,
-                });
-                dependencyInfo = VkDependencyInfo{
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .imageMemoryBarrierCount = 1,
-                    .pImageMemoryBarriers = &imgBarrier,
-                };
-                vkCmdPipelineBarrier2(cmd, &dependencyInfo);
-
-                if(createInfo.fillMipLevels && createInfo.mipLevels > 1)
+        VkBufferImageCopy copyRegion{
+            .bufferOffset = stagingAlloc.offset,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource =
+                {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+            .imageExtent =
                 {
-                    fillMipLevels(
-                        cmd, ret.image, Texture::Descriptor::fromCreateInfo(createInfo), createInfo.initialState);
-                }
-            });
+                    .width = createInfo.size.width,
+                    .height = createInfo.size.height,
+                    .depth = createInfo.size.depth,
+                },
+        };
 
-        // immediate submit also waits on device idle so staging buffer is not being used here anymore
-        vmaDestroyBuffer(allocator, stagingBuffer.buffer, stagingBuffer.allocation);
+        vkCmdCopyBufferToImage(
+            getCurrentFrameData().uploadCommandBuffer,
+            *get<VkBuffer>(stagingAlloc.buffer),
+            image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &copyRegion);
+
+        imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+            .texture = image,
+            .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
+            .stateBefore = ResourceState::TransferDst,
+            .stateAfter = createInfo.initialState,
+        });
+        dependencyInfo = VkDependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &imgBarrier,
+        };
+        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
+
+        if(createInfo.fillMipLevels && createInfo.mipLevels > 1)
+        {
+            fillMipLevels(
+                getCurrentFrameData().uploadCommandBuffer,
+                image,
+                Texture::Descriptor::fromCreateInfo(createInfo),
+                createInfo.initialState);
+        }
     }
     else if(createInfo.initialState != ResourceState::Undefined)
     {
         // Dont upload anything, just transition
-        immediateSubmit(
-            [&](VkCommandBuffer cmd)
-            {
-                auto imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
-                    .texture = ret.image,
-                    .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
-                    .stateBefore = ResourceState::Undefined,
-                    .stateAfter = createInfo.initialState,
-                });
-                VkDependencyInfo dependencyInfo{
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .imageMemoryBarrierCount = 1,
-                    .pImageMemoryBarriers = &imgBarrier,
-                };
-                vkCmdPipelineBarrier2(cmd, &dependencyInfo);
-            });
-    }
-    setDebugName(ret.image, (createInfo.debugName + "_image").c_str());
-
-    // Creating the resourceViews and descriptors for bindless
-
-    assert(createInfo.mipLevels > 0);
-    ret._mipResourceIndices = std::make_unique<uint32_t[]>(createInfo.mipLevels);
-    for(int i = 0; i < createInfo.mipLevels; i++)
-        ret._mipResourceIndices[i] = 0xFFFFFFFF;
-    ret._mipImageViews = std::make_unique<VkImageView[]>(createInfo.mipLevels);
-    for(int i = 0; i < createInfo.mipLevels; i++)
-        ret._mipImageViews[i] = VK_NULL_HANDLE;
-
-    if(createInfo.mipLevels == 1)
-    {
-        // create a single view and single resourceIndex
-        VkImageViewType viewType =
-            createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
-        VkImageViewCreateInfo imageViewCrInfo{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        auto imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
+            .texture = image,
+            .descriptor = Texture::Descriptor::fromCreateInfo(createInfo),
+            .stateBefore = ResourceState::Undefined,
+            .stateAfter = createInfo.initialState,
+        });
+        VkDependencyInfo dependencyInfo{
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .pNext = nullptr,
-            .image = ret.image,
-            .viewType = viewType,
-            .format = toVkFormat(createInfo.format),
-            .components =
-                VkComponentMapping{
-                    .r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                    .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                    .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                    .a = VK_COMPONENT_SWIZZLE_IDENTITY,
-                },
-            .subresourceRange =
-                {
-                    .aspectMask = toVkImageAspect(createInfo.format),
-                    .baseMipLevel = 0,
-                    .levelCount = static_cast<uint32_t>(createInfo.mipLevels),
-                    .baseArrayLayer = 0,
-                    .layerCount = toVkArrayLayers(Texture::Descriptor::fromCreateInfo(createInfo)),
-                },
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &imgBarrier,
         };
-
-        vkCreateImageView(device, &imageViewCrInfo, nullptr, &ret.fullImageView);
-        ret._mipImageViews[0] = ret.fullImageView;
-        setDebugName(ret.fullImageView, (createInfo.debugName + "_viewFull").c_str());
-
-        // TODO: containsSamplingState()/...StorageState() functions!
-        bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
-                               (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
-                               (createInfo.allStates & ResourceState::SampleSourceCompute);
-        bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
-                              (createInfo.allStates & ResourceState::StorageGraphics) ||
-                              (createInfo.allStates & ResourceState::StorageCompute);
-
-        if(usedForSampling && usedForStorage)
-        {
-            ret.resourceIndex =
-                bindlessManager.createImageBinding(ret.fullImageView, BindlessManager::ImageUsage::Both);
-        }
-        // else: not both but maybe one of the two
-        else if(usedForSampling)
-        {
-            ret.resourceIndex =
-                bindlessManager.createImageBinding(ret.fullImageView, BindlessManager::ImageUsage::Sampled);
-        }
-        else if(usedForStorage)
-        {
-            ret.resourceIndex =
-                bindlessManager.createImageBinding(ret.fullImageView, BindlessManager::ImageUsage::Storage);
-        }
-        ret._mipResourceIndices[0] = ret.resourceIndex;
+        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
     }
-    else
+    setDebugName(image, (createInfo.debugName + "_image").c_str());
+
+    VkImageViewType viewType =
+        createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+    VkImageViewCreateInfo imageViewCrInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = nullptr,
+        .image = image,
+        .viewType = viewType,
+        .format = toVkFormat(createInfo.format),
+        .components =
+            VkComponentMapping{
+                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+            },
+        .subresourceRange =
+            {
+                .aspectMask = toVkImageAspect(createInfo.format),
+                .baseMipLevel = 0,
+                .levelCount = static_cast<uint32_t>(createInfo.mipLevels),
+                .baseArrayLayer = 0,
+                .layerCount = toVkArrayLayers(createInfo.arrayLength, createInfo.type),
+            },
+    };
+    vkCreateImageView(device, &imageViewCrInfo, nullptr, &view);
+    setDebugName(view, (createInfo.debugName + "_view").c_str());
+
+    // TODO: containsSamplingState()/...StorageState() functions!
+    bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
+                           (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
+                           (createInfo.allStates & ResourceState::SampleSourceCompute);
+    bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
+                          (createInfo.allStates & ResourceState::StorageGraphics) ||
+                          (createInfo.allStates & ResourceState::StorageCompute);
+
+    if(usedForSampling && usedForStorage)
     {
-        // create a view for the full image, can not be used for storage!
-        {
-            VkImageViewType viewType =
-                createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
-            VkImageViewCreateInfo imageViewCrInfo{
-                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .pNext = nullptr,
-                .image = ret.image,
-                .viewType = viewType,
-                .format = toVkFormat(createInfo.format),
-                .components =
-                    VkComponentMapping{
-                        .r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                        .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                        .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                        .a = VK_COMPONENT_SWIZZLE_IDENTITY,
-                    },
-                .subresourceRange =
-                    {
-                        .aspectMask = toVkImageAspect(createInfo.format),
-                        .baseMipLevel = 0,
-                        .levelCount = static_cast<uint32_t>(createInfo.mipLevels),
-                        .baseArrayLayer = 0,
-                        .layerCount = toVkArrayLayers(Texture::Descriptor::fromCreateInfo(createInfo)),
-                    },
-            };
-
-            vkCreateImageView(device, &imageViewCrInfo, nullptr, &ret.fullImageView);
-            setDebugName(ret.fullImageView, (createInfo.debugName + "_viewFull").c_str());
-
-            bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
-                                   (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
-                                   (createInfo.allStates & ResourceState::SampleSourceCompute);
-
-            if(usedForSampling)
-            {
-                ret.resourceIndex =
-                    bindlessManager.createImageBinding(ret.fullImageView, BindlessManager::ImageUsage::Sampled);
-            }
-        }
-
-        // Create views for all individual mips, storage only for now, but wouldnt be hard to change
-        for(int m = 0; m < createInfo.mipLevels; m++)
-        {
-            VkImageViewType viewType =
-                createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
-            VkImageViewCreateInfo imageViewCrInfo{
-                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .pNext = nullptr,
-                .image = ret.image,
-                .viewType = viewType,
-                .format = toVkFormat(createInfo.format),
-                .components =
-                    VkComponentMapping{
-                        .r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                        .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                        .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                        .a = VK_COMPONENT_SWIZZLE_IDENTITY,
-                    },
-                .subresourceRange =
-                    {
-                        .aspectMask = toVkImageAspect(createInfo.format),
-                        .baseMipLevel = static_cast<uint32_t>(m),
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = toVkArrayLayers(Texture::Descriptor::fromCreateInfo(createInfo)),
-                    },
-            };
-
-            vkCreateImageView(device, &imageViewCrInfo, nullptr, &ret._mipImageViews[m]);
-            setDebugName(ret._mipImageViews[m], (createInfo.debugName + "_viewMip" + std::to_string(m)).c_str());
-
-            VulkanDevice& gfxDevice = *VulkanDevice::get();
-            bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
-                                   (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
-                                   (createInfo.allStates & ResourceState::SampleSourceCompute);
-            bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
-                                  (createInfo.allStates & ResourceState::StorageGraphics) ||
-                                  (createInfo.allStates & ResourceState::StorageCompute);
-
-            // if(usedForSampling && usedForStorage)
-            // {
-            //     tex->_fullResourceIndex = gfxDevice.bindlessManager.createImageBinding(
-            //         tex->_fullImageView, BindlessManager::ImageUsage::Both);
-            // }
-            // // else: not both but maybe one of the two
-            // else if(usedForSampling)
-            // {
-            //     tex->_fullResourceIndex = gfxDevice.bindlessManager.createImageBinding(
-            //         tex->_fullImageView, BindlessManager::ImageUsage::Sampled);
-            // }
-            // else if(usedForStorage)
-            if(usedForStorage)
-            {
-                ret._mipResourceIndices[m] = gfxDevice.bindlessManager.createImageBinding(
-                    ret._mipImageViews[m], BindlessManager::ImageUsage::Storage);
-            }
-        }
+        resourceIndex = bindlessManager.createImageBinding(view, BindlessManager::ImageUsage::Both);
+    }
+    // else: not both but maybe one of the two
+    else if(usedForSampling)
+    {
+        resourceIndex = bindlessManager.createImageBinding(view, BindlessManager::ImageUsage::Sampled);
+    }
+    else if(usedForStorage)
+    {
+        resourceIndex = bindlessManager.createImageBinding(view, BindlessManager::ImageUsage::Storage);
     }
 
-    return ret;
+    Texture::Handle newHandle = texturePool.insert(
+        createInfo.debugName,
+        Texture::Descriptor::fromCreateInfo(createInfo),
+        Texture::GPU{
+            .image = image,
+            .imageView = view,
+        },
+        resourceIndex,
+        Texture::Allocation{.allocation = allocation} //
+    );
+
+    return newHandle;
 }
 
-void VulkanDevice::deleteTexture(Texture* texture)
+void VulkanDevice::destroy(Texture::Handle handle)
 {
-    VkImage image = texture->gpuTexture.image;
-    VmaAllocation vmaAllocation = texture->gpuTexture.allocation;
+    ResourceStateMulti states = get<Texture::Descriptor>(handle)->allStates;
+    auto resourceIndex = *get<ResourceIndex>(handle);
+    bool usedSampling = bool(
+        states &
+        (ResourceState::SampleSource | ResourceState::SampleSourceCompute | ResourceState::SampleSourceGraphics));
+
+    bool usedStorage =
+        bool(states & (ResourceState::Storage | ResourceState::StorageCompute | ResourceState::StorageGraphics));
+
+    BindlessManager::ImageUsage usage;
+    if(usedSampling && usedStorage)
+        usage = BindlessManager::ImageUsage::Both;
+    else if(usedSampling)
+        usage = BindlessManager::ImageUsage::Sampled;
+    else if(usedStorage)
+        usage = BindlessManager::ImageUsage::Storage;
+
+    bindlessManager.freeImageBinding(resourceIndex, usage);
+
+    VkImageView imageView = get<Texture::GPU>(handle)->imageView;
+    deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
+
+    VkImage image = get<Texture::GPU>(handle)->image;
+    VmaAllocation vmaAllocation = get<Texture::Allocation>(handle)->allocation;
 
     deleteQueue.pushBack([=]() { vmaDestroyImage(allocator, image, vmaAllocation); });
 
-    VkImageView imageView = texture->gpuTexture.fullImageView;
-    deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
-
-    if(texture->descriptor.mipLevels > 1)
-        for(int i = 0; i < texture->descriptor.mipLevels; i++)
-        {
-            imageView = texture->gpuTexture._mipImageViews[i];
-            deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
-        }
+    texturePool.remove(handle);
 }
 
-VkPipeline VulkanDevice::createComputePipeline(Span<uint32_t> spirv, std::string_view debugName)
+Handle<TextureView> VulkanDevice::createTextureView(TextureView::CreateInfo&& createInfo)
 {
-    // (temp) Shader Modules ----------------
-    VkShaderModule tempSM;
-    VkShaderModuleCreateInfo SMCrInfo{
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+    auto* parentDesc = get<Texture::Descriptor>(createInfo.parent);
+
+    assert(!(createInfo.allStates & (~parentDesc->allStates)));
+
+    VkImageViewType viewType =
+        createInfo.type == Texture::Type::tCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+    VkImageViewCreateInfo imageViewCrInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
-        .codeSize = 4u * spirv.size(), // size in bytes, but spirvBinary is uint32 vector!
-        .pCode = spirv.data(),
+        .image = get<Texture::GPU>(createInfo.parent)->image,
+        .viewType = viewType,
+        .format = toVkFormat(parentDesc->format),
+        .components =
+            VkComponentMapping{
+                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+            },
+        .subresourceRange =
+            {
+                .aspectMask = toVkImageAspect(parentDesc->format),
+                .baseMipLevel = createInfo.baseMipLevel,
+                .levelCount = createInfo.mipCount,
+                .baseArrayLayer = createInfo.baseArrayLayer,
+                .layerCount =
+                    createInfo.type == Texture::Type::tCube ? 6 * createInfo.arrayLength : createInfo.arrayLength,
+            },
     };
-    if(vkCreateShaderModule(device, &SMCrInfo, nullptr, &tempSM) != VK_SUCCESS)
+
+    VkImageView view;
+    uint32_t resourceIndex;
+    vkCreateImageView(device, &imageViewCrInfo, nullptr, &view);
+    setDebugName(view, createInfo.debugName.c_str());
+
+    bool usedForSampling = (createInfo.allStates & ResourceState::SampleSource) ||
+                           (createInfo.allStates & ResourceState::SampleSourceGraphics) ||
+                           (createInfo.allStates & ResourceState::SampleSourceCompute);
+    bool usedForStorage = (createInfo.allStates & ResourceState::Storage) ||
+                          (createInfo.allStates & ResourceState::StorageGraphics) ||
+                          (createInfo.allStates & ResourceState::StorageCompute);
+
+    if(usedForSampling && usedForStorage)
     {
-        assert(false);
+        resourceIndex = bindlessManager.createImageBinding(view, BindlessManager::ImageUsage::Both);
+    }
+    // else: not both but maybe one of the two
+    else if(usedForSampling)
+    {
+        resourceIndex = bindlessManager.createImageBinding(view, BindlessManager::ImageUsage::Sampled);
+    }
+    else if(usedForStorage)
+    {
+        resourceIndex = bindlessManager.createImageBinding(view, BindlessManager::ImageUsage::Storage);
     }
 
-    // todo: check if pipeline with given parameters already exists, and just return that in case it does!
-    //       Though im not sure if that should happen on this level, or as part of the application level
-    //       Especially since it would require something like the spirv path to check equality
+    Handle<TextureView> newHandle = textureViewPool.insert(TextureView{
+        .descriptor =
+            {
+                .parent = createInfo.parent,
+                .type = createInfo.type,
+                .allStates = createInfo.allStates,
+                .baseMipLevel = createInfo.baseMipLevel,
+                .mipCount = createInfo.mipCount,
+                .baseArrayLayer = createInfo.baseArrayLayer,
+                .arrayLength = createInfo.arrayLength,
+            },
+        .imageView = view,
+        .resourceIndex = resourceIndex,
+    });
 
-    // Creating the pipeline ---------------------------
-    VkPipeline pipeline;
-    const VkPipelineShaderStageCreateInfo shaderStageCrInfo{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-        .module = tempSM,
-        .pName = "main",
-        .pSpecializationInfo = nullptr,
-    };
-
-    const VkComputePipelineCreateInfo pipelineCrInfo{
-        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .stage = shaderStageCrInfo,
-        .layout = bindlessPipelineLayout,
-        .basePipelineHandle = VK_NULL_HANDLE,
-    };
-
-    if(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCrInfo, nullptr, &pipeline) != VK_SUCCESS)
-    {
-        assert(false);
-    }
-    setDebugName(pipeline, (std::string{debugName}).c_str());
-
-    vkDestroyShaderModule(device, tempSM, nullptr);
-
-    return pipeline;
+    return newHandle;
 }
 
-void VulkanDevice::deleteComputePipeline(ComputeShader* shader)
+void VulkanDevice::destroy(Handle<TextureView> handle)
 {
-    if(shader->pipeline != VK_NULL_HANDLE)
-    {
-        deleteQueue.pushBack([=]() { vkDestroyPipeline(device, shader->pipeline, nullptr); });
-    }
+    TextureView* view = textureViewPool.get(handle);
+    deleteQueue.pushBack([device = device, view = view->imageView]()
+                         { vkDestroyImageView(device, view, nullptr); });
+    textureViewPool.remove(handle);
 }
 
 VkPipeline VulkanDevice::createGraphicsPipeline(
@@ -1128,22 +1186,132 @@ VkPipeline VulkanDevice::createGraphicsPipeline(
     return pipeline;
 }
 
-void VulkanDevice::deleteGraphicsPipeline(Material* material)
+VkPipeline VulkanDevice::createComputePipeline(Span<uint32_t> spirv, std::string_view debugName)
 {
-    if(material->pipeline != VK_NULL_HANDLE)
+    // (temp) Shader Modules ----------------
+    VkShaderModule tempSM;
+    VkShaderModuleCreateInfo SMCrInfo{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = nullptr,
+        .codeSize = 4u * spirv.size(), // size in bytes, but spirvBinary is uint32 vector!
+        .pCode = spirv.data(),
+    };
+    if(vkCreateShaderModule(device, &SMCrInfo, nullptr, &tempSM) != VK_SUCCESS)
     {
-        deleteQueue.pushBack([=]() { vkDestroyPipeline(device, material->pipeline, nullptr); });
+        assert(false);
     }
+
+    // todo: check if pipeline with given parameters already exists, and just return that in case it does!
+    //       Though im not sure if that should happen on this level, or as part of the application level
+    //       Especially since it would require something like the spirv path to check equality
+
+    // Creating the pipeline ---------------------------
+    VkPipeline pipeline;
+    const VkPipelineShaderStageCreateInfo shaderStageCrInfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .module = tempSM,
+        .pName = "main",
+        .pSpecializationInfo = nullptr,
+    };
+
+    const VkComputePipelineCreateInfo pipelineCrInfo{
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .stage = shaderStageCrInfo,
+        .layout = bindlessPipelineLayout,
+        .basePipelineHandle = VK_NULL_HANDLE,
+    };
+
+    if(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCrInfo, nullptr, &pipeline) != VK_SUCCESS)
+    {
+        assert(false);
+    }
+    setDebugName(pipeline, (std::string{debugName}).c_str());
+
+    vkDestroyShaderModule(device, tempSM, nullptr);
+
+    return pipeline;
+}
+
+void VulkanDevice::destroy(VkPipeline pipeline)
+{
+    if(pipeline != VK_NULL_HANDLE)
+    {
+        deleteQueue.pushBack([=]() { vkDestroyPipeline(device, pipeline, nullptr); });
+    }
+}
+
+GPUAllocation VulkanDevice::allocateStagingData(size_t size)
+{
+    auto& currentFrameData = getCurrentFrameData();
+    return currentFrameData.stagingAllocator.allocate(size);
+}
+
+void VulkanDevice::startInitializationWork()
+{
+    auto& curFrameData = getCurrentFrameData();
+
+    assertVkResult(vkWaitForFences(device, 1, &curFrameData.commandsDone, true, UINT64_MAX));
+    assertVkResult(vkResetFences(device, 1, &curFrameData.commandsDone));
+    curFrameData.stagingAllocator.reset();
+
+    // no commmand buffers / pools to clear / reset yet
+
+    // begin upload command buffer
+    {
+        VkCommandBufferBeginInfo cmdBeginInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = nullptr,
+
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+            .pInheritanceInfo = nullptr,
+        };
+
+        assertVkResult(vkBeginCommandBuffer(curFrameData.uploadCommandBuffer, &cmdBeginInfo));
+    }
+}
+
+void VulkanDevice::submitInitializationWork(Span<const VkCommandBuffer> cmdBuffersToSubmit)
+{
+    inInitialization = false;
+
+    auto& curFrameData = getCurrentFrameData();
+
+    vkEndCommandBuffer(curFrameData.uploadCommandBuffer);
+    std::vector<VkCommandBuffer> buffers{cmdBuffersToSubmit.size() + 1};
+    std::copy(cmdBuffersToSubmit.begin(), cmdBuffersToSubmit.end(), ++buffers.begin());
+    buffers[0] = curFrameData.uploadCommandBuffer;
+
+    VkSubmitInfo submitInfo{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = nullptr,
+
+        .waitSemaphoreCount = 0,
+
+        .commandBufferCount = static_cast<uint32_t>(buffers.size()),
+        .pCommandBuffers = buffers.data(),
+
+        .signalSemaphoreCount = 0,
+    };
+
+    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
 }
 
 void VulkanDevice::startNextFrame()
 {
+    assert(inInitialization == false && "Initialization frame has not been ended yet!");
+
     frameNumber++;
 
     auto& curFrameData = getCurrentFrameData();
 
     assertVkResult(vkWaitForFences(device, 1, &curFrameData.commandsDone, true, UINT64_MAX));
     assertVkResult(vkResetFences(device, 1, &curFrameData.commandsDone));
+    curFrameData.stagingAllocator.reset();
 
     assertVkResult(vkAcquireNextImageKHR(
         device,
@@ -1171,6 +1339,20 @@ void VulkanDevice::startNextFrame()
     for(VkCommandPool cmdPool : curFrameData.commandPools)
     {
         assertVkResult(vkResetCommandPool(device, cmdPool, 0));
+    }
+    assertVkResult(vkResetCommandPool(device, curFrameData.uploadCommandPool, 0));
+
+    // begin upload command buffer
+    {
+        VkCommandBufferBeginInfo cmdBeginInfo{
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = nullptr,
+
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+            .pInheritanceInfo = nullptr,
+        };
+
+        assertVkResult(vkBeginCommandBuffer(curFrameData.uploadCommandBuffer, &cmdBeginInfo));
     }
 }
 
@@ -1222,14 +1404,16 @@ VkCommandBuffer VulkanDevice::beginCommandBuffer(uint32_t threadIndex)
 
     return cmdBuffer;
 }
-void VulkanDevice::endCommandBuffer(VkCommandBuffer cmd)
-{
-    vkEndCommandBuffer(cmd);
-}
+void VulkanDevice::endCommandBuffer(VkCommandBuffer cmd) { vkEndCommandBuffer(cmd); }
 
 void VulkanDevice::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
 {
-    const auto& curFrameData = getCurrentFrameData();
+    auto& curFrameData = getCurrentFrameData();
+
+    vkEndCommandBuffer(curFrameData.uploadCommandBuffer);
+    std::vector<VkCommandBuffer> buffers{cmdBuffers.size() + 1};
+    std::copy(cmdBuffers.begin(), cmdBuffers.end(), ++buffers.begin());
+    buffers[0] = curFrameData.uploadCommandBuffer;
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submitInfo{
@@ -1240,14 +1424,60 @@ void VulkanDevice::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
         .pWaitSemaphores = &curFrameData.swapchainImageAvailable,
         .pWaitDstStageMask = &waitStage,
 
-        .commandBufferCount = static_cast<uint32_t>(cmdBuffers.size()),
-        .pCommandBuffers = cmdBuffers.data(),
+        .commandBufferCount = static_cast<uint32_t>(buffers.size()),
+        .pCommandBuffers = buffers.data(),
 
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = &curFrameData.swapchainImageRenderFinished,
     };
 
     assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, curFrameData.commandsDone));
+}
+
+void VulkanDevice::presentSwapchain()
+{
+    const auto& curFrameData = getCurrentFrameData();
+
+    VkPresentInfoKHR presentInfo{
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext = nullptr,
+
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &curFrameData.swapchainImageRenderFinished,
+
+        .swapchainCount = 1,
+        .pSwapchains = &swapchain,
+
+        .pImageIndices = &currentSwapchainImageIndex,
+    };
+
+    assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
+}
+
+void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Texture::Handle texture, ResourceState state)
+{
+    return fillMipLevels(cmd, get<Texture::GPU>(texture)->image, *get<Texture::Descriptor>(texture), state);
+}
+
+void VulkanDevice::copyBuffer(VkCommandBuffer cmd, Buffer::Handle src, Buffer::Handle dest)
+{
+    size_t bufSize = get<Buffer::Descriptor>(src)->size;
+    copyBuffer(cmd, src, 0, dest, 0, bufSize);
+}
+void VulkanDevice::copyBuffer(
+    VkCommandBuffer cmd, Buffer::Handle src, size_t srcOffset, Buffer::Handle dest, size_t destOffset, size_t size)
+{
+    VkBufferCopy copyRegion{
+        srcOffset,
+        destOffset,
+        size,
+    };
+    vkCmdCopyBuffer(cmd, *get<VkBuffer>(src), *get<VkBuffer>(dest), 1, &copyRegion);
+}
+
+void VulkanDevice::dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
+{
+    vkCmdDispatch(cmd, groupsX, groupsY, groupsZ);
 }
 
 void VulkanDevice::insertSwapchainImageBarrier(
@@ -1291,19 +1521,17 @@ void VulkanDevice::insertSwapchainImageBarrier(
 
 // TODO: overload to just not take a depth target, instead of having to pass null inside render target?
 void VulkanDevice::beginRendering(
-    VkCommandBuffer cmd, Span<const RenderTarget>&& colorTargets, RenderTarget&& depthTarget)
+    VkCommandBuffer cmd, Span<const ColorTarget>&& colorTargets, const DepthTarget&& depthTarget)
 {
-    ResourceManager* rm = ResourceManager::get();
-
-    VkClearValue clearValue{.color = {0.0f, 0.0f, 0.0f, 1.0f}};
+    VkClearValue clearValue{.color = {1.0f, 1.0f, 1.0f, 1.0f}};
     VkClearValue depthStencilClear{.depthStencil = {.depth = 1.0f, .stencil = 0u}};
 
     std::vector<VkRenderingAttachmentInfo> colorAttachmentInfos;
     colorAttachmentInfos.reserve(colorTargets.size());
     for(const auto& target : colorTargets)
     {
-        const VkImageView view = std::holds_alternative<Handle<Texture>>(target.texture)
-                                     ? rm->get(std::get<Handle<Texture>>(depthTarget.texture))->fullResourceView()
+        const VkImageView view = std::holds_alternative<Texture::Handle>(target.texture)
+                                     ? get<Texture::GPU>(std::get<Texture::Handle>(target.texture))->imageView
                                      : swapchainImageViews[currentSwapchainImageIndex];
         colorAttachmentInfos.emplace_back(VkRenderingAttachmentInfo{
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -1316,14 +1544,13 @@ void VulkanDevice::beginRendering(
         });
     }
 
+    bool hasDepthAttachment = depthTarget.texture.isValid();
     VkRenderingAttachmentInfo depthAttachmentInfo;
-
-    bool hasDepthAttachment = std::get<Handle<Texture>>(depthTarget.texture).isValid();
     if(hasDepthAttachment)
         depthAttachmentInfo = {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = rm->get(std::get<Handle<Texture>>(depthTarget.texture))->fullResourceView(),
+            .imageView = get<Texture::GPU>(depthTarget.texture)->imageView,
             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             .loadOp = toVkLoadOp(depthTarget.loadOp),
             .storeOp = toVkStoreOp(depthTarget.storeOp),
@@ -1360,10 +1587,7 @@ void VulkanDevice::beginRendering(
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 }
 
-void VulkanDevice::endRendering(VkCommandBuffer cmd)
-{
-    vkCmdEndRendering(cmd);
-}
+void VulkanDevice::endRendering(VkCommandBuffer cmd) { vkCmdEndRendering(cmd); }
 
 void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barriers)
 {
@@ -1374,21 +1598,43 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
     {
         if(barrier.type == Barrier::Type::Buffer)
         {
-            assert(false);
-        }
-        else if(barrier.type == Barrier::Type::Image)
-        {
-            auto* rm = ResourceManager::get();
-
-            const Texture* tex = barrier.image.texture;
-            if(tex == nullptr)
+            if(!bufferPool.isHandleValid(barrier.buffer.buffer))
             {
                 BREAKPOINT;
                 continue; // TODO: LOG warning
             }
-            assert(tex->descriptor.mipLevels > 0);
+            auto* descriptor = get<Buffer::Descriptor>(barrier.buffer.buffer);
+            VkBufferMemoryBarrier2 vkBarrier{
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+
+                .srcStageMask = toVkPipelineStage(barrier.buffer.stateBefore),
+                .srcAccessMask = toVkAccessFlags(barrier.buffer.stateBefore),
+
+                .dstStageMask = toVkPipelineStage(barrier.buffer.stateAfter),
+                .dstAccessMask = toVkAccessFlags(barrier.buffer.stateAfter),
+
+                .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
+                .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
+
+                .buffer = *get<VkBuffer>(barrier.buffer.buffer),
+                .offset = barrier.buffer.offset,
+                .size = barrier.buffer.size,
+            };
+
+            bufferBarriers.emplace_back(vkBarrier);
+        }
+        else if(barrier.type == Barrier::Type::Image)
+        {
+            const auto* descriptor = get<Texture::Descriptor>(barrier.image.texture);
+            if(descriptor == nullptr)
+            {
+                BREAKPOINT;
+                continue; // TODO: LOG warning
+            }
+            assert(descriptor->mipLevels > 0);
             int32_t mipCount = barrier.image.mipCount == Texture::MipLevels::All
-                                   ? tex->descriptor.mipLevels - barrier.image.mipLevel
+                                   ? descriptor->mipLevels - barrier.image.mipLevel
                                    : barrier.image.mipCount;
 
             VkImageMemoryBarrier2 vkBarrier{
@@ -1408,16 +1654,16 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
                 .srcQueueFamilyIndex = graphicsAndComputeQueueFamily,
                 .dstQueueFamilyIndex = graphicsAndComputeQueueFamily,
 
-                .image = tex->gpuTexture.image,
+                .image = get<Texture::GPU>(barrier.image.texture)->image,
                 .subresourceRange =
                     {
-                        .aspectMask = toVkImageAspect(tex->descriptor.format),
+                        .aspectMask = toVkImageAspect(descriptor->format),
                         .baseMipLevel = static_cast<uint32_t>(barrier.image.mipLevel),
                         .levelCount = static_cast<uint32_t>(mipCount),
                         .baseArrayLayer = static_cast<uint32_t>(barrier.image.arrayLayer),
                         .layerCount = static_cast<uint32_t>(
-                            tex->descriptor.type == Texture::Type::tCube ? 6 * barrier.image.arrayLength
-                                                                         : barrier.image.arrayLength),
+                            descriptor->type == Texture::Type::tCube ? 6 * barrier.image.arrayLength
+                                                                     : barrier.image.arrayLength),
                     },
             };
 
@@ -1449,16 +1695,14 @@ void VulkanDevice::insertBarriers(VkCommandBuffer cmd, Span<const Barrier> barri
     imageBarriers.clear();
 }
 
-void VulkanDevice::setGraphicsPipelineState(VkCommandBuffer cmd, Handle<Material> mat)
+void VulkanDevice::setGraphicsPipelineState(VkCommandBuffer cmd, VkPipeline pipe)
 {
-    auto* rm = ResourceManager::get();
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rm->get(mat)->pipeline);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
 }
 
-void VulkanDevice::setComputePipelineState(VkCommandBuffer cmd, Handle<ComputeShader> shader)
+void VulkanDevice::setComputePipelineState(VkCommandBuffer cmd, VkPipeline pipe)
 {
-    auto* rm = ResourceManager::get();
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rm->get(shader)->pipeline);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
 }
 
 // TODO: CORRECT PUSH CONSTANT RANGES FOR COMPUTE PIPELINES !!!!!
@@ -1467,26 +1711,23 @@ void VulkanDevice::pushConstants(VkCommandBuffer cmd, size_t size, void* data, s
     vkCmdPushConstants(cmd, bindlessPipelineLayout, VK_SHADER_STAGE_ALL, offset, size, data);
 }
 
-void VulkanDevice::bindIndexBuffer(VkCommandBuffer cmd, Handle<Buffer> buffer, size_t offset)
+void VulkanDevice::bindIndexBuffer(VkCommandBuffer cmd, Buffer::Handle buffer, size_t offset)
 {
-    auto* rm = ResourceManager::get();
-    vkCmdBindIndexBuffer(cmd, rm->get(buffer)->gpuBuffer.buffer, offset, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(cmd, *get<VkBuffer>(buffer), offset, VK_INDEX_TYPE_UINT32);
 }
 
 void VulkanDevice::bindVertexBuffers(
     VkCommandBuffer cmd,
     uint32_t startBinding,
     uint32_t count,
-    Span<const Handle<Buffer>> buffers,
+    Span<const Buffer::Handle> buffers,
     Span<const uint64_t> offsets)
 {
-    auto* rm = ResourceManager::get();
-
     assert(buffers.size() == offsets.size());
     std::vector<VkBuffer> vkBuffers{buffers.size()};
     for(int i = 0; i < buffers.size(); i++)
     {
-        vkBuffers[i] = rm->get(buffers[i])->gpuBuffer.buffer;
+        vkBuffers[i] = *get<VkBuffer>(buffers[i]);
         assert(vkBuffers[i]);
     }
     vkCmdBindVertexBuffers(cmd, startBinding, count, &vkBuffers[0], offsets.data());
@@ -1503,44 +1744,10 @@ void VulkanDevice::drawIndexed(
     vkCmdDrawIndexed(cmd, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-void VulkanDevice::drawImGui(VkCommandBuffer cmd)
-{
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
-}
+void VulkanDevice::drawImGui(VkCommandBuffer cmd) { ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd); }
 
-void VulkanDevice::dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
-{
-    vkCmdDispatch(cmd, groupsX, groupsY, groupsZ);
-}
-
-void VulkanDevice::presentSwapchain()
-{
-    const auto& curFrameData = getCurrentFrameData();
-
-    VkPresentInfoKHR presentInfo{
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .pNext = nullptr,
-
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &curFrameData.swapchainImageRenderFinished,
-
-        .swapchainCount = 1,
-        .pSwapchains = &swapchain,
-
-        .pImageIndices = &currentSwapchainImageIndex,
-    };
-
-    assertVkResult(vkQueuePresentKHR(graphicsAndComputeQueue, &presentInfo));
-}
-
-void VulkanDevice::disableValidationErrorBreakpoint()
-{
-    breakOnValidationError = false;
-}
-void VulkanDevice::enableValidationErrorBreakpoint()
-{
-    breakOnValidationError = true;
-}
+void VulkanDevice::disableValidationErrorBreakpoint() { breakOnValidationError = false; }
+void VulkanDevice::enableValidationErrorBreakpoint() { breakOnValidationError = true; }
 
 void VulkanDevice::startDebugRegion(VkCommandBuffer cmd, const char* name)
 {
@@ -1551,10 +1758,7 @@ void VulkanDevice::startDebugRegion(VkCommandBuffer cmd, const char* name)
     };
     pfnCmdBeginDebugUtilsLabelEXT(cmd, &info);
 }
-void VulkanDevice::endDebugRegion(VkCommandBuffer cmd)
-{
-    pfnCmdEndDebugUtilsLabelEXT(cmd);
-}
+void VulkanDevice::endDebugRegion(VkCommandBuffer cmd) { pfnCmdEndDebugUtilsLabelEXT(cmd); }
 
 void VulkanDevice::setDebugName(VkObjectType type, uint64_t handle, const char* name)
 {
@@ -1572,11 +1776,6 @@ void VulkanDevice::setDebugName(VkObjectType type, uint64_t handle, const char* 
         .pObjectName = name,
     };
     setObjectDebugName(device, &nameInfo);
-}
-
-void VulkanDevice::fillMipLevels(VkCommandBuffer cmd, Texture* texture, ResourceState state)
-{
-    return fillMipLevels(cmd, texture->gpuTexture.image, texture->descriptor, state);
 }
 
 void VulkanDevice::fillMipLevels(
@@ -1657,7 +1856,7 @@ void VulkanDevice::fillMipLevels(
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     .mipLevel = uint32_t(i - 1),
                     .baseArrayLayer = 0,
-                    .layerCount = toVkArrayLayers(descriptor),
+                    .layerCount = toVkArrayLayers(descriptor.arrayLength, descriptor.type),
                 },
             .srcOffsets =
                 {{.x = 0, .y = 0, .z = 0}, {int32_t(lastWidth), int32_t(lastHeight), int32_t(lastDepth)}},
@@ -1666,7 +1865,7 @@ void VulkanDevice::fillMipLevels(
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     .mipLevel = uint32_t(i),
                     .baseArrayLayer = 0,
-                    .layerCount = toVkArrayLayers(descriptor),
+                    .layerCount = toVkArrayLayers(descriptor.arrayLength, descriptor.type),
                 },
             .dstOffsets = {{.x = 0, .y = 0, .z = 0}, {int32_t(curWidth), int32_t(curHeight), int32_t(curDepth)}},
         };
@@ -1768,4 +1967,37 @@ void VulkanDevice::immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& fu
     vkResetFences(device, 1, &uploadContext.uploadFence);
 
     vkResetCommandPool(device, uploadContext.commandPool, 0);
+}
+
+void VulkanDevice::LinearAllocator::reset() { offset = 0; }
+GPUAllocation VulkanDevice::LinearAllocator::allocate(size_t size)
+{
+    if(offset + size > capacity)
+    {
+        // TODO: could handle special cases where the requested size is like >=80% of the staging buffer capacity!
+        //       in that case, could just return a dedicated allocation for just that request instead of using the
+        //       normal allocation mechanism
+
+        // enqueue current buffer for deletion
+        VulkanDevice::impl()->destroy(this->buffer);
+
+        // create new buffer
+
+        // TODO: be smarter?
+        size_t newSize = std::max(this->capacity, size);
+
+        this->buffer = VulkanDevice::impl()->createBuffer(Buffer::CreateInfo{
+            .debugName = "StagingBufferReplacement",
+            .size = newSize,
+            .memoryType = Buffer::MemoryType::CPU,
+            .allStates = ResourceState::TransferSrc,
+            .initialState = ResourceState::TransferSrc,
+        });
+        this->capacity = newSize;
+        this->offset = 0;
+        this->ptr = static_cast<uint8_t*>(*VulkanDevice::impl()->get<void*>(this->buffer));
+    }
+    // TODO: alignment?
+    size_t oldOffset = offset.fetch_add(size);
+    return GPUAllocation{.buffer = buffer, .offset = oldOffset, .size = size, .ptr = &(ptr[oldOffset])};
 }

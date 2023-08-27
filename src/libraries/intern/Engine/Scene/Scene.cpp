@@ -3,7 +3,7 @@
 #include "glTF/glTF.hpp"
 #include "glTF/glTFtoTI.hpp"
 
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 #include <Engine/Application/Application.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <cstddef>
@@ -12,8 +12,8 @@
 #include <vulkan/vulkan_core.h>
 
 ECS::Entity parseNode(
-    Span<Handle<Mesh>> meshes,
-    Span<Handle<MaterialInstance>> matInsts,
+    Span<Mesh::Handle> meshes,
+    Span<MaterialInstance::Handle> matInsts,
     const glTF::Main& gltf,
     ECS& ecs,
     uint32_t nodeIndex,
@@ -62,7 +62,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             confirm its actually a gltf file
     */
 
-    auto* rm = ResourceManager::get();
+    auto* rm = ResourceManager::impl();
 
     std::filesystem::path basePath{path};
     basePath = basePath.parent_path();
@@ -101,7 +101,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         textureIsLinear[baseColorTextureGLTF.sourceIndex] = false;
     }
 
-    std::vector<Handle<Texture>> textures;
+    std::vector<Texture::Handle> textures;
     textures.resize(gltf.images.size());
     for(int i = 0; i < gltf.images.size(); i++)
     {
@@ -141,7 +141,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
     }
 
     // Load/create Meshes
-    std::vector<Handle<Mesh>> meshes;
+    std::vector<Mesh::Handle> meshes;
     meshes.resize(gltf.meshes.size());
     for(int i = 0; i < gltf.meshes.size(); i++)
     {
@@ -300,53 +300,49 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
     }
 
     // Create material instances (materials in glTF)
-    std::vector<Handle<MaterialInstance>> materialInstances;
+    std::vector<MaterialInstance::Handle> materialInstances;
     materialInstances.resize(gltf.materials.size());
     auto basicPBRMaterial = rm->getMaterial("PBRBasic");
-    assert(rm->get(basicPBRMaterial) != nullptr);
+    assert(rm->get<std::string>(basicPBRMaterial) != nullptr);
     for(int i = 0; i < gltf.materials.size(); i++)
     {
         const glTF::Material& material = gltf.materials[i];
-        auto materialInstanceHandle = rm->createMaterialInstance(basicPBRMaterial);
-        MaterialInstance* matInst = rm->get(materialInstanceHandle);
+        auto matInst = rm->createMaterialInstance(basicPBRMaterial);
 
         const glTF::Texture& normalTextureGLTF = gltf.textures[material.normalTexture.index];
-        const Handle<Texture> normalTextureHandle = textures[normalTextureGLTF.sourceIndex];
+        const Texture::Handle normalTextureHandle = textures[normalTextureGLTF.sourceIndex];
         const Handle<Sampler> normalSamplerHandle = samplers[normalTextureGLTF.samplerIndex];
-        Texture* normalTex = rm->get(normalTextureHandle);
         Sampler* normalSampler = rm->get(normalSamplerHandle);
-        matInst->parameters.setResource("normalTexture", normalTex->fullResourceIndex());
-        matInst->parameters.setResource("normalSampler", normalSampler->sampler.resourceIndex);
+        MaterialInstance::setResource(matInst, "normalTexture", *rm->get<ResourceIndex>(normalTextureHandle));
+        MaterialInstance::setResource(matInst, "normalSampler", normalSampler->sampler.resourceIndex);
 
         const glTF::Texture& baseColorTextureGLTF =
             gltf.textures[material.pbrMetallicRoughness.baseColorTexture.index];
-        const Handle<Texture> baseColorTextureHandle = textures[baseColorTextureGLTF.sourceIndex];
+        const Texture::Handle baseColorTextureHandle = textures[baseColorTextureGLTF.sourceIndex];
         const Handle<Sampler> baseColorSamplerHandle = samplers[baseColorTextureGLTF.samplerIndex];
-        Texture* baseColorTex = rm->get(baseColorTextureHandle);
         Sampler* baseColorSampler = rm->get(baseColorSamplerHandle);
-        matInst->parameters.setResource("baseColorTexture", baseColorTex->fullResourceIndex());
-        matInst->parameters.setResource("baseColorSampler", baseColorSampler->sampler.resourceIndex);
+        MaterialInstance::setResource(
+            matInst, "baseColorTexture", *rm->get<ResourceIndex>(baseColorTextureHandle));
+        MaterialInstance::setResource(matInst, "baseColorSampler", baseColorSampler->sampler.resourceIndex);
 
         const glTF::Texture& metalRoughTextureGLTF =
             gltf.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index];
-        const Handle<Texture> metalRoughTextureHandle = textures[metalRoughTextureGLTF.sourceIndex];
+        const Texture::Handle metalRoughTextureHandle = textures[metalRoughTextureGLTF.sourceIndex];
         const Handle<Sampler> metalRoughSamplerHandle = samplers[metalRoughTextureGLTF.samplerIndex];
-        Texture* metalRoughTex = rm->get(metalRoughTextureHandle);
         Sampler* metalRoughSampler = rm->get(metalRoughSamplerHandle);
-        matInst->parameters.setResource("metalRoughTexture", metalRoughTex->fullResourceIndex());
-        matInst->parameters.setResource("metalRoughSampler", metalRoughSampler->sampler.resourceIndex);
+        MaterialInstance::setResource(
+            matInst, "metalRoughTexture", *rm->get<ResourceIndex>(metalRoughTextureHandle));
+        MaterialInstance::setResource(matInst, "metalRoughSampler", metalRoughSampler->sampler.resourceIndex);
 
         const glTF::Texture& occlusionTextureGLTF = gltf.textures[material.occlusionTexture.index];
-        const Handle<Texture> occlusionTextureHandle = textures[occlusionTextureGLTF.sourceIndex];
+        const Texture::Handle occlusionTextureHandle = textures[occlusionTextureGLTF.sourceIndex];
         const Handle<Sampler> occlusionSamplerHandle = samplers[occlusionTextureGLTF.samplerIndex];
-        Texture* occlusionTex = rm->get(occlusionTextureHandle);
         Sampler* occlusionSampler = rm->get(occlusionSamplerHandle);
-        matInst->parameters.setResource("occlusionTexture", occlusionTex->fullResourceIndex());
-        matInst->parameters.setResource("occlusionSampler", occlusionSampler->sampler.resourceIndex);
+        MaterialInstance::setResource(
+            matInst, "occlusionTexture", *rm->get<ResourceIndex>(occlusionTextureHandle));
+        MaterialInstance::setResource(matInst, "occlusionSampler", occlusionSampler->sampler.resourceIndex);
 
-        matInst->parameters.pushChanges();
-
-        materialInstances[i] = materialInstanceHandle;
+        materialInstances[i] = matInst;
     }
 
     ECS::Entity sceneRoot = parent;

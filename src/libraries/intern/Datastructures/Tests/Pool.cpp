@@ -1,4 +1,4 @@
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 
 #include <array>
 #include <vector>
@@ -64,6 +64,50 @@ int main()
         auto handle = pool1.insert(aInstance);
     }
     assert(count == 3);
+
+    {
+        PoolLimited<2, float> pool1{2u};
+        auto fstHandle = pool1.insert(3.0);
+        assert(fstHandle.isValid());
+        pool1.insert(2.0);
+        auto handle = pool1.insert(1.0);
+        assert(!handle.isValid());
+    }
+    assert(count == 3);
+
+    // Testing iterators
+    {
+        Pool<float> pool1{2u};
+
+        auto handle1 = pool1.insert(3.0);
+        auto handle2 = pool1.insert(2.0);
+        auto handle3 = pool1.insert(1.0);
+
+        for(auto num : pool1)
+        {
+            (*num)++;
+        }
+
+        assert(*pool1.get(handle1) == 4.0f);
+        assert(*pool1.get(handle2) == 3.0f);
+        assert(*pool1.get(handle3) == 2.0f);
+
+        decltype(pool1)::DirectIterator<false> deletedIter{1, &pool1};
+
+        pool1.remove(handle2);
+
+        for(auto* num : pool1)
+        {
+            assert(*num != 3.0f);
+        }
+        int count = 0;
+        for(auto iter = pool1.begin(); iter != pool1.end(); iter++)
+        {
+            assert(iter != deletedIter);
+            count++;
+        }
+        assert(count == 2);
+    }
 
     return 0;
 }

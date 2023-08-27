@@ -115,12 +115,12 @@ void BindlessManager::init()
         bindlessDescriptorSets[entry.second.setIndex] = set;
     }
 
-    gfxDevice.deleteQueue.pushBack(
-        [=]() { vkDestroyDescriptorPool(gfxDevice.device, bindlessDescriptorPool, nullptr); });
+    gfxDevice.deleteQueue.pushBack([device = gfxDevice.device, pool = bindlessDescriptorPool]()
+                                   { vkDestroyDescriptorPool(device, pool, nullptr); });
     for(auto setLayout : bindlessSetLayouts)
     {
-        gfxDevice.deleteQueue.pushBack([=]()
-                                       { vkDestroyDescriptorSetLayout(gfxDevice.device, setLayout, nullptr); });
+        gfxDevice.deleteQueue.pushBack([device = gfxDevice.device, layout = setLayout]()
+                                       { vkDestroyDescriptorSetLayout(device, layout, nullptr); });
     }
 
     for(auto& entry : descriptorTypeTable)
@@ -129,18 +129,9 @@ void BindlessManager::init()
     }
 }
 
-uint32_t BindlessManager::getDescriptorSetsCount() const
-{
-    return bindlessDescriptorSets.size();
-}
-const VkDescriptorSet* BindlessManager::getDescriptorSets()
-{
-    return bindlessDescriptorSets.data();
-}
-const VkDescriptorSetLayout* BindlessManager::getDescriptorSetLayouts()
-{
-    return bindlessSetLayouts.data();
-}
+uint32_t BindlessManager::getDescriptorSetsCount() const { return bindlessDescriptorSets.size(); }
+const VkDescriptorSet* BindlessManager::getDescriptorSets() { return bindlessDescriptorSets.data(); }
+const VkDescriptorSetLayout* BindlessManager::getDescriptorSetLayouts() { return bindlessSetLayouts.data(); }
 
 uint32_t BindlessManager::createBufferBinding(VkBuffer buffer, BufferUsage possibleBufferUsage)
 {
@@ -197,7 +188,7 @@ void createImageDescriptor(
         .imageLayout = layout,
     };
 
-    uint32_t binding = descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ? ResourceManager::samplerLimit : 0;
+    uint32_t binding = descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ? BindlessManager::samplerLimit : 0;
 
     VkWriteDescriptorSet setWrite{
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -328,4 +319,49 @@ uint32_t BindlessManager::createSamplerBinding(VkSampler sampler)
     vkUpdateDescriptorSets(gfxDevice.device, 1, &setWrite, 0, nullptr);
 
     return freeIndex;
+}
+
+void BindlessManager::freeSamplerBinding(uint32_t index)
+{
+    // TODO: NEEDS TO HAPPEN AFTER [FRAMES IN FLIGHT] FAMES DELAY!
+
+    auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLER);
+    DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+    freeIndicesBitset.setBit(index);
+}
+
+void BindlessManager::freeImageBinding(uint32_t index, ImageUsage usage)
+{
+    // TODO: NEEDS TO HAPPEN AFTER [FRAMES IN FLIGHT] FAMES DELAY!
+
+    if(usage == ImageUsage::Both || usage == ImageUsage::Sampled)
+    {
+        auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
+        DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+        freeIndicesBitset.setBit(index);
+    }
+    if(usage == ImageUsage::Both || usage == ImageUsage::Storage)
+    {
+        auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+        freeIndicesBitset.setBit(index);
+    }
+}
+
+void BindlessManager::freeBufferBinding(uint32_t index, BufferUsage usage)
+{
+    // TODO: NEEDS TO HAPPEN AFTER [FRAMES IN FLIGHT] FAMES DELAY!
+
+    if(usage == BufferUsage::Storage)
+    {
+        auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+        DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+        freeIndicesBitset.setBit(index);
+    }
+    if(usage == BufferUsage::Uniform)
+    {
+        auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+        freeIndicesBitset.setBit(index);
+    }
 }

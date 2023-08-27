@@ -33,6 +33,8 @@ class DynamicBitset
     [[nodiscard]] uint32_t getFirstBitSet() const;
     // returns 0xffffffff is no bit is cleared
     [[nodiscard]] uint32_t getFirstBitClear() const;
+    // returns 0xffffffff is none found
+    [[nodiscard]] uint32_t getNextBitSet(uint32_t index) const;
 
     [[nodiscard]] uint32_t getSize() const;
     void resize(uint32_t newSize);

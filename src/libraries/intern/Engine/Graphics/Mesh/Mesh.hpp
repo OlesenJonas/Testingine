@@ -2,7 +2,7 @@
 
 #include "../Buffer/Buffer.hpp"
 
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Handle.hpp>
 #include <Datastructures/Span.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -12,7 +12,7 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-// todo: just contain two/three Handle<Buffer> for index + position/(position+attributes) !!
+// todo: just contain two/three Buffer::Handle for index + position/(position+attributes) !!
 
 struct VertexInputDescription
 {
@@ -36,15 +36,17 @@ struct Mesh
         TexCoordType uv;
     };
 
-    // todo: does this need to be here?
-    //  I feel like the actual GPU sided stuff, ie vertexcount, buffer handles etc should be seperate from the
-    //  scene management realted stuff like name, parent, children etc
-    std::string name{};
+    struct RenderData
+    {
+        uint32_t indexCount = 0;
+        Buffer::Handle indexBuffer;
+        Buffer::Handle positionBuffer;
+        Buffer::Handle attributeBuffer;
+    };
 
-    uint32_t indexCount = 0;
-    Handle<Buffer> indexBuffer;
-    Handle<Buffer> positionBuffer;
-    Handle<Buffer> attributeBuffer;
+    using Handle = Handle<std::string, RenderData>;
+
+    // --------------------------------------------------------
 
     // for mikktspace
     struct MikkTSpaceUserData
@@ -53,6 +55,7 @@ struct Mesh
         Span<VertexAttributes> vertexAttributes;
         Span<IndexType> indices;
     };
+
     static int mktGetNumFaces(const SMikkTSpaceContext* pContext);
     static int mktGetNumVerticesOfFace(const SMikkTSpaceContext* pContext, const int iFace);
     static void

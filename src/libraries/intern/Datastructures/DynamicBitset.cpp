@@ -191,10 +191,7 @@ void DynamicBitset::fill(uint32_t firstBit, uint32_t lastBit)
     internal[lastBit / 32u] |= fillBits;
 }
 
-constexpr int32_t getLastFull(uint32_t i)
-{
-    return (i + 1u) / 32u - 1u;
-}
+constexpr int32_t getLastFull(uint32_t i) { return (i + 1u) / 32u - 1u; }
 static_assert(getLastFull(0) == -1);
 static_assert(getLastFull(1) == -1);
 static_assert(getLastFull(30) == -1);
@@ -239,10 +236,39 @@ uint32_t DynamicBitset::getFirstBitClear() const
     return (consecOnesInLastInt == size % 32u) ? 0xFFFFFFFF : 32u * (internal.size() - 1) + consecOnesInLastInt;
 }
 
-uint32_t DynamicBitset::getSize() const
+uint32_t DynamicBitset::getNextBitSet(uint32_t index) const
 {
-    return size;
+    const uint32_t startWordIndex = index / 32u;
+    const uint32_t startIndexInsideWord = index % 32u;
+
+    if(startWordIndex == internal.size() - 1)
+    {
+        uint32_t lastBitsAfterIndex = internal[startWordIndex] >> (startIndexInsideWord + 1);
+        if(lastBitsAfterIndex == 0u)
+            return 0xFFFFFFFF;
+        return std::countr_zero(lastBitsAfterIndex) + index + 1;
+    }
+
+    // check inside word of start index
+    const uint32_t restBitsInStartWord = internal[startWordIndex] >> (startIndexInsideWord + 1);
+    if(startIndexInsideWord != 31u && restBitsInStartWord > 0u)
+    {
+        return std::countr_zero(restBitsInStartWord) + index + 1;
+    }
+
+    for(uint32_t i = startWordIndex + 1; i < internal.size() - 1; i++)
+    {
+        if(internal[i] > 0u)
+            return std::countr_zero(internal[i]) + i * 32;
+    }
+
+    if(internal[internal.size() - 1] == 0u)
+        return 0xFFFFFFFF;
+
+    return std::countr_zero(internal[internal.size() - 1]) + (internal.size() - 1) * 32u + 1;
 }
+
+uint32_t DynamicBitset::getSize() const { return size; }
 
 void DynamicBitset::resize(uint32_t newSize)
 {
@@ -282,10 +308,7 @@ void DynamicBitset::resize(uint32_t newSize)
         return;
     }
 }
-const std::vector<uint32_t>& DynamicBitset::getInternal() const
-{
-    return internal;
-}
+const std::vector<uint32_t>& DynamicBitset::getInternal() const { return internal; }
 
 void DynamicBitset::fixLastInteger()
 {

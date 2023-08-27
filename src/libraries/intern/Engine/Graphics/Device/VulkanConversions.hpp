@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../RenderTargets.hpp"
+#include <Engine/Graphics/Graphics.hpp>
 #include <concepts>
 #include <type_traits>
 #include <vulkan/vulkan_core.h>
@@ -26,8 +28,6 @@ consteval VkObjectType toVkObjectType()
 
 template <typename T>
 concept VulkanConvertible = toVkObjectType<T>() != VK_OBJECT_TYPE_UNKNOWN;
-
-#include <Engine/Graphics/Graphics.hpp>
 
 constexpr VkImageUsageFlags toVkImageUsageSingle(ResourceState state)
 {
@@ -139,7 +139,7 @@ constexpr VkPipelineStageFlags2 toVkPipelineStage(ResourceState state)
     case ResourceState::DepthStencilReadOnly:
         return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
     case ResourceState::VertexBuffer:
-        return VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+        return VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT;
     case ResourceState::IndexBuffer:
         return VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
     case ResourceState::IndirectArgument:
@@ -222,14 +222,9 @@ constexpr VkAttachmentStoreOp toVkStoreOp(const RenderTarget::StoreOp op)
 
 #include <Engine/Graphics/Texture/Texture.hpp>
 
-constexpr uint32_t toVkArrayLayers(const Texture::Descriptor& desc)
+constexpr uint32_t toVkArrayLayers(uint32_t arrayLength, Texture::Type texType)
 {
-    return desc.type == Texture::Type::tCube ? 6 * desc.arrayLength : desc.arrayLength;
-}
-
-constexpr uint32_t toVkArrayLayers(const Texture::CreateInfo& info)
-{
-    return info.type == Texture::Type::tCube ? 6 * info.arrayLength : info.arrayLength;
+    return texType == Texture::Type::tCube ? 6 * arrayLength : arrayLength;
 }
 
 constexpr VkImageType toVkImgType(Texture::Type type)

@@ -1,31 +1,35 @@
 #pragma once
 
 #include "Texture.hpp"
-#include <Datastructures/Pool.hpp>
+#include <Datastructures/Pool/Pool.hpp>
 
 struct TextureView
 {
-    struct Info
+    struct CreateInfo
     {
-        VkImageViewType textureType = VK_IMAGE_VIEW_TYPE_2D;
-        VkImageSubresourceRange subresourceRange = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        };
-        // if this is undefined, it will be set to match the given texture
-        VkFormat format = VK_FORMAT_UNDEFINED;
-        VkComponentMapping componentMapping = {
-            .r = VK_COMPONENT_SWIZZLE_IDENTITY,
-            .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-            .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-            .a = VK_COMPONENT_SWIZZLE_IDENTITY,
-        };
+        std::string debugName = ""; // NOLINT
+        Texture::Handle parent;
+        Texture::Type type = Texture::Type::t2D;
+        ResourceStateMulti allStates = ResourceState::None;
+        uint32_t baseMipLevel = 0;
+        uint32_t mipCount = 1;
+        uint32_t baseArrayLayer = 0;
+        uint32_t arrayLength = 1;
     };
 
-    Handle<Texture> texture;
-    Info info;
+    struct Descriptor
+    {
+        Texture::Handle parent;
+        Texture::Type type = Texture::Type::t2D;
+        ResourceStateMulti allStates = ResourceState::None;
+        uint32_t baseMipLevel = 0;
+        uint32_t mipCount = 1;
+        uint32_t baseArrayLayer = 0;
+        uint32_t arrayLength = 1;
+    };
+
+    Descriptor descriptor;
+
     VkImageView imageView = VK_NULL_HANDLE;
+    uint32_t resourceIndex = 0xFFFFFFFF;
 };

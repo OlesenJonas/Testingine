@@ -1,47 +1,63 @@
 #pragma once
 
-#include "ParameterBuffer.hpp"
-
+#include "../Buffer/Buffer.hpp"
+#include "../Graphics.hpp"
+#include <Datastructures/Pool/Handle.hpp>
+#include <Datastructures/Pool/PoolHelpers.hpp>
+#include <Datastructures/StringMap.hpp>
 #include <Engine/Graphics/Shaders/Shaders.hpp>
-#include <Engine/Misc/StringHash.hpp>
 
-#include <Datastructures/Pool.hpp>
-#include <string_view>
-#include <type_traits>
-#include <unordered_map>
+// TODO: find abstraction for VkPipeline and remove include
 #include <vulkan/vulkan_core.h>
 
-class ResourceManager;
-
-struct ParameterInfo
-{
-    // todo: use some bits to store type information etc. so I can do at least *some* tests
-    uint16_t byteSize = 0xFFFF;
-    uint16_t byteOffsetInBuffer = 0xFFFF;
-};
-
-struct Material
+namespace Material
 {
     struct CreateInfo
     {
         Shaders::StageCreateInfo vertexShader;
         Shaders::StageCreateInfo fragmentShader;
+
+        std::string_view debugName;
     };
 
-    VkPipeline pipeline = VK_NULL_HANDLE;
+    struct ParameterBuffer
+    {
+        uint32_t size = 0;
+        uint8_t* writeBuffer = nullptr;
+        Buffer::Handle deviceBuffer = Buffer::Handle::Invalid();
+    };
 
-    ParameterBuffer parameters;
+    struct ParameterInfo
+    {
+        // todo: use some bits to store type information etc. so I can do at least *some* tests
+        uint16_t byteSize = 0;
+        uint16_t byteOffsetInBuffer = 0;
+    };
 
-  private:
-    using ParameterMap = std::unordered_map<std::string, ParameterInfo, StringHash, std::equal_to<>>;
-    // not sure I like this being a pointer, but for now it makes stuff easier
-    ParameterMap* parametersLUT = nullptr;
-    ParameterMap* instanceParametersLUT = nullptr;
-    uint32_t parametersBufferSize = 0;
-    uint32_t instanceParametersBufferSize = 0;
+    // TODO: need to wrap because otherwise TypeIndexInPack cant decide which index to return if pack contains
+    // duplicate type
+    //       TODO: could enable/allow accessing Pool through handle and index instead!
+    struct ParameterMap
+    {
+        size_t bufferSize = 0;
+        StringMap<ParameterInfo> map;
+    };
+    struct InstanceParameterMap
+    {
+        size_t bufferSize = 0;
+        StringMap<ParameterInfo> map;
+    };
 
-    friend ParameterBuffer;
-    friend ResourceManager;
-};
+    using Handle = Handle<std::string, VkPipeline, ParameterMap, InstanceParameterMap, ParameterBuffer, bool>;
 
-static_assert(is_trivially_relocatable<Material>);
+    void setResource(Handle handle, std::string_view name, ResourceIndex index);
+
+}; // namespace Material
+
+namespace MaterialInstance
+{
+    using ParameterBuffer = Material::ParameterBuffer;
+    using Handle = Handle<std::string, Material::Handle, ParameterBuffer, bool>;
+
+    void setResource(Handle handle, std::string_view name, ResourceIndex index);
+}; // namespace MaterialInstance
