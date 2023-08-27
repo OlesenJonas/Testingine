@@ -222,14 +222,9 @@ constexpr VkAttachmentStoreOp toVkStoreOp(const RenderTarget::StoreOp op)
 
 #include <Engine/Graphics/Texture/Texture.hpp>
 
-constexpr uint32_t toVkArrayLayers(const Texture::Descriptor& desc)
+constexpr uint32_t toVkArrayLayers(uint32_t arrayLength, Texture::Type texType)
 {
-    return desc.type == Texture::Type::tCube ? 6 * desc.arrayLength : desc.arrayLength;
-}
-
-constexpr uint32_t toVkArrayLayers(const Texture::CreateInfo& info)
-{
-    return info.type == Texture::Type::tCube ? 6 * info.arrayLength : info.arrayLength;
+    return texType == Texture::Type::tCube ? 6 * arrayLength : arrayLength;
 }
 
 constexpr VkImageType toVkImgType(Texture::Type type)

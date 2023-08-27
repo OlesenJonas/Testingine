@@ -699,7 +699,7 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
             },
 
         .mipLevels = static_cast<uint32_t>(createInfo.mipLevels),
-        .arrayLayers = toVkArrayLayers(createInfo),
+        .arrayLayers = toVkArrayLayers(createInfo.arrayLength, createInfo.type),
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = toVkImageUsage(createInfo.allStates),
@@ -815,7 +815,7 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
                 .baseMipLevel = 0,
                 .levelCount = static_cast<uint32_t>(createInfo.mipLevels),
                 .baseArrayLayer = 0,
-                .layerCount = toVkArrayLayers(Texture::Descriptor::fromCreateInfo(createInfo)),
+                .layerCount = toVkArrayLayers(createInfo.arrayLength, createInfo.type),
             },
     };
     vkCreateImageView(device, &imageViewCrInfo, nullptr, &view);
@@ -1822,7 +1822,7 @@ void VulkanDevice::fillMipLevels(
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     .mipLevel = uint32_t(i - 1),
                     .baseArrayLayer = 0,
-                    .layerCount = toVkArrayLayers(descriptor),
+                    .layerCount = toVkArrayLayers(descriptor.arrayLength, descriptor.type),
                 },
             .srcOffsets =
                 {{.x = 0, .y = 0, .z = 0}, {int32_t(lastWidth), int32_t(lastHeight), int32_t(lastDepth)}},
@@ -1831,7 +1831,7 @@ void VulkanDevice::fillMipLevels(
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     .mipLevel = uint32_t(i),
                     .baseArrayLayer = 0,
-                    .layerCount = toVkArrayLayers(descriptor),
+                    .layerCount = toVkArrayLayers(descriptor.arrayLength, descriptor.type),
                 },
             .dstOffsets = {{.x = 0, .y = 0, .z = 0}, {int32_t(curWidth), int32_t(curHeight), int32_t(curDepth)}},
         };
