@@ -844,6 +844,7 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
     }
 
     Texture::Handle newHandle = texturePool.insert(
+        createInfo.debugName,
         Texture::Descriptor::fromCreateInfo(createInfo),
         Texture::GPU{
             .image = image,

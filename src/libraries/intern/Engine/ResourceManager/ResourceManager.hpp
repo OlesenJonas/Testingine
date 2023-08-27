@@ -22,12 +22,6 @@ class ResourceManager
 {
     CREATE_STATIC_GETTER(ResourceManager);
 
-#define CREATE_NAME_TO_HANDLE_GETTER(T, LUT)                                                                      \
-    inline Handle<T> get##T(std::string_view name)                                                                \
-    {                                                                                                             \
-        const auto iterator = LUT.find(name);                                                                     \
-        return (iterator == LUT.end()) ? Handle<T>::Null() : iterator->second;                                    \
-    }
 #define CREATE_NAME_TO_MULTI_HANDLE_GETTER(T, LUT)                                                                \
     inline T::Handle get##T(std::string_view name)                                                                \
     {                                                                                                             \
@@ -48,16 +42,20 @@ class ResourceManager
         return VulkanDevice::impl()->get<T>(handle);
     }
 
-    Handle<Mesh> createMesh(const char* file, std::string_view name = "");
+    Mesh::Handle createMesh(const char* file, std::string name = "");
     // indices can be {}, but then a trivial index list will still be used!
-    Handle<Mesh> createMesh(
+    Mesh::Handle createMesh(
         Span<const Mesh::PositionType> vertexPositions,
         Span<const Mesh::VertexAttributes> vertexAttributes,
         Span<const uint32_t> indices,
-        std::string_view name);
-    void destroy(Handle<Mesh> handle);
-    inline Mesh* get(Handle<Mesh> handle) { return meshPool.get(handle); }
-    CREATE_NAME_TO_HANDLE_GETTER(Mesh, nameToMeshLUT);
+        std::string name);
+    void destroy(Mesh::Handle handle);
+    template <typename T>
+    inline T* get(Mesh::Handle handle)
+    {
+        return meshPool.get<T>(handle);
+    }
+    CREATE_NAME_TO_MULTI_HANDLE_GETTER(Mesh, nameToMeshLUT);
 
     Handle<Sampler> createSampler(Sampler::Info&& info);
     inline Sampler* get(Handle<Sampler> handle) { return VulkanDevice::impl()->get(handle); };
@@ -107,7 +105,7 @@ class ResourceManager
   private:
     bool _initialized = false;
 
-    Pool<Mesh> meshPool;
+    MultiPool<std::string, Mesh::RenderData> meshPool;
     MultiPool<
         std::string,
         VkPipeline,
@@ -120,7 +118,7 @@ class ResourceManager
     Pool<ComputeShader> computeShaderPool;
 
     // just using standard unordered_map here, because I dont want to think about yet another datastructure atm
-    std::unordered_map<std::string, Handle<Mesh>, StringHash, std::equal_to<>> nameToMeshLUT;
+    std::unordered_map<std::string, Mesh::Handle, StringHash, std::equal_to<>> nameToMeshLUT;
     std::unordered_map<std::string, Texture::Handle, StringHash, std::equal_to<>> nameToTextureLUT;
     std::unordered_map<std::string, Material::Handle, StringHash, std::equal_to<>> nameToMaterialLUT;
 };

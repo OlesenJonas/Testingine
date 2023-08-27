@@ -220,7 +220,7 @@ Editor::Editor()
         gfxDevice.endDebugRegion(mainCmdBuffer);
     }
 
-    Handle<Mesh> triangleMesh;
+    Mesh::Handle triangleMesh;
     {
         std::vector<glm::vec3> triangleVertexPositions;
         std::vector<Mesh::VertexAttributes> triangleVertexAttributes;
@@ -601,7 +601,7 @@ void Editor::update()
 
         struct RenderObject
         {
-            Handle<Mesh> mesh;
+            Mesh::Handle mesh;
             MaterialInstance::Handle materialInstance;
             glm::mat4 transformMatrix;
         };
@@ -643,7 +643,7 @@ void Editor::update()
             *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
         pushConstants.transformBuffer = *resourceManager.get<ResourceIndex>(getCurrentFrameData().objectBuffer);
 
-        Handle<Mesh> lastMesh = Handle<Mesh>::Invalid();
+        Mesh::Handle lastMesh = Mesh::Handle::Invalid();
         Material::Handle lastMaterial = Material::Handle::Invalid();
         MaterialInstance::Handle lastMaterialInstance = MaterialInstance::Handle::Invalid();
         uint32_t indexCount = 0;
@@ -652,7 +652,7 @@ void Editor::update()
         {
             RenderObject& object = renderables[i];
 
-            Handle<Mesh> objectMesh = object.mesh;
+            Mesh::Handle objectMesh = object.mesh;
             MaterialInstance::Handle objectMaterialInstance = object.materialInstance;
 
             if(objectMaterialInstance != lastMaterialInstance)
@@ -685,11 +685,11 @@ void Editor::update()
 
             if(objectMesh != lastMesh)
             {
-                Mesh* newMesh = resourceManager.get(objectMesh);
-                indexCount = newMesh->indexCount;
-                gfxDevice.bindIndexBuffer(offscreenCmdBuffer, newMesh->indexBuffer);
+                auto* meshData = resourceManager.get<Mesh::RenderData>(objectMesh);
+                indexCount = meshData->indexCount;
+                gfxDevice.bindIndexBuffer(offscreenCmdBuffer, meshData->indexBuffer);
                 gfxDevice.bindVertexBuffers(
-                    offscreenCmdBuffer, 0, 2, {newMesh->positionBuffer, newMesh->attributeBuffer}, {0, 0});
+                    offscreenCmdBuffer, 0, 2, {meshData->positionBuffer, meshData->attributeBuffer}, {0, 0});
                 lastMesh = objectMesh;
             }
 

@@ -12,7 +12,7 @@
 #include <vulkan/vulkan_core.h>
 
 ECS::Entity parseNode(
-    Span<Handle<Mesh>> meshes,
+    Span<Mesh::Handle> meshes,
     Span<MaterialInstance::Handle> matInsts,
     const glTF::Main& gltf,
     ECS& ecs,
@@ -141,7 +141,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
     }
 
     // Load/create Meshes
-    std::vector<Handle<Mesh>> meshes;
+    std::vector<Mesh::Handle> meshes;
     meshes.resize(gltf.meshes.size());
     for(int i = 0; i < gltf.meshes.size(); i++)
     {

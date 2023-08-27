@@ -46,7 +46,7 @@ void ResourceManager::cleanup()
             destroy(*iter);
         }
     };
-    clearPool(meshPool);
+    clearMultiPool(meshPool);
     clearMultiPool(materialInstancePool);
     clearMultiPool(materialPool);
     clearPool(computeShaderPool);
@@ -59,13 +59,13 @@ Buffer::Handle ResourceManager::createBuffer(Buffer::CreateInfo&& createInfo)
 
 void ResourceManager::destroy(Buffer::Handle handle) { VulkanDevice::impl()->destroy(handle); }
 
-Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name)
+Mesh::Handle ResourceManager::createMesh(const char* file, std::string name)
 {
     std::string_view fileView{file};
-    auto lastDirSep = fileView.find_last_of("/\\");
-    auto extensionStart = fileView.find_last_of('.');
-    std::string_view meshName =
-        name.empty() ? fileView.substr(lastDirSep + 1, extensionStart - lastDirSep - 1) : name;
+    auto fileName = PathHelpers::fileName(fileView);
+    auto fileExtension = PathHelpers::extension(fileView);
+
+    std::string meshName = name.empty() ? std::string{fileName} : std::move(name);
 
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
@@ -126,14 +126,14 @@ Handle<Mesh> ResourceManager::createMesh(const char* file, std::string_view name
         }
     }
 
-    return createMesh(vertexPositions, vertexAttributes, {}, meshName);
+    return createMesh(vertexPositions, vertexAttributes, {}, std::move(meshName));
 }
 
-Handle<Mesh> ResourceManager::createMesh(
+Mesh::Handle ResourceManager::createMesh(
     Span<const Mesh::PositionType> vertexPositions,
     Span<const Mesh::VertexAttributes> vertexAttributes,
     Span<const uint32_t> indices,
-    std::string_view name)
+    std::string name)
 {
     assert(vertexAttributes.size() == vertexPositions.size());
 
@@ -154,7 +154,7 @@ Handle<Mesh> ResourceManager::createMesh(
     }
 
     Buffer::Handle positionBufferHandle = createBuffer(Buffer::CreateInfo{
-        .debugName = (std::string{name} + "_positionsBuffer"),
+        .debugName = (name + "_positionsBuffer"),
         .size = vertexPositions.size() * sizeof(glm::vec3),
         .memoryType = Buffer::MemoryType::GPU,
         .allStates = ResourceState::VertexBuffer | ResourceState::TransferDst,
@@ -163,7 +163,7 @@ Handle<Mesh> ResourceManager::createMesh(
     });
 
     Buffer::Handle attributesBufferHandle = createBuffer(Buffer::CreateInfo{
-        .debugName = (std::string{name} + "_attributesBuffer"),
+        .debugName = (name + "_attributesBuffer"),
         .size = vertexAttributes.size() * sizeof(vertexAttributes[0]),
         .memoryType = Buffer::MemoryType::GPU,
         .allStates = ResourceState::VertexBuffer | ResourceState::TransferDst,
@@ -172,7 +172,7 @@ Handle<Mesh> ResourceManager::createMesh(
     });
 
     Buffer::Handle indexBufferHandle = createBuffer(Buffer::CreateInfo{
-        .debugName = (std::string{name} + "_indexBuffer"),
+        .debugName = (name + "_indexBuffer"),
         .size = indices.size() * sizeof(indices[0]),
         .memoryType = Buffer::MemoryType::GPU,
         .allStates = ResourceState::IndexBuffer | ResourceState::TransferDst,
@@ -180,24 +180,27 @@ Handle<Mesh> ResourceManager::createMesh(
         .initialData = {(uint8_t*)indices.data(), indices.size() * sizeof(indices[0])},
     });
 
-    Handle<Mesh> newMeshHandle = meshPool.insert(Mesh{
-        .name{name},
-        .indexCount = uint32_t(indices.size()),
-        .indexBuffer = indexBufferHandle,
-        .positionBuffer = positionBufferHandle,
-        .attributeBuffer = attributesBufferHandle});
+    Mesh::Handle newMeshHandle = meshPool.insert(
+        name,
+        Mesh::RenderData{
+            .indexCount = uint32_t(indices.size()),
+            .indexBuffer = indexBufferHandle,
+            .positionBuffer = positionBufferHandle,
+            .attributeBuffer = attributesBufferHandle,
+        });
 
     nameToMeshLUT.insert({std::string{name}, newMeshHandle});
 
     return newMeshHandle;
 }
 
-void ResourceManager::destroy(Handle<Mesh> handle)
+void ResourceManager::destroy(Mesh::Handle handle)
 {
     VulkanDevice* device = VulkanDevice::impl();
-    device->destroy(get(handle)->positionBuffer);
-    device->destroy(get(handle)->attributeBuffer);
-    device->destroy(get(handle)->indexBuffer);
+    auto* renderData = get<Mesh::RenderData>(handle);
+    device->destroy(renderData->positionBuffer);
+    device->destroy(renderData->attributeBuffer);
+    device->destroy(renderData->indexBuffer);
     meshPool.remove(handle);
 }
 
