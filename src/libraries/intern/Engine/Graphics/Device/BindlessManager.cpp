@@ -320,3 +320,48 @@ uint32_t BindlessManager::createSamplerBinding(VkSampler sampler)
 
     return freeIndex;
 }
+
+void BindlessManager::freeSamplerBinding(uint32_t index)
+{
+    // TODO: NEEDS TO HAPPEN AFTER [FRAMES IN FLIGHT] FAMES DELAY!
+
+    auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLER);
+    DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+    freeIndicesBitset.setBit(index);
+}
+
+void BindlessManager::freeImageBinding(uint32_t index, ImageUsage usage)
+{
+    // TODO: NEEDS TO HAPPEN AFTER [FRAMES IN FLIGHT] FAMES DELAY!
+
+    if(usage == ImageUsage::Both || usage == ImageUsage::Sampled)
+    {
+        auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE);
+        DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+        freeIndicesBitset.setBit(index);
+    }
+    if(usage == ImageUsage::Both || usage == ImageUsage::Storage)
+    {
+        auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+        DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+        freeIndicesBitset.setBit(index);
+    }
+}
+
+void BindlessManager::freeBufferBinding(uint32_t index, BufferUsage usage)
+{
+    // TODO: NEEDS TO HAPPEN AFTER [FRAMES IN FLIGHT] FAMES DELAY!
+
+    if(usage == BufferUsage::Storage)
+    {
+        auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+        DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+        freeIndicesBitset.setBit(index);
+    }
+    if(usage == BufferUsage::Uniform)
+    {
+        auto& tableEntry = descriptorTypeTable.at(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        DynamicBitset& freeIndicesBitset = tableEntry.freeIndices;
+        freeIndicesBitset.setBit(index);
+    }
+}

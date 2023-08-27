@@ -137,10 +137,10 @@ Editor::Editor()
         .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
         .debugName = "PBRBasic",
     });
-    assert(resourceManager.get(resourceManager.getMaterial("PBRBasic")) != nullptr);
+    assert(resourceManager.get<std::string>(resourceManager.getMaterial("PBRBasic")) != nullptr);
 
     resourceManager.createMesh(Cube::positions, Cube::attributes, Cube::indices, "DefaultCube");
-    assert(resourceManager.get(resourceManager.getMesh("DefaultCube")) != nullptr);
+    assert(resourceManager.get<std::string>(resourceManager.getMesh("DefaultCube")) != nullptr);
 
     mainCamera =
         Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};

@@ -303,7 +303,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
     std::vector<MaterialInstance::Handle> materialInstances;
     materialInstances.resize(gltf.materials.size());
     auto basicPBRMaterial = rm->getMaterial("PBRBasic");
-    assert(rm->get(basicPBRMaterial) != nullptr);
+    assert(rm->get<std::string>(basicPBRMaterial) != nullptr);
     for(int i = 0; i < gltf.materials.size(); i++)
     {
         const glTF::Material& material = gltf.materials[i];

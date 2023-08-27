@@ -587,6 +587,18 @@ void VulkanDevice::destroy(Buffer::Handle handle)
         return;
     }
 
+    ResourceStateMulti states = get<Buffer::Descriptor>(handle)->allStates;
+    auto resourceIndex = *get<ResourceIndex>(handle);
+    if(states &
+       (ResourceState::UniformBuffer | ResourceState::UniformBufferCompute | ResourceState::UniformBufferGraphics))
+    {
+        bindlessManager.freeBufferBinding(resourceIndex, BindlessManager::BufferUsage::Uniform);
+    }
+    if(states & (ResourceState::Storage | ResourceState::StorageCompute | ResourceState::StorageGraphics))
+    {
+        bindlessManager.freeBufferBinding(resourceIndex, BindlessManager::BufferUsage::Storage);
+    }
+
     VkBuffer buffer = *get<VkBuffer>(handle);
     VmaAllocation alloc = get<Buffer::Allocation>(handle)->allocation;
 
@@ -644,6 +656,8 @@ Handle<Sampler> VulkanDevice::createSampler(const Sampler::Info& info)
 
 void VulkanDevice::destroy(Handle<Sampler> sampler)
 {
+    bindlessManager.freeSamplerBinding(get(sampler)->sampler.resourceIndex);
+
     VulkanSampler vksampler = get(sampler)->sampler;
     deleteQueue.pushBack([=]() { vkDestroySampler(device, vksampler.sampler, nullptr); });
     samplerPool.remove(sampler);
@@ -859,6 +873,25 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
 
 void VulkanDevice::destroy(Texture::Handle handle)
 {
+    ResourceStateMulti states = get<Texture::Descriptor>(handle)->allStates;
+    auto resourceIndex = *get<ResourceIndex>(handle);
+    bool usedSampling = bool(
+        states &
+        (ResourceState::SampleSource | ResourceState::SampleSourceCompute | ResourceState::SampleSourceGraphics));
+
+    bool usedStorage =
+        bool(states & (ResourceState::Storage | ResourceState::StorageCompute | ResourceState::StorageGraphics));
+
+    BindlessManager::ImageUsage usage;
+    if(usedSampling && usedStorage)
+        usage = BindlessManager::ImageUsage::Both;
+    else if(usedSampling)
+        usage = BindlessManager::ImageUsage::Sampled;
+    else if(usedStorage)
+        usage = BindlessManager::ImageUsage::Storage;
+
+    bindlessManager.freeImageBinding(resourceIndex, usage);
+
     VkImageView imageView = get<Texture::GPU>(handle)->imageView;
     deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });
 
