@@ -34,6 +34,8 @@ class ResourceManager
 
     // todo: track resource usage so no stuff thats in use gets deleted
 
+    // --------- Buffer -----------------------------------
+
     Buffer::Handle createBuffer(Buffer::CreateInfo&& createInfo);
     void destroy(Buffer::Handle handle);
     template <typename T>
@@ -41,6 +43,8 @@ class ResourceManager
     {
         return VulkanDevice::impl()->get<T>(handle);
     }
+
+    // --------- Mesh -----------------------------------
 
     Mesh::Handle createMesh(const char* file, std::string name = "");
     // indices can be {}, but then a trivial index list will still be used!
@@ -57,8 +61,12 @@ class ResourceManager
     }
     CREATE_NAME_TO_MULTI_HANDLE_GETTER(Mesh, nameToMeshLUT);
 
+    // --------- Sampler -----------------------------------
+
     Handle<Sampler> createSampler(Sampler::Info&& info);
     inline Sampler* get(Handle<Sampler> handle) { return VulkanDevice::impl()->get(handle); };
+
+    // --------- Texture -----------------------------------
 
     Texture::Handle createTexture(Texture::CreateInfo&& createInfo);
     Texture::Handle createTexture(Texture::LoadInfo&& loadInfo);
@@ -70,9 +78,13 @@ class ResourceManager
     };
     CREATE_NAME_TO_MULTI_HANDLE_GETTER(Texture, nameToTextureLUT);
 
+    // --------- Texture View -----------------------------------
+
     Handle<TextureView> createTextureView(TextureView::CreateInfo&& createInfo);
     void destroy(Handle<TextureView> handle);
     inline TextureView* get(Handle<TextureView> handle) { return VulkanDevice::impl()->get(handle); };
+
+    // --------- Material -----------------------------------
 
     Material::Handle createMaterial(Material::CreateInfo&& crInfo);
     void destroy(Material::Handle handle);
@@ -83,6 +95,8 @@ class ResourceManager
     };
     CREATE_NAME_TO_MULTI_HANDLE_GETTER(Material, nameToMaterialLUT);
 
+    // --------- Material Instance -----------------------------------
+
     MaterialInstance::Handle createMaterialInstance(Material::Handle parent);
     void destroy(MaterialInstance::Handle handle);
     template <typename T>
@@ -90,6 +104,8 @@ class ResourceManager
     {
         return materialInstancePool.get<T>(handle);
     };
+
+    // --------- Compute Shader -----------------------------------
 
     Handle<ComputeShader> createComputeShader(Shaders::StageCreateInfo&& createInfo, std::string_view debugName);
     void destroy(Handle<ComputeShader> handle);

@@ -196,6 +196,13 @@ Mesh::Handle ResourceManager::createMesh(
 
 void ResourceManager::destroy(Mesh::Handle handle)
 {
+    if(!meshPool.isHandleValid(handle))
+        return;
+
+    auto iter = nameToMeshLUT.find(*get<std::string>(handle));
+    assert(iter != nameToMeshLUT.end());
+    nameToMeshLUT.erase(iter);
+
     VulkanDevice* device = VulkanDevice::impl();
     auto* renderData = get<Mesh::RenderData>(handle);
     device->destroy(renderData->positionBuffer);
@@ -250,7 +257,13 @@ Texture::Handle ResourceManager::createTexture(Texture::CreateInfo&& createInfo)
     return newHandle;
 }
 
-void ResourceManager::destroy(Texture::Handle handle) { VulkanDevice::impl()->destroy(handle); }
+void ResourceManager::destroy(Texture::Handle handle)
+{
+    auto iter = nameToTextureLUT.find(*get<std::string>(handle));
+    assert(iter != nameToTextureLUT.end());
+    nameToTextureLUT.erase(iter);
+    VulkanDevice::impl()->destroy(handle);
+}
 
 Handle<TextureView> ResourceManager::createTextureView(TextureView::CreateInfo&& createInfo)
 {
@@ -411,9 +424,11 @@ Material::Handle ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
 void ResourceManager::destroy(Material::Handle handle)
 {
     if(!materialPool.isHandleValid(handle))
-    {
         return;
-    }
+
+    auto iter = nameToMaterialLUT.find(*get<std::string>(handle));
+    assert(iter != nameToMaterialLUT.end());
+    nameToMaterialLUT.erase(iter);
 
     VulkanDevice* gfxDevice = VulkanDevice::impl();
 
@@ -467,10 +482,8 @@ MaterialInstance::Handle ResourceManager::createMaterialInstance(Material::Handl
 
 void ResourceManager::destroy(MaterialInstance::Handle handle)
 {
-    if(materialInstancePool.isHandleValid(handle))
-    {
+    if(!materialInstancePool.isHandleValid(handle))
         return;
-    }
 
     VulkanDevice* gfxDevice = VulkanDevice::impl();
 
