@@ -34,6 +34,31 @@ class Editor final : public Application
     Texture::Format depthFormat = Texture::Format::d32_float;
     Texture::Handle depthTexture;
 
+    void createDefaultSamplers();
+
+    void createDefaultTextures(VkCommandBuffer cmd);
+    Texture::Handle mipDebugTex;
+    Texture::Handle defaultHDRI;
+    Texture::Handle brdfIntegralTex;
+
+    Handle<ComputeShader> equiToCubeShader;
+    Handle<ComputeShader> irradianceCalcShader;
+    struct SkyboxTextures
+    {
+        Texture::Handle cubeMap;
+        Texture::Handle irradianceMap;
+        Texture::Handle prefilteredMap;
+    };
+    SkyboxTextures generateSkyboxTextures(
+        VkCommandBuffer cmd,
+        Texture::Handle equiSource,
+        uint32_t hdriCubeRes,
+        uint32_t irradianceRes,
+        uint32_t prefilteredEnvMapBaseSize);
+
+    VkCommandBuffer drawScene(int threadIndex);
+    VkCommandBuffer drawUI(int threadIndex);
+
     // TODO: store somewhere else and keep synced with shader code version of struct
     struct RenderPassData
     {

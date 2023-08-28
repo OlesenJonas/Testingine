@@ -41,7 +41,7 @@ Editor::Editor()
     sceneRoot.addComponent<Transform>();
     sceneRoot.addComponent<Hierarchy>();
 
-    // rendering internals -------------------------
+    // rendering internals --------------------------------------------
 
     for(int i = 0; i < ArraySize(perFrameData); i++)
     {
@@ -71,8 +71,150 @@ Editor::Editor()
         .size = {gfxDevice.getSwapchainWidth(), gfxDevice.getSwapchainHeight()},
     });
 
-    // Create default Samplers
+    // default resources --------------------------------------------
 
+    createDefaultSamplers();
+
+    // needed for glTF loading
+    resourceManager.createMaterial({
+        .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
+        .debugName = "PBRBasic",
+    });
+    assert(resourceManager.get<std::string>(resourceManager.getMaterial("PBRBasic")) != nullptr);
+
+    resourceManager.createMesh(Cube::positions, Cube::attributes, Cube::indices, "DefaultCube");
+    assert(resourceManager.get<std::string>(resourceManager.getMesh("DefaultCube")) != nullptr);
+
+    mainCamera =
+        Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
+
+    glfwSetTime(0.0);
+    inputManager.resetTime();
+
+    // Scene and other test stuff loading -------------------------------------------
+    VkCommandBuffer mainCmdBuffer = gfxDevice.beginCommandBuffer();
+
+    // Disable validation error breakpoints during init, synch errors arent correct
+    gfxDevice.disableValidationErrorBreakpoint();
+
+    // TODO: execute this while GPU is already doing work, instead of waiting for this *then* starting GPU
+    Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf", &ecs, sceneRoot);
+
+    createDefaultTextures(mainCmdBuffer);
+
+    equiToCubeShader = resourceManager.createComputeShader(
+        {.sourcePath = SHADERS_PATH "/Skybox/equiToCube.hlsl"}, "equiToCubeCompute");
+
+    irradianceCalcShader = resourceManager.createComputeShader(
+        {.sourcePath = SHADERS_PATH "/Skybox/generateIrradiance.comp"}, "generateIrradiance");
+
+    auto unlitTexturedMaterial = resourceManager.createMaterial({
+        .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
+        .debugName = "texturedUnlit",
+    });
+
+    SkyboxTextures skyboxTextures = generateSkyboxTextures(mainCmdBuffer, defaultHDRI, 512, 32, 128);
+
+    auto unlitMatInst = resourceManager.createMaterialInstance(unlitTexturedMaterial);
+    MaterialInstance::setResource(unlitMatInst, "texture", *resourceManager.get<ResourceIndex>(mipDebugTex));
+
+    Material::Handle pbrMat = resourceManager.getMaterial("PBRBasic");
+    Material::setResource(
+        pbrMat, "irradianceTex", *resourceManager.get<ResourceIndex>(skyboxTextures.irradianceMap));
+    Material::setResource(
+        pbrMat, "prefilterTex", *resourceManager.get<ResourceIndex>(skyboxTextures.prefilteredMap));
+    Material::setResource(pbrMat, "brdfLUT", *resourceManager.get<ResourceIndex>(brdfIntegralTex));
+
+    auto equiSkyboxMat = resourceManager.createMaterial({
+        .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
+        .debugName = "equiSkyboxMat",
+    });
+    auto equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
+    {
+        MaterialInstance::setResource(
+            equiSkyboxMatInst, "equirectangularMap", *resourceManager.get<ResourceIndex>(defaultHDRI));
+    }
+
+    auto cubeSkyboxMat = resourceManager.createMaterial({
+        .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
+        .debugName = "cubeSkyboxMat",
+    });
+
+    auto cubeSkyboxMatInst = resourceManager.createMaterialInstance(cubeSkyboxMat);
+    {
+        MaterialInstance::setResource(
+            cubeSkyboxMatInst, "cubeMap", *resourceManager.get<ResourceIndex>(skyboxTextures.cubeMap));
+    }
+
+    auto skybox = ecs.createEntity();
+    {
+        auto* transform = skybox.addComponent<Transform>();
+        auto* renderInfo = skybox.addComponent<RenderInfo>();
+        renderInfo->mesh = resourceManager.getMesh("DefaultCube");
+        // renderInfo->materialInstance = equiSkyboxMatInst;
+        renderInfo->materialInstance = cubeSkyboxMatInst;
+    }
+
+    Mesh::Handle triangleMesh;
+    {
+        std::vector<glm::vec3> triangleVertexPositions;
+        std::vector<Mesh::VertexAttributes> triangleVertexAttributes;
+        triangleVertexPositions.resize(3);
+        triangleVertexAttributes.resize(3);
+
+        triangleVertexPositions[0] = {1.f, 1.f, 0.0f};
+        triangleVertexPositions[1] = {-1.f, 1.f, 0.0f};
+        triangleVertexPositions[2] = {0.f, -1.f, 0.0f};
+
+        triangleVertexAttributes[0].uv = {1.0f, 0.0f};
+        triangleVertexAttributes[1].uv = {0.0f, 0.0f};
+        triangleVertexAttributes[2].uv = {0.5f, 1.0f};
+
+        triangleMesh =
+            resourceManager.createMesh(triangleVertexPositions, triangleVertexAttributes, {}, "triangle");
+    }
+
+    auto newRenderable = ecs.createEntity();
+    {
+        auto* renderInfo = newRenderable.addComponent<RenderInfo>();
+        renderInfo->mesh = triangleMesh;
+        renderInfo->materialInstance = unlitMatInst;
+        auto* transform = newRenderable.addComponent<Transform>();
+        transform->position = glm::vec3{3.0f, 0.0f, 0.0f};
+        transform->calculateLocalTransformMatrix();
+        // dont like having to call this manually
+        transform->localToWorld = transform->localTransform;
+        /*
+            maybe a wrapper around entt + default component creation like
+            scene.addObject() that just conatins Transform+Hierarchy component (and default parenting
+            settings) would be nice
+        */
+        assert(renderInfo->mesh.isValid());
+        assert(renderInfo->materialInstance.isValid());
+    }
+
+    // ------------------------------------------------------------------------------
+
+    gfxDevice.enableValidationErrorBreakpoint();
+
+    gfxDevice.endCommandBuffer(mainCmdBuffer);
+
+    VkCommandBuffer materialUpdateCmds = updateDirtyMaterialParameters();
+
+    gfxDevice.submitInitializationWork({materialUpdateCmds, mainCmdBuffer});
+
+    // just to be safe, wait for all commands to be done here
+    gfxDevice.waitForWorkFinished();
+
+    gfxDevice.enableValidationErrorBreakpoint();
+}
+
+void Editor::createDefaultSamplers()
+{
     struct DefaultSamplerInfo
     {
         int index;
@@ -131,36 +273,15 @@ Editor::Editor()
         defaultSamplerDefines << std::format("#define {} {}\n", info.name, info.index);
     }
     defaultSamplerDefines.close();
+}
 
-    resourceManager.createMaterial({
-        .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
-        .debugName = "PBRBasic",
-    });
-    assert(resourceManager.get<std::string>(resourceManager.getMaterial("PBRBasic")) != nullptr);
-
-    resourceManager.createMesh(Cube::positions, Cube::attributes, Cube::indices, "DefaultCube");
-    assert(resourceManager.get<std::string>(resourceManager.getMesh("DefaultCube")) != nullptr);
-
-    mainCamera =
-        Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
-
-    glfwSetTime(0.0);
-    inputManager.resetTime();
-
-    // Scene and other test stuff loading -------------------------------------------
-    VkCommandBuffer mainCmdBuffer = gfxDevice.beginCommandBuffer();
-
-    // Disable validation error breakpoints during init, synch errors arent correct
-    gfxDevice.disableValidationErrorBreakpoint();
-
-    Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf", &ecs, sceneRoot);
-
+void Editor::createDefaultTextures(VkCommandBuffer cmd)
+{
     Handle<ComputeShader> debugMipFillShaderH = resourceManager.createComputeShader(
         {.sourcePath = SHADERS_PATH "/Misc/debugMipFill.comp"}, "debugMipFill");
     ComputeShader* debugMipFillShader = resourceManager.get(debugMipFillShaderH);
 
-    auto mipTestTexH = resourceManager.createTexture({
+    mipDebugTex = resourceManager.createTexture({
         .debugName = "mipTest",
         .type = Texture::Type::t2D,
         .format = Texture::Format::r8g8b8a8_unorm,
@@ -170,8 +291,8 @@ Editor::Editor()
         .mipLevels = Texture::MipLevels::All,
     });
     {
-        gfxDevice.startDebugRegion(mainCmdBuffer, "Mip test tex filling");
-        gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(debugMipFillShaderH)->pipeline);
+        gfxDevice.startDebugRegion(cmd, "Mip test tex filling");
+        gfxDevice.setComputePipelineState(cmd, resourceManager.get(debugMipFillShaderH)->pipeline);
 
         struct DebugMipFillPushConstants
         {
@@ -183,11 +304,11 @@ Editor::Editor()
             .level = 0,
         };
 
-        uint32_t mipCount = resourceManager.get<Texture::Descriptor>(mipTestTexH)->mipLevels;
+        uint32_t mipCount = resourceManager.get<Texture::Descriptor>(mipDebugTex)->mipLevels;
         for(uint32_t mip = 0; mip < mipCount; mip++)
         {
             Handle<TextureView> mipView = gfxDevice.createTextureView(TextureView::CreateInfo{
-                .parent = mipTestTexH,
+                .parent = mipDebugTex,
                 .allStates = ResourceState::StorageCompute,
                 .baseMipLevel = mip,
             });
@@ -199,114 +320,113 @@ Editor::Editor()
                 .level = mip,
             };
 
-            gfxDevice.pushConstants(mainCmdBuffer, sizeof(DebugMipFillPushConstants), &constants);
+            gfxDevice.pushConstants(cmd, sizeof(DebugMipFillPushConstants), &constants);
 
             // TODO: dont hardcode sizes! retrieve programmatically (workrgoup size form spirv)
-            gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
+            gfxDevice.dispatchCompute(cmd, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
 
             gfxDevice.destroy(mipView);
         }
 
         // transfer dst texture from general to shader read only layout
         gfxDevice.insertBarriers(
-            mainCmdBuffer,
+            cmd,
             {
                 Barrier::FromImage{
-                    .texture = mipTestTexH,
+                    .texture = mipDebugTex,
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 },
             });
-        gfxDevice.endDebugRegion(mainCmdBuffer);
+        gfxDevice.endDebugRegion(cmd);
     }
 
-    Mesh::Handle triangleMesh;
-    {
-        std::vector<glm::vec3> triangleVertexPositions;
-        std::vector<Mesh::VertexAttributes> triangleVertexAttributes;
-        triangleVertexPositions.resize(3);
-        triangleVertexAttributes.resize(3);
-
-        triangleVertexPositions[0] = {1.f, 1.f, 0.0f};
-        triangleVertexPositions[1] = {-1.f, 1.f, 0.0f};
-        triangleVertexPositions[2] = {0.f, -1.f, 0.0f};
-
-        triangleVertexAttributes[0].uv = {1.0f, 0.0f};
-        triangleVertexAttributes[1].uv = {0.0f, 0.0f};
-        triangleVertexAttributes[2].uv = {0.5f, 1.0f};
-
-        triangleMesh =
-            resourceManager.createMesh(triangleVertexPositions, triangleVertexAttributes, {}, "triangle");
-    }
-
-    auto unlitTexturedMaterialH = resourceManager.createMaterial({
-        .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
-        .debugName = "texturedUnlit",
-    });
-
-    auto unlitTexturedMaterial = resourceManager.createMaterialInstance(unlitTexturedMaterialH);
-    MaterialInstance::setResource(
-        unlitTexturedMaterial, "texture", *resourceManager.get<ResourceIndex>(mipTestTexH));
-
-    auto newRenderable = ecs.createEntity();
-    {
-        auto* renderInfo = newRenderable.addComponent<RenderInfo>();
-        renderInfo->mesh = triangleMesh;
-        renderInfo->materialInstance = unlitTexturedMaterial;
-        auto* transform = newRenderable.addComponent<Transform>();
-        transform->position = glm::vec3{3.0f, 0.0f, 0.0f};
-        transform->calculateLocalTransformMatrix();
-        // dont like having to call this manually
-        transform->localToWorld = transform->localTransform;
-        /*
-            maybe a wrapper around entt + default component creation like
-            scene.addObject() that just conatins Transform+Hierarchy component (and default parenting
-            settings) would be nice
-        */
-        assert(renderInfo->mesh.isValid());
-        assert(renderInfo->materialInstance.isValid());
-    }
-
-    auto hdri = resourceManager.createTexture(Texture::LoadInfo{
+    defaultHDRI = resourceManager.createTexture(Texture::LoadInfo{
         .path = ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr",
         .fileDataIsLinear = true,
         .allStates = ResourceState::SampleSource,
         .initialState = ResourceState::SampleSource,
     });
-    const int32_t hdriCubeRes = 512;
+
+    Handle<ComputeShader> integrateBrdfShaderHandle = resourceManager.createComputeShader(
+        {.sourcePath = SHADERS_PATH "/PBR/integrateBRDF.comp"}, "integrateBRDFComp");
+    ComputeShader* integrateBRDFShader = resourceManager.get(integrateBrdfShaderHandle);
+    uint32_t brdfIntegralSize = 512;
+    brdfIntegralTex = resourceManager.createTexture({
+        .debugName = "brdfIntegral",
+        .type = Texture::Type::t2D,
+        .format = Texture::Format::r16_g16_float,
+        .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
+        .initialState = ResourceState::StorageCompute,
+        .size = {brdfIntegralSize, brdfIntegralSize},
+        .mipLevels = 1,
+    });
+    {
+        gfxDevice.setComputePipelineState(cmd, resourceManager.get(integrateBrdfShaderHandle)->pipeline);
+
+        struct IntegratePushConstants
+        {
+            uint32_t outTexture;
+        };
+        IntegratePushConstants constants{*resourceManager.get<ResourceIndex>(brdfIntegralTex)};
+
+        gfxDevice.pushConstants(cmd, sizeof(IntegratePushConstants), &constants);
+
+        gfxDevice.dispatchCompute(
+            cmd, UintDivAndCeil(brdfIntegralSize, 8), UintDivAndCeil(brdfIntegralSize, 8), 6);
+
+        // transfer dst texture from general to shader read only layout
+        gfxDevice.insertBarriers(
+            cmd,
+            {
+                Barrier::FromImage{
+                    .texture = brdfIntegralTex,
+                    .stateBefore = ResourceState::StorageCompute,
+                    .stateAfter = ResourceState::SampleSource,
+                },
+            });
+    }
+}
+
+Editor::SkyboxTextures Editor::generateSkyboxTextures(
+    VkCommandBuffer cmd,
+    Texture::Handle equiSource,
+    uint32_t hdriCubeRes,
+    uint32_t irradianceRes,
+    uint32_t prefilteredEnvMapBaseSize)
+{
+    std::string baseName = *resourceManager.get<std::string>(equiSource);
+
     auto hdriCube = resourceManager.createTexture(Texture::CreateInfo{
         // specifying non-default values only
-        .debugName = "HdriCubemap",
+        .debugName = baseName + "Cubemap",
         .type = Texture::Type::tCube,
-        .format = resourceManager.get<Texture::Descriptor>(hdri)->format,
+        .format = resourceManager.get<Texture::Descriptor>(equiSource)->format,
         .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
         .initialState = ResourceState::StorageCompute,
         .size = {.width = hdriCubeRes, .height = hdriCubeRes},
         .mipLevels = Texture::MipLevels::All,
     });
-    Handle<ComputeShader> conversionShaderHandle = resourceManager.createComputeShader(
-        {.sourcePath = SHADERS_PATH "/Skybox/equiToCube.hlsl"}, "equiToCubeCompute");
-    ComputeShader* conversionShader = resourceManager.get(conversionShaderHandle);
-
     {
-        gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(conversionShaderHandle)->pipeline);
+        ComputeShader* conversionShader = resourceManager.get(equiToCubeShader);
+
+        gfxDevice.setComputePipelineState(cmd, resourceManager.get(equiToCubeShader)->pipeline);
 
         struct ConversionPushConstants
         {
             uint32_t sourceIndex;
             uint32_t targetIndex;
         } constants = {
-            .sourceIndex = *resourceManager.get<ResourceIndex>(hdri),
+            .sourceIndex = *resourceManager.get<ResourceIndex>(equiSource),
             // TODO: Not sure if writing into image view with all levels correctly writes into 0th level
             .targetIndex = *resourceManager.get<ResourceIndex>(hdriCube),
         };
-        gfxDevice.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
+        gfxDevice.pushConstants(cmd, sizeof(ConversionPushConstants), &constants);
 
-        gfxDevice.dispatchCompute(mainCmdBuffer, hdriCubeRes / 8, hdriCubeRes / 8, 6);
+        gfxDevice.dispatchCompute(cmd, hdriCubeRes / 8, hdriCubeRes / 8, 6);
 
         gfxDevice.insertBarriers(
-            mainCmdBuffer,
+            cmd,
             {
                 Barrier::FromImage{
                     .texture = hdriCube,
@@ -315,16 +435,11 @@ Editor::Editor()
                 },
             });
 
-        gfxDevice.fillMipLevels(mainCmdBuffer, hdriCube, ResourceState::SampleSource);
+        gfxDevice.fillMipLevels(cmd, hdriCube, ResourceState::SampleSource);
     }
 
-    Handle<ComputeShader> calcIrradianceComp = resourceManager.createComputeShader(
-        {.sourcePath = SHADERS_PATH "/Skybox/generateIrradiance.comp"}, "generateIrradiance");
-    ComputeShader* calcIrradianceShader = resourceManager.get(calcIrradianceComp);
-
-    uint32_t irradianceRes = 32;
-    auto irradianceTexHandle = resourceManager.createTexture({
-        .debugName = "hdriIrradiance",
+    auto irradianceTex = resourceManager.createTexture({
+        .debugName = baseName + "Irradiance",
         .type = Texture::Type::tCube,
         .format = Texture::Format::r16g16b16a16_float,
         .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
@@ -332,7 +447,8 @@ Editor::Editor()
         .size = {irradianceRes, irradianceRes, 1},
     });
     {
-        gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(calcIrradianceComp)->pipeline);
+        ComputeShader* calcIrradianceShader = resourceManager.get(irradianceCalcShader);
+        gfxDevice.setComputePipelineState(cmd, calcIrradianceShader->pipeline);
 
         struct ConversionPushConstants
         {
@@ -341,19 +457,19 @@ Editor::Editor()
         };
         ConversionPushConstants constants{
             .sourceIndex = *resourceManager.get<ResourceIndex>(hdriCube),
-            .targetIndex = *resourceManager.get<ResourceIndex>(irradianceTexHandle),
+            .targetIndex = *resourceManager.get<ResourceIndex>(irradianceTex),
         };
 
-        gfxDevice.pushConstants(mainCmdBuffer, sizeof(ConversionPushConstants), &constants);
+        gfxDevice.pushConstants(cmd, sizeof(ConversionPushConstants), &constants);
 
-        gfxDevice.dispatchCompute(mainCmdBuffer, irradianceRes / 8, irradianceRes / 8, 6);
+        gfxDevice.dispatchCompute(cmd, irradianceRes / 8, irradianceRes / 8, 6);
 
         // transfer dst texture from general to shader read only layout
         gfxDevice.insertBarriers(
-            mainCmdBuffer,
+            cmd,
             {
                 Barrier::FromImage{
-                    .texture = irradianceTexHandle,
+                    .texture = irradianceTex,
                     .stateBefore = ResourceState::StorageCompute,
                     .stateAfter = ResourceState::SampleSource,
                 },
@@ -364,9 +480,8 @@ Editor::Editor()
         {.sourcePath = SHADERS_PATH "/Skybox/prefilter.comp"}, "prefilterEnvComp");
     ComputeShader* prefilterEnvShader = resourceManager.get(prefilterEnvShaderHandle);
 
-    uint32_t prefilteredEnvMapBaseSize = 128;
     auto prefilteredEnvMap = resourceManager.createTexture({
-        .debugName = "prefilteredEnvMap",
+        .debugName = baseName + "Prefiltered",
         .type = Texture::Type::tCube,
         .format = Texture::Format::r16g16b16a16_float,
         .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
@@ -375,7 +490,7 @@ Editor::Editor()
         .mipLevels = 5,
     });
     {
-        gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(prefilterEnvShaderHandle)->pipeline);
+        gfxDevice.setComputePipelineState(cmd, resourceManager.get(prefilterEnvShaderHandle)->pipeline);
 
         struct PrefilterPushConstants
         {
@@ -407,16 +522,16 @@ Editor::Editor()
                 .roughness = float(mip) / float(mipCount - 1),
             };
 
-            gfxDevice.pushConstants(mainCmdBuffer, sizeof(PrefilterPushConstants), &constants);
+            gfxDevice.pushConstants(cmd, sizeof(PrefilterPushConstants), &constants);
 
-            gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
+            gfxDevice.dispatchCompute(cmd, UintDivAndCeil(mipSize, 8), UintDivAndCeil(mipSize, 8), 6);
 
             gfxDevice.destroy(mipView);
         }
 
         // transfer dst texture from general to shader read only layout
         gfxDevice.insertBarriers(
-            mainCmdBuffer,
+            cmd,
             {
                 Barrier::FromImage{
                     .texture = prefilteredEnvMap,
@@ -426,103 +541,11 @@ Editor::Editor()
             });
     }
 
-    Handle<ComputeShader> integrateBrdfShaderHandle = resourceManager.createComputeShader(
-        {.sourcePath = SHADERS_PATH "/PBR/integrateBRDF.comp"}, "integrateBRDFComp");
-    ComputeShader* integrateBRDFShader = resourceManager.get(integrateBrdfShaderHandle);
-    uint32_t brdfIntegralSize = 512;
-    auto brdfIntegralMap = resourceManager.createTexture({
-        .debugName = "brdfIntegral",
-        .type = Texture::Type::t2D,
-        .format = Texture::Format::r16_g16_float,
-        .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
-        .initialState = ResourceState::StorageCompute,
-        .size = {brdfIntegralSize, brdfIntegralSize},
-        .mipLevels = 1,
-    });
-    {
-        gfxDevice.setComputePipelineState(mainCmdBuffer, resourceManager.get(integrateBrdfShaderHandle)->pipeline);
-
-        struct IntegratePushConstants
-        {
-            uint32_t outTexture;
-        };
-        IntegratePushConstants constants{*resourceManager.get<ResourceIndex>(brdfIntegralMap)};
-
-        gfxDevice.pushConstants(mainCmdBuffer, sizeof(IntegratePushConstants), &constants);
-
-        gfxDevice.dispatchCompute(
-            mainCmdBuffer, UintDivAndCeil(brdfIntegralSize, 8), UintDivAndCeil(brdfIntegralSize, 8), 6);
-
-        // transfer dst texture from general to shader read only layout
-        gfxDevice.insertBarriers(
-            mainCmdBuffer,
-            {
-                Barrier::FromImage{
-                    .texture = brdfIntegralMap,
-                    .stateBefore = ResourceState::StorageCompute,
-                    .stateAfter = ResourceState::SampleSource,
-                },
-            });
-    }
-
-    // TODO: getPtrTmp() function (explicitetly state temporary!)
-    Material::Handle pbrMat = resourceManager.getMaterial("PBRBasic");
-    Material::setResource(pbrMat, "irradianceTex", *resourceManager.get<ResourceIndex>(irradianceTexHandle));
-    Material::setResource(pbrMat, "prefilterTex", *resourceManager.get<ResourceIndex>(prefilteredEnvMap));
-    Material::setResource(pbrMat, "brdfLUT", *resourceManager.get<ResourceIndex>(brdfIntegralMap));
-
-    auto defaultCube = resourceManager.getMesh("DefaultCube");
-
-    /*
-        todo:
-            load by default on engine init!
-    */
-    auto equiSkyboxMat = resourceManager.createMaterial({
-        .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
-        .debugName = "equiSkyboxMat",
-    });
-    auto equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
-    {
-        MaterialInstance::setResource(
-            equiSkyboxMatInst, "equirectangularMap", *resourceManager.get<ResourceIndex>(hdri));
-    }
-
-    auto cubeSkyboxMat = resourceManager.createMaterial({
-        .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
-        .debugName = "cubeSkyboxMat",
-    });
-
-    auto cubeSkyboxMatInst = resourceManager.createMaterialInstance(cubeSkyboxMat);
-    {
-        MaterialInstance::setResource(cubeSkyboxMatInst, "cubeMap", *resourceManager.get<ResourceIndex>(hdriCube));
-    }
-
-    // todo: createEntity takes initial set of components as arguments and returns all the pointers as []-thingy
-    auto skybox = ecs.createEntity();
-    {
-        auto* transform = skybox.addComponent<Transform>();
-        auto* renderInfo = skybox.addComponent<RenderInfo>();
-        renderInfo->mesh = defaultCube;
-        // renderInfo->materialInstance = equiSkyboxMatInst;
-        renderInfo->materialInstance = cubeSkyboxMatInst;
-    }
-
-    // ------------------------------------------------------------------------------
-
-    gfxDevice.enableValidationErrorBreakpoint();
-
-    gfxDevice.endCommandBuffer(mainCmdBuffer);
-
-    VkCommandBuffer materialUpdateCmds = updateDirtyMaterialParameters();
-
-    gfxDevice.submitInitializationWork({materialUpdateCmds, mainCmdBuffer});
-
-    // just to be safe, wait for all commands to be done here
-    gfxDevice.waitForWorkFinished();
-
-    gfxDevice.enableValidationErrorBreakpoint();
+    return SkyboxTextures{
+        .cubeMap = hdriCube,
+        .irradianceMap = irradianceTex,
+        .prefilteredMap = prefilteredEnvMap,
+    };
 }
 
 Editor::~Editor()
@@ -574,157 +597,12 @@ void Editor::update()
     //          (ie error out when command buffer begun before next frame started)
     gfxDevice.startNextFrame();
 
-    // Draw Scene ------
-    auto recordSceneDrawingCommands = [&](int threadIndex)
-    {
-        VkCommandBuffer offscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
-
-        gfxDevice.insertBarriers(
-            offscreenCmdBuffer,
-            {
-                Barrier::FromImage{
-                    .texture = depthTexture,
-                    .stateBefore = ResourceState::DepthStencilTarget,
-                    .stateAfter = ResourceState::DepthStencilTarget,
-                    .allowDiscardOriginal = true,
-                },
-            });
-        gfxDevice.insertSwapchainImageBarrier(
-            offscreenCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::Rendertarget);
-
-        gfxDevice.beginRendering(
-            offscreenCmdBuffer,
-            {ColorTarget{.texture = ColorTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Clear}},
-            DepthTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
-
-        // Render scene ------------------------------
-
-        struct RenderObject
-        {
-            Mesh::Handle mesh;
-            MaterialInstance::Handle materialInstance;
-            glm::mat4 transformMatrix;
-        };
-        std::vector<RenderObject> renderables;
-
-        ecs.forEach<RenderInfo, Transform>(
-            [&](RenderInfo* renderinfos, Transform* transforms, uint32_t count)
-            {
-                for(int i = 0; i < count; i++)
-                {
-                    const RenderInfo& rinfo = renderinfos[i];
-                    const Transform& transform = transforms[i];
-                    renderables.emplace_back(rinfo.mesh, rinfo.materialInstance, transform.localToWorld);
-                }
-            });
-
-        RenderPassData renderPassData;
-        renderPassData.proj = mainCamera.getProj();
-        renderPassData.view = mainCamera.getView();
-        renderPassData.projView = mainCamera.getProjView();
-        renderPassData.cameraPositionWS = mainCamera.getPosition();
-
-        void* renderPassDataPtr = *resourceManager.get<void*>(getCurrentFrameData().renderPassDataBuffer);
-        memcpy(renderPassDataPtr, &renderPassData, sizeof(renderPassData));
-
-        void* objectData = *resourceManager.get<void*>(getCurrentFrameData().objectBuffer);
-        // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
-        auto* objectSSBO = (GPUObjectData*)objectData;
-        for(int i = 0; i < renderables.size(); i++)
-        {
-            const RenderObject& object = renderables[i];
-            objectSSBO[i].modelMatrix = object.transformMatrix;
-        }
-
-        //---
-
-        BindlessIndices pushConstants;
-        pushConstants.RenderInfoBuffer =
-            *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
-        pushConstants.transformBuffer = *resourceManager.get<ResourceIndex>(getCurrentFrameData().objectBuffer);
-
-        Mesh::Handle lastMesh = Mesh::Handle::Invalid();
-        Material::Handle lastMaterial = Material::Handle::Invalid();
-        MaterialInstance::Handle lastMaterialInstance = MaterialInstance::Handle::Invalid();
-        uint32_t indexCount = 0;
-
-        for(int i = 0; i < renderables.size(); i++)
-        {
-            RenderObject& object = renderables[i];
-
-            Mesh::Handle objectMesh = object.mesh;
-            MaterialInstance::Handle objectMaterialInstance = object.materialInstance;
-
-            if(objectMaterialInstance != lastMaterialInstance)
-            {
-                Material::Handle newMaterial = *resourceManager.get<Material::Handle>(objectMaterialInstance);
-                if(newMaterial != lastMaterial)
-                {
-                    gfxDevice.setGraphicsPipelineState(
-                        offscreenCmdBuffer, *resourceManager.get<VkPipeline>(newMaterial));
-
-                    auto* parameters = resourceManager.get<Material::ParameterBuffer>(newMaterial);
-                    Buffer::Handle paramBuffer = parameters->deviceBuffer;
-                    if(paramBuffer.isValid())
-                        pushConstants.materialParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
-                    else
-                        pushConstants.materialParamsBuffer = 0xFFFFFFFF;
-                    lastMaterial = newMaterial;
-                }
-
-                Buffer::Handle paramBuffer =
-                    resourceManager.get<MaterialInstance::ParameterBuffer>(objectMaterialInstance)->deviceBuffer;
-                if(paramBuffer.isValid())
-                    pushConstants.materialInstanceParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
-                else
-                    pushConstants.materialInstanceParamsBuffer = 0xFFFFFFFF;
-            }
-
-            pushConstants.transformIndex = i;
-            gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
-
-            if(objectMesh != lastMesh)
-            {
-                auto* meshData = resourceManager.get<Mesh::RenderData>(objectMesh);
-                indexCount = meshData->indexCount;
-                gfxDevice.bindIndexBuffer(offscreenCmdBuffer, meshData->indexBuffer);
-                gfxDevice.bindVertexBuffers(
-                    offscreenCmdBuffer, 0, 2, {meshData->positionBuffer, meshData->attributeBuffer}, {0, 0});
-                lastMesh = objectMesh;
-            }
-
-            gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, 0);
-        }
-
-        gfxDevice.endRendering(offscreenCmdBuffer);
-        gfxDevice.endCommandBuffer(offscreenCmdBuffer);
-
-        return offscreenCmdBuffer;
-    };
-
-    // Draw UI ---------
-    auto recordUIdrawingCommands = [&](int threadIndex)
-    {
-        VkCommandBuffer onscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
-        gfxDevice.beginRendering(
-            onscreenCmdBuffer,
-            {ColorTarget{.texture = ColorTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Load}},
-            DepthTarget{.texture = Texture::Handle::Null()});
-        gfxDevice.drawImGui(onscreenCmdBuffer);
-        gfxDevice.endRendering(onscreenCmdBuffer);
-
-        gfxDevice.insertSwapchainImageBarrier(
-            onscreenCmdBuffer, ResourceState::Rendertarget, ResourceState::PresentSrc);
-
-        gfxDevice.endCommandBuffer(onscreenCmdBuffer);
-
-        return onscreenCmdBuffer;
-    };
-
     VkCommandBuffer materialParamUpdates = updateDirtyMaterialParameters();
 
-    auto offscreenFuture = threadPool.queueJob(recordSceneDrawingCommands);
-    auto onscreenFuture = threadPool.queueJob(recordUIdrawingCommands);
+    auto offscreenFuture =
+        threadPool.queueJob([editor = this](int threadIndex) { return editor->drawScene(threadIndex); });
+    auto onscreenFuture =
+        threadPool.queueJob([editor = this](int threadIndex) { return editor->drawUI(threadIndex); });
 
     VkCommandBuffer offscreenCmdBuffer = offscreenFuture.get();
     VkCommandBuffer onscreenCmdBuffer = onscreenFuture.get();
@@ -734,6 +612,151 @@ void Editor::update()
     gfxDevice.presentSwapchain();
 
     // ------------------------------
+}
+
+VkCommandBuffer Editor::drawScene(int threadIndex)
+{
+    VkCommandBuffer offscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
+
+    gfxDevice.insertBarriers(
+        offscreenCmdBuffer,
+        {
+            Barrier::FromImage{
+                .texture = depthTexture,
+                .stateBefore = ResourceState::DepthStencilTarget,
+                .stateAfter = ResourceState::DepthStencilTarget,
+                .allowDiscardOriginal = true,
+            },
+        });
+    gfxDevice.insertSwapchainImageBarrier(
+        offscreenCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::Rendertarget);
+
+    gfxDevice.beginRendering(
+        offscreenCmdBuffer,
+        {ColorTarget{.texture = ColorTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Clear}},
+        DepthTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
+
+    // Render scene ------------------------------
+
+    struct RenderObject
+    {
+        Mesh::Handle mesh;
+        MaterialInstance::Handle materialInstance;
+        glm::mat4 transformMatrix;
+    };
+    std::vector<RenderObject> renderables;
+
+    ecs.forEach<RenderInfo, Transform>(
+        [&](RenderInfo* renderinfos, Transform* transforms, uint32_t count)
+        {
+            for(int i = 0; i < count; i++)
+            {
+                const RenderInfo& rinfo = renderinfos[i];
+                const Transform& transform = transforms[i];
+                renderables.emplace_back(rinfo.mesh, rinfo.materialInstance, transform.localToWorld);
+            }
+        });
+
+    RenderPassData renderPassData;
+    renderPassData.proj = mainCamera.getProj();
+    renderPassData.view = mainCamera.getView();
+    renderPassData.projView = mainCamera.getProjView();
+    renderPassData.cameraPositionWS = mainCamera.getPosition();
+
+    void* renderPassDataPtr = *resourceManager.get<void*>(getCurrentFrameData().renderPassDataBuffer);
+    memcpy(renderPassDataPtr, &renderPassData, sizeof(renderPassData));
+
+    void* objectData = *resourceManager.get<void*>(getCurrentFrameData().objectBuffer);
+    // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
+    auto* objectSSBO = (GPUObjectData*)objectData;
+    for(int i = 0; i < renderables.size(); i++)
+    {
+        const RenderObject& object = renderables[i];
+        objectSSBO[i].modelMatrix = object.transformMatrix;
+    }
+
+    //---
+
+    BindlessIndices pushConstants;
+    pushConstants.RenderInfoBuffer =
+        *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
+    pushConstants.transformBuffer = *resourceManager.get<ResourceIndex>(getCurrentFrameData().objectBuffer);
+
+    Mesh::Handle lastMesh = Mesh::Handle::Invalid();
+    Material::Handle lastMaterial = Material::Handle::Invalid();
+    MaterialInstance::Handle lastMaterialInstance = MaterialInstance::Handle::Invalid();
+    uint32_t indexCount = 0;
+
+    for(int i = 0; i < renderables.size(); i++)
+    {
+        RenderObject& object = renderables[i];
+
+        Mesh::Handle objectMesh = object.mesh;
+        MaterialInstance::Handle objectMaterialInstance = object.materialInstance;
+
+        if(objectMaterialInstance != lastMaterialInstance)
+        {
+            Material::Handle newMaterial = *resourceManager.get<Material::Handle>(objectMaterialInstance);
+            if(newMaterial != lastMaterial)
+            {
+                gfxDevice.setGraphicsPipelineState(
+                    offscreenCmdBuffer, *resourceManager.get<VkPipeline>(newMaterial));
+
+                auto* parameters = resourceManager.get<Material::ParameterBuffer>(newMaterial);
+                Buffer::Handle paramBuffer = parameters->deviceBuffer;
+                if(paramBuffer.isValid())
+                    pushConstants.materialParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
+                else
+                    pushConstants.materialParamsBuffer = 0xFFFFFFFF;
+                lastMaterial = newMaterial;
+            }
+
+            Buffer::Handle paramBuffer =
+                resourceManager.get<MaterialInstance::ParameterBuffer>(objectMaterialInstance)->deviceBuffer;
+            if(paramBuffer.isValid())
+                pushConstants.materialInstanceParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
+            else
+                pushConstants.materialInstanceParamsBuffer = 0xFFFFFFFF;
+        }
+
+        pushConstants.transformIndex = i;
+        gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
+
+        if(objectMesh != lastMesh)
+        {
+            auto* meshData = resourceManager.get<Mesh::RenderData>(objectMesh);
+            indexCount = meshData->indexCount;
+            gfxDevice.bindIndexBuffer(offscreenCmdBuffer, meshData->indexBuffer);
+            gfxDevice.bindVertexBuffers(
+                offscreenCmdBuffer, 0, 2, {meshData->positionBuffer, meshData->attributeBuffer}, {0, 0});
+            lastMesh = objectMesh;
+        }
+
+        gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, 0);
+    }
+
+    gfxDevice.endRendering(offscreenCmdBuffer);
+    gfxDevice.endCommandBuffer(offscreenCmdBuffer);
+
+    return offscreenCmdBuffer;
+};
+
+VkCommandBuffer Editor::drawUI(int threadIndex)
+{
+    VkCommandBuffer onscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
+    gfxDevice.beginRendering(
+        onscreenCmdBuffer,
+        {ColorTarget{.texture = ColorTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Load}},
+        DepthTarget{.texture = Texture::Handle::Null()});
+    gfxDevice.drawImGui(onscreenCmdBuffer);
+    gfxDevice.endRendering(onscreenCmdBuffer);
+
+    gfxDevice.insertSwapchainImageBarrier(
+        onscreenCmdBuffer, ResourceState::Rendertarget, ResourceState::PresentSrc);
+
+    gfxDevice.endCommandBuffer(onscreenCmdBuffer);
+
+    return onscreenCmdBuffer;
 }
 
 VkCommandBuffer Editor::updateDirtyMaterialParameters()
