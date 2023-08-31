@@ -17,7 +17,7 @@ Texture::LoadResult Texture::loadHDR(Texture::LoadInfo&& loadInfo)
     }
     void* pixelPtr = pixels;
     VkDeviceSize pixelCount = texWidth * texHeight * 4; // 4 since load forces rgb_alpha
-    Texture::Format imageFormat = Texture::Format::r32g32b32a32_float;
+    Texture::Format imageFormat = Texture::Format::R32_G32_B32_A32_FLOAT;
     Texture::Extent imageExtent{
         .width = (uint32_t)texWidth,
         .height = (uint32_t)texHeight,

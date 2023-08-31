@@ -70,9 +70,16 @@ class VulkanDevice
     void destroy(Handle<TextureView> handle);
     inline TextureView* get(Handle<TextureView> handle) { return textureViewPool.get(handle); }
 
-    // TODO: wrap in handles aswell?
-    VkPipeline
-    createGraphicsPipeline(Span<uint32_t> vertexSpirv, Span<uint32_t> fragmentSpirv, std::string_view debugName);
+    struct PipelineCreateInfo
+    {
+        std::string_view debugName;
+        Span<uint32_t> vertexSpirv;
+        Span<uint32_t> fragmentSpirv;
+        Span<const Texture::Format> colorFormats;
+        Texture::Format depthFormat = Texture::Format::UNDEFINED;
+        Texture::Format stencilFormat = Texture::Format::UNDEFINED;
+    };
+    VkPipeline createGraphicsPipeline(PipelineCreateInfo&& createInfo);
     VkPipeline createComputePipeline(Span<uint32_t> spirv, std::string_view debugName);
     void destroy(VkPipeline pipeline);
 
@@ -211,8 +218,6 @@ class VulkanDevice
 #endif
     bool breakOnValidationError = true;
 
-    // TODO: remove need to access this from the outside!
-  public:
     VkDevice device = VK_NULL_HANDLE;
     VkInstance instance = VK_NULL_HANDLE;
 
@@ -228,9 +233,7 @@ class VulkanDevice
 
     VkPipelineCache pipelineCache;
     VkFormat swapchainImageFormat;
-    VkFormat defaultDepthFormat;
 
-  private:
     VkDebugUtilsMessengerEXT debugMessenger;
     PFN_vkSetDebugUtilsObjectNameEXT setObjectDebugName = nullptr;
 
@@ -357,6 +360,8 @@ class VulkanDevice
             .size = barrier.size,
         };
     }
+
+    friend BindlessManager;
 };
 
 extern PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;

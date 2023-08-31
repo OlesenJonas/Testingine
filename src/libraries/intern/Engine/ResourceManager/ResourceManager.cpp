@@ -385,7 +385,14 @@ Material::Handle ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
 
     Material::Handle newMaterialHandle = materialPool.insert(
         std::string{crInfo.debugName},
-        VulkanDevice::impl()->createGraphicsPipeline(vertexBinary, fragmentBinary, crInfo.debugName),
+        VulkanDevice::impl()->createGraphicsPipeline(VulkanDevice::PipelineCreateInfo{
+            .debugName = crInfo.debugName,
+            .vertexSpirv = vertexBinary,
+            .fragmentSpirv = fragmentBinary,
+            .colorFormats = crInfo.colorFormats,
+            .depthFormat = crInfo.depthFormat,
+            .stencilFormat = crInfo.stencilFormat,
+        }),
         Material::ParameterMap{
             .bufferSize = parametersBufferSize,
             .map = std::move(parametersMap),

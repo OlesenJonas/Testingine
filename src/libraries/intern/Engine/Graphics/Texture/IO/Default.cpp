@@ -17,7 +17,7 @@ Texture::LoadResult Texture::loadDefault(Texture::LoadInfo&& loadInfo)
     void* pixelPtr = pixels;
     VkDeviceSize imageSize = texWidth * texHeight * 4;
     Texture::Format imageFormat =
-        loadInfo.fileDataIsLinear ? Texture::Format::r8g8b8a8_unorm : Texture::Format::r8g8b8a8_srgb;
+        loadInfo.fileDataIsLinear ? Texture::Format::R8_G8_B8_A8_UNORM : Texture::Format::R8_G8_B8_A8_SRGB;
     Texture::Extent imageExtent{
         .width = (uint32_t)texWidth,
         .height = (uint32_t)texHeight,

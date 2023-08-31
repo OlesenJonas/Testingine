@@ -987,16 +987,15 @@ void VulkanDevice::destroy(Handle<TextureView> handle)
     textureViewPool.remove(handle);
 }
 
-VkPipeline VulkanDevice::createGraphicsPipeline(
-    Span<uint32_t> vertexSpirv, Span<uint32_t> fragmentSpirv, std::string_view debugName)
+VkPipeline VulkanDevice::createGraphicsPipeline(PipelineCreateInfo&& createInfo)
 {
     // (temp) Shader Modules ----------------
     VkShaderModule vertSM;
     VkShaderModuleCreateInfo vertSMCrInfo{
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .pNext = nullptr,
-        .codeSize = 4u * vertexSpirv.size(), // size in bytes, but spirvBinary is uint32 vector!
-        .pCode = vertexSpirv.data(),
+        .codeSize = 4u * createInfo.vertexSpirv.size(), // size in bytes, but spirvBinary is uint32 vector!
+        .pCode = createInfo.vertexSpirv.data(),
     };
     if(vkCreateShaderModule(device, &vertSMCrInfo, nullptr, &vertSM) != VK_SUCCESS)
     {
@@ -1007,8 +1006,8 @@ VkPipeline VulkanDevice::createGraphicsPipeline(
     VkShaderModuleCreateInfo fragSMCrInfo{
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .pNext = nullptr,
-        .codeSize = 4u * fragmentSpirv.size(), // size in bytes, but spirvBinary is uint32 vector!
-        .pCode = fragmentSpirv.data(),
+        .codeSize = 4u * createInfo.fragmentSpirv.size(), // size in bytes, but spirvBinary is uint32 vector!
+        .pCode = createInfo.fragmentSpirv.data(),
     };
     if(vkCreateShaderModule(device, &fragSMCrInfo, nullptr, &fragSM) != VK_SUCCESS)
     {
@@ -1139,17 +1138,19 @@ VkPipeline VulkanDevice::createGraphicsPipeline(
         .pDynamicStates = &dynamicStates[0],
     };
 
-    const VkFormat colorAttachmentFormats[1] = {swapchainImageFormat};
-    const VkFormat depthAttachmentFormat = defaultDepthFormat;
-    const VkFormat stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+    std::vector<VkFormat> colorFormats{createInfo.colorFormats.size()};
+    for(int i = 0; i < colorFormats.size(); i++)
+    {
+        colorFormats[i] = toVkFormat(createInfo.colorFormats[i]);
+    }
 
     const VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .pNext = nullptr,
-        .colorAttachmentCount = ArraySize(colorAttachmentFormats),
-        .pColorAttachmentFormats = &colorAttachmentFormats[0],
-        .depthAttachmentFormat = depthAttachmentFormat,
-        .stencilAttachmentFormat = stencilAttachmentFormat,
+        .colorAttachmentCount = static_cast<uint32_t>(colorFormats.size()),
+        .pColorAttachmentFormats = colorFormats.data(),
+        .depthAttachmentFormat = toVkFormat(createInfo.depthFormat),
+        .stencilAttachmentFormat = toVkFormat(createInfo.stencilFormat),
     };
 
     const VkGraphicsPipelineCreateInfo pipelineCrInfo{
@@ -1178,7 +1179,7 @@ VkPipeline VulkanDevice::createGraphicsPipeline(
     {
         assert(false);
     }
-    setDebugName(pipeline, debugName.data());
+    setDebugName(pipeline, createInfo.debugName.data());
 
     vkDestroyShaderModule(device, vertSM, nullptr);
     vkDestroyShaderModule(device, fragSM, nullptr);

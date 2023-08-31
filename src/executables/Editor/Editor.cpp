@@ -21,8 +21,6 @@ Editor::Editor()
 {
     gfxDevice.startInitializationWork();
 
-    gfxDevice.defaultDepthFormat = toVkFormat(depthFormat);
-
     inputManager.init(mainWindow.glfwWindow);
     glfwSetWindowUserPointer(mainWindow.glfwWindow, this);
     inputManager.setupCallbacks(
@@ -77,9 +75,11 @@ Editor::Editor()
 
     // needed for glTF loading
     resourceManager.createMaterial({
+        .debugName = "PBRBasic",
         .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
         .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
-        .debugName = "PBRBasic",
+        .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
+        .depthFormat = depthFormat,
     });
     assert(resourceManager.get<std::string>(resourceManager.getMaterial("PBRBasic")) != nullptr);
 
@@ -110,9 +110,11 @@ Editor::Editor()
         {.sourcePath = SHADERS_PATH "/Skybox/generateIrradiance.comp"}, "generateIrradiance");
 
     auto unlitTexturedMaterial = resourceManager.createMaterial({
+        .debugName = "texturedUnlit",
         .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
         .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
-        .debugName = "texturedUnlit",
+        .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
+        .depthFormat = depthFormat,
     });
 
     SkyboxTextures skyboxTextures = generateSkyboxTextures(mainCmdBuffer, defaultHDRI, 512, 32, 128);
@@ -128,9 +130,11 @@ Editor::Editor()
     Material::setResource(pbrMat, "brdfLUT", *resourceManager.get<ResourceIndex>(brdfIntegralTex));
 
     auto equiSkyboxMat = resourceManager.createMaterial({
+        .debugName = "equiSkyboxMat",
         .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
         .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
-        .debugName = "equiSkyboxMat",
+        .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
+        .depthFormat = depthFormat,
     });
     auto equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
     {
@@ -139,9 +143,11 @@ Editor::Editor()
     }
 
     auto cubeSkyboxMat = resourceManager.createMaterial({
+        .debugName = "cubeSkyboxMat",
         .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
         .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
-        .debugName = "cubeSkyboxMat",
+        .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
+        .depthFormat = depthFormat,
     });
 
     auto cubeSkyboxMatInst = resourceManager.createMaterialInstance(cubeSkyboxMat);
@@ -284,7 +290,7 @@ void Editor::createDefaultTextures(VkCommandBuffer cmd)
     mipDebugTex = resourceManager.createTexture({
         .debugName = "mipTest",
         .type = Texture::Type::t2D,
-        .format = Texture::Format::r8g8b8a8_unorm,
+        .format = Texture::Format::R8_G8_B8_A8_UNORM,
         .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
         .initialState = ResourceState::StorageCompute,
         .size = {128, 128},
@@ -355,7 +361,7 @@ void Editor::createDefaultTextures(VkCommandBuffer cmd)
     brdfIntegralTex = resourceManager.createTexture({
         .debugName = "brdfIntegral",
         .type = Texture::Type::t2D,
-        .format = Texture::Format::r16_g16_float,
+        .format = Texture::Format::R16_G16_FLOAT,
         .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
         .initialState = ResourceState::StorageCompute,
         .size = {brdfIntegralSize, brdfIntegralSize},
@@ -441,7 +447,7 @@ Editor::SkyboxTextures Editor::generateSkyboxTextures(
     auto irradianceTex = resourceManager.createTexture({
         .debugName = baseName + "Irradiance",
         .type = Texture::Type::tCube,
-        .format = Texture::Format::r16g16b16a16_float,
+        .format = Texture::Format::R16_G16_B16_A16_FLOAT,
         .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
         .initialState = ResourceState::StorageCompute,
         .size = {irradianceRes, irradianceRes, 1},
@@ -483,7 +489,7 @@ Editor::SkyboxTextures Editor::generateSkyboxTextures(
     auto prefilteredEnvMap = resourceManager.createTexture({
         .debugName = baseName + "Prefiltered",
         .type = Texture::Type::tCube,
-        .format = Texture::Format::r16g16b16a16_float,
+        .format = Texture::Format::R16_G16_B16_A16_FLOAT,
         .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
         .initialState = ResourceState::StorageCompute,
         .size = {prefilteredEnvMapBaseSize, prefilteredEnvMapBaseSize},

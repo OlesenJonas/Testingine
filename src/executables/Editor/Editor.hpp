@@ -31,7 +31,7 @@ class Editor final : public Application
     // TODO: not sure if camera should be part of just Editor, or Application is general
     Camera mainCamera;
 
-    Texture::Format depthFormat = Texture::Format::d32_float;
+    Texture::Format depthFormat = Texture::Format::D32_FLOAT;
     Texture::Handle depthTexture;
 
     void createDefaultSamplers();

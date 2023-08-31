@@ -34,19 +34,20 @@ struct Texture
     // enum struct Format
     enum struct Format
     {
-        Undefined,
-        r8_unorm,
+        UNDEFINED,
+        R8_UNORM,
 
-        r8g8b8a8_unorm,
-        r8g8b8a8_srgb,
+        R8_G8_B8_A8_UNORM,
+        R8_G8_B8_A8_SRGB,
+        B8_G8_R8_A8_SRGB,
 
-        r16_g16_float,
+        R16_G16_FLOAT,
 
-        r16g16b16a16_float,
-        r32g32b32a32_float,
+        R16_G16_B16_A16_FLOAT,
+        R32_G32_B32_A32_FLOAT,
 
         //-- Special Formats
-        d32_float,
+        D32_FLOAT,
     };
 
     struct LoadInfo
@@ -65,7 +66,7 @@ struct Texture
         std::string debugName = ""; // NOLINT
 
         Type type = Type::t2D;
-        Format format = Format::Undefined;
+        Format format = Format::UNDEFINED;
         ResourceStateMulti allStates = ResourceState::None;
         ResourceState initialState = ResourceState::None;
 
@@ -85,7 +86,7 @@ struct Texture
     struct Descriptor
     {
         Type type = Type::t2D;
-        Format format = Format::Undefined;
+        Format format = Format::UNDEFINED;
         ResourceStateMulti allStates = ResourceState::None;
 
         Extent size = {1, 1, 1};

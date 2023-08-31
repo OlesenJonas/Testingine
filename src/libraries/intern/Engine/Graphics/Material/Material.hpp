@@ -2,6 +2,7 @@
 
 #include "../Buffer/Buffer.hpp"
 #include "../Graphics.hpp"
+#include "../Texture/Texture.hpp"
 #include <Datastructures/Pool/Handle.hpp>
 #include <Datastructures/Pool/PoolHelpers.hpp>
 #include <Datastructures/StringMap.hpp>
@@ -14,10 +15,13 @@ namespace Material
 {
     struct CreateInfo
     {
+        std::string_view debugName;
         Shaders::StageCreateInfo vertexShader;
         Shaders::StageCreateInfo fragmentShader;
-
-        std::string_view debugName;
+        // TODO: shouldnt be part of general material
+        Span<const Texture::Format> colorFormats;
+        Texture::Format depthFormat = Texture::Format::UNDEFINED;
+        Texture::Format stencilFormat = Texture::Format::UNDEFINED;
     };
 
     struct ParameterBuffer

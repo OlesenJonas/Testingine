@@ -244,21 +244,23 @@ constexpr VkFormat toVkFormat(Texture::Format format)
 {
     switch(format)
     {
-    case Texture::Format::Undefined:
+    case Texture::Format::UNDEFINED:
         return VK_FORMAT_UNDEFINED;
-    case Texture::Format::r8_unorm:
+    case Texture::Format::R8_UNORM:
         return VK_FORMAT_R8_UNORM;
-    case Texture::Format::r8g8b8a8_unorm:
+    case Texture::Format::R8_G8_B8_A8_UNORM:
         return VK_FORMAT_R8G8B8A8_UNORM;
-    case Texture::Format::r8g8b8a8_srgb:
+    case Texture::Format::R8_G8_B8_A8_SRGB:
         return VK_FORMAT_R8G8B8A8_SRGB;
-    case Texture::Format::r16_g16_float:
+    case Texture::Format::B8_G8_R8_A8_SRGB:
+        return VK_FORMAT_B8G8R8A8_SRGB;
+    case Texture::Format::R16_G16_FLOAT:
         return VK_FORMAT_R16G16_SFLOAT;
-    case Texture::Format::r16g16b16a16_float:
+    case Texture::Format::R16_G16_B16_A16_FLOAT:
         return VK_FORMAT_R16G16B16A16_SFLOAT;
-    case Texture::Format::r32g32b32a32_float:
+    case Texture::Format::R32_G32_B32_A32_FLOAT:
         return VK_FORMAT_R32G32B32A32_SFLOAT;
-    case Texture::Format::d32_float:
+    case Texture::Format::D32_FLOAT:
         return VK_FORMAT_D32_SFLOAT;
     default:
         assert(false && "Unhandled formats to convert");
@@ -269,15 +271,17 @@ constexpr VkImageAspectFlags toVkImageAspect(Texture::Format format)
 {
     switch(format)
     {
-    case Texture::Format::Undefined:
-    case Texture::Format::r8_unorm:
-    case Texture::Format::r8g8b8a8_unorm:
-    case Texture::Format::r8g8b8a8_srgb:
-    case Texture::Format::r16_g16_float:
-    case Texture::Format::r16g16b16a16_float:
-    case Texture::Format::r32g32b32a32_float:
+    case Texture::Format::UNDEFINED:
+        assert(false);
+    case Texture::Format::R8_UNORM:
+    case Texture::Format::R8_G8_B8_A8_UNORM:
+    case Texture::Format::R8_G8_B8_A8_SRGB:
+    case Texture::Format::B8_G8_R8_A8_SRGB:
+    case Texture::Format::R16_G16_FLOAT:
+    case Texture::Format::R16_G16_B16_A16_FLOAT:
+    case Texture::Format::R32_G32_B32_A32_FLOAT:
         return VK_IMAGE_ASPECT_COLOR_BIT;
-    case Texture::Format::d32_float:
+    case Texture::Format::D32_FLOAT:
         return VK_IMAGE_ASPECT_DEPTH_BIT;
     default:
         assert(false && "Unhandled formats to convert");
