@@ -2,6 +2,7 @@
 #include <Datastructures/Span.hpp>
 #include <Engine/Graphics/Barrier/Barrier.hpp>
 #include <Engine/Graphics/Mesh/Cube.hpp>
+#include <Engine/Graphics/Mesh/Fullscreen.hpp>
 #include <Engine/Misc/Math.hpp>
 #include <Engine/Scene/DefaultComponents.hpp>
 #include <Engine/Scene/Scene.hpp>
@@ -69,6 +70,14 @@ Editor::Editor()
         .size = {gfxDevice.getSwapchainWidth(), gfxDevice.getSwapchainHeight()},
     });
 
+    offscreenTexture = resourceManager.createTexture(Texture::CreateInfo{
+        .debugName = "Offscreen RT",
+        .format = offscreenRTFormat,
+        .allStates = ResourceState::Rendertarget | ResourceState::SampleSourceGraphics,
+        .initialState = ResourceState::Rendertarget,
+        .size = {gfxDevice.getSwapchainWidth(), gfxDevice.getSwapchainHeight()},
+    });
+
     // default resources --------------------------------------------
 
     createDefaultSamplers();
@@ -78,13 +87,17 @@ Editor::Editor()
         .debugName = "PBRBasic",
         .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
         .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
-        .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
+        .colorFormats = {offscreenRTFormat},
         .depthFormat = depthFormat,
     });
     assert(resourceManager.get<std::string>(resourceManager.getMaterial("PBRBasic")) != nullptr);
 
     resourceManager.createMesh(Cube::positions, Cube::attributes, Cube::indices, "DefaultCube");
     assert(resourceManager.get<std::string>(resourceManager.getMesh("DefaultCube")) != nullptr);
+
+    fullscreenTri = resourceManager.createMesh(
+        FullscreenTri::positions, FullscreenTri::attributes, FullscreenTri::indices, "FullscreenTri");
+    assert(resourceManager.get<std::string>(fullscreenTri) != nullptr);
 
     mainCamera =
         Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
@@ -113,7 +126,7 @@ Editor::Editor()
         .debugName = "texturedUnlit",
         .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
         .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
-        .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
+        .colorFormats = {offscreenRTFormat},
         .depthFormat = depthFormat,
     });
 
@@ -121,6 +134,16 @@ Editor::Editor()
 
     auto unlitMatInst = resourceManager.createMaterialInstance(unlitTexturedMaterial);
     MaterialInstance::setResource(unlitMatInst, "texture", *resourceManager.get<ResourceIndex>(mipDebugTex));
+
+    auto writeToSwapchainMat = resourceManager.createMaterial({
+        .debugName = "writeToSwapchain",
+        .vertexShader = {.sourcePath = SHADERS_PATH "/WriteToSwapchain/WriteToSwapchain.vert"},
+        .fragmentShader = {.sourcePath = SHADERS_PATH "/WriteToSwapchain/WriteToSwapchain.frag"},
+        .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
+    });
+    writeToSwapchainMatInst = resourceManager.createMaterialInstance(writeToSwapchainMat);
+    MaterialInstance::setResource(
+        writeToSwapchainMatInst, "texture", *resourceManager.get<ResourceIndex>(offscreenTexture));
 
     Material::Handle pbrMat = resourceManager.getMaterial("PBRBasic");
     Material::setResource(
@@ -133,7 +156,7 @@ Editor::Editor()
         .debugName = "equiSkyboxMat",
         .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
         .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
-        .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
+        .colorFormats = {offscreenRTFormat},
         .depthFormat = depthFormat,
     });
     auto equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
@@ -146,7 +169,7 @@ Editor::Editor()
         .debugName = "cubeSkyboxMat",
         .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
         .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
-        .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
+        .colorFormats = {offscreenRTFormat},
         .depthFormat = depthFormat,
     });
 
@@ -633,13 +656,17 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
                 .stateAfter = ResourceState::DepthStencilTarget,
                 .allowDiscardOriginal = true,
             },
+            Barrier::FromImage{
+                .texture = offscreenTexture,
+                .stateBefore = ResourceState::SampleSourceGraphics,
+                .stateAfter = ResourceState::Rendertarget,
+                .allowDiscardOriginal = true,
+            },
         });
-    gfxDevice.insertSwapchainImageBarrier(
-        offscreenCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::Rendertarget);
 
     gfxDevice.beginRendering(
         offscreenCmdBuffer,
-        {ColorTarget{.texture = ColorTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Clear}},
+        {ColorTarget{.texture = offscreenTexture, .loadOp = RenderTarget::LoadOp::Clear}},
         DepthTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
 
     // Render scene ------------------------------
@@ -750,11 +777,51 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
 VkCommandBuffer Editor::drawUI(int threadIndex)
 {
     VkCommandBuffer onscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
+
+    gfxDevice.insertBarriers(
+        onscreenCmdBuffer,
+        {
+            Barrier::FromImage{
+                .texture = offscreenTexture,
+                .stateBefore = ResourceState::Rendertarget,
+                .stateAfter = ResourceState::SampleSourceGraphics,
+            },
+        });
+
+    gfxDevice.insertSwapchainImageBarrier(
+        onscreenCmdBuffer, ResourceState::OldSwapchainImage, ResourceState::Rendertarget);
+
     gfxDevice.beginRendering(
         onscreenCmdBuffer,
-        {ColorTarget{.texture = ColorTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Load}},
+        {ColorTarget{.texture = ColorTarget::SwapchainImage{}, .loadOp = RenderTarget::LoadOp::Clear}},
         DepthTarget{.texture = Texture::Handle::Null()});
+
+    // Transfer offscreen image to swapchain
+
+    // TODO: abstraction for this!
+    BindlessIndices pushConstants;
+    pushConstants.RenderInfoBuffer =
+        *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
+    pushConstants.transformBuffer = *resourceManager.get<ResourceIndex>(getCurrentFrameData().objectBuffer);
+
+    Material::Handle newMaterial = *resourceManager.get<Material::Handle>(writeToSwapchainMatInst);
+
+    gfxDevice.setGraphicsPipelineState(onscreenCmdBuffer, *resourceManager.get<VkPipeline>(newMaterial));
+
+    Buffer::Handle paramBuffer =
+        resourceManager.get<MaterialInstance::ParameterBuffer>(writeToSwapchainMatInst)->deviceBuffer;
+    pushConstants.materialInstanceParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
+
+    gfxDevice.pushConstants(onscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
+
+    auto* meshData = resourceManager.get<Mesh::RenderData>(fullscreenTri);
+    gfxDevice.bindIndexBuffer(onscreenCmdBuffer, meshData->indexBuffer);
+    gfxDevice.bindVertexBuffers(
+        onscreenCmdBuffer, 0, 2, {meshData->positionBuffer, meshData->attributeBuffer}, {0, 0});
+    gfxDevice.drawIndexed(onscreenCmdBuffer, meshData->indexCount, 1, 0, 0, 0);
+
     gfxDevice.drawImGui(onscreenCmdBuffer);
+
     gfxDevice.endRendering(onscreenCmdBuffer);
 
     gfxDevice.insertSwapchainImageBarrier(

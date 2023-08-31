@@ -873,6 +873,9 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
 
 void VulkanDevice::destroy(Texture::Handle handle)
 {
+    if(!texturePool.isHandleValid(handle))
+        return;
+
     ResourceStateMulti states = get<Texture::Descriptor>(handle)->allStates;
     auto resourceIndex = *get<ResourceIndex>(handle);
     bool usedSampling = bool(
