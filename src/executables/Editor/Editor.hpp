@@ -84,7 +84,6 @@ class Editor final : public Application
         uint32_t RenderInfoBuffer;
         // Buffer with object transforms and index into that buffer
         uint32_t transformBuffer;
-        uint32_t transformIndex;
         // Buffer with material/-instance parameters
         uint32_t materialParamsBuffer;
         uint32_t materialInstanceParamsBuffer;

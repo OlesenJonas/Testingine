@@ -14,6 +14,8 @@ struct VSInput
     [[vk::location(2)]] float4 vTangent : TANGENT0;
     [[vk::location(3)]] float3 vColor : COLOR0;
     [[vk::location(4)]] float2 vTexCoord : TEXCOORD0;
+    [[vk::builtin("BaseInstance")]]
+    int baseInstance : BASE_INSTANCE;
 };
 
 #endif

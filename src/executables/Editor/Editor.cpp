@@ -752,7 +752,6 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
                 pushConstants.materialInstanceParamsBuffer = 0xFFFFFFFF;
         }
 
-        pushConstants.transformIndex = i;
         gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
 
         if(objectMesh != lastMesh)
@@ -765,7 +764,7 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
             lastMesh = objectMesh;
         }
 
-        gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, 0);
+        gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, i);
     }
 
     gfxDevice.endRendering(offscreenCmdBuffer);

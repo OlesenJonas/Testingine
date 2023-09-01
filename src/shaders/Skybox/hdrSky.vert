@@ -16,7 +16,6 @@ DefineShaderInputs(
     Handle< ConstantBuffer<RenderPassData> > renderPassData;
     // Buffer with object transforms and index into that buffer
     Handle< StructuredBuffer<float4x4> > transformBuffer;
-    uint transformIndex;
     // Buffer with material/-instance parameters
     // using placeholder, since parameter types arent defined here
     Handle< Placeholder > materialParamsBuffer;
@@ -30,7 +29,7 @@ VSOutput main(VSInput input)
     vsOut.localPos = input.vPosition;
 
     const StructuredBuffer<float4x4> transformBuffer = shaderInputs.transformBuffer.get();
-    const float4x4 modelMatrix = transformBuffer[shaderInputs.transformIndex];
+    const float4x4 modelMatrix = transformBuffer[input.baseInstance];
 
     const RenderPassData renderPassData = shaderInputs.renderPassData.Load();
     const float4x4 projMatrix = renderPassData.proj;
