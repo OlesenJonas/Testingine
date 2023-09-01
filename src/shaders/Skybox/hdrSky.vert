@@ -14,8 +14,6 @@ DefineShaderInputs(
     // Resolution, matrices (differs in eg. shadow and default pass)
     // Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
     Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with object transforms and index into that buffer
-    Handle< StructuredBuffer<float4x4> > transformBuffer;
     // Buffer with material/-instance parameters
     // using placeholder, since parameter types arent defined here
     Handle< Placeholder > materialParamsBuffer;
@@ -28,7 +26,8 @@ VSOutput main(VSInput input)
 
     vsOut.localPos = input.vPosition;
 
-    const StructuredBuffer<float4x4> transformBuffer = shaderInputs.transformBuffer.get();
+    // const StructuredBuffer<float4x4> transformBuffer = globalTransformBuffer.get();
+    const StructuredBuffer<float4x4> transformBuffer = GLOBAL_TRANSFORMS;
     const float4x4 modelMatrix = transformBuffer[input.baseInstance];
 
     const RenderPassData renderPassData = shaderInputs.renderPassData.Load();

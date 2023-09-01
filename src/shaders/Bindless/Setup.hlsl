@@ -55,6 +55,10 @@ struct ShaderInputs             \
 [[vk::push_constant]]           \
 ShaderInputs shaderInputs;
 
+// currently 0th buffer is hardcoded (c++ side) to be the transform buffer
+// static Handle< StructuredBuffer<float4x4> > globalTransformBuffer = Handle< StructuredBuffer<float4x4> >(0);
+#define GLOBAL_TRANSFORMS g_StructuredBuffer_float4x4[0]
+
 // --------------------------------
 
 #endif

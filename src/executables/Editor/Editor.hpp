@@ -72,18 +72,18 @@ class Editor final : public Application
         glm::vec3 cameraPositionWS;
         float pad;
     };
-    struct GPUObjectData
-    {
-        glm::mat4 modelMatrix;
-    };
+
+    const int MAX_GPU_OBJECTS = 10000;
+    Buffer::Handle transformsBuffer;
+    // TODO: bitset and/or full pool logic instead
+    uint32_t freeTransformIndex = 0;
+
     struct BindlessIndices
     {
         // Frame globals
         uint32_t FrameDataBuffer;
         // Resolution, matrices (differs in eg. shadow and default pass)
         uint32_t RenderInfoBuffer;
-        // Buffer with object transforms and index into that buffer
-        uint32_t transformBuffer;
         // Buffer with material/-instance parameters
         uint32_t materialParamsBuffer;
         uint32_t materialInstanceParamsBuffer;
@@ -92,8 +92,6 @@ class Editor final : public Application
     struct PerFrameData
     {
         Buffer::Handle renderPassDataBuffer;
-        // TODO: dont need to upload this every frame, most objects are static!!
-        Buffer::Handle objectBuffer;
     };
 
     PerFrameData perFrameData[VulkanDevice::FRAMES_IN_FLIGHT];

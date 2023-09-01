@@ -16,8 +16,6 @@ DefineShaderInputs(
     Handle< Placeholder > frameDataBuffer;
     // Resolution, matrices (differs in eg. shadow and default pass)
     Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with object transforms and index into that buffer
-    Handle< StructuredBuffer<float4x4> > transformBuffer;
     // Buffer with material/-instance parameters
     Handle< Placeholder > materialParams;
     Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;

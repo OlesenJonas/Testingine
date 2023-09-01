@@ -41,6 +41,9 @@ ECS::Entity parseNode(
             renderInfo->mesh = meshes[glTFNode.meshIndex.value()];
             renderInfo->materialInstance = matInsts[gltfMesh.primitives[0].materialIndex];
         }
+        auto* gpuRepr = nodeEntity.addComponent<GPURepr>();
+        assert(gpuRepr->isDirty);
+        assert(gpuRepr->index == 0xFFFFFFFF);
     }
 
     if(glTFNode.childNodeIndices.has_value())

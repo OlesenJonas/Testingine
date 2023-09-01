@@ -20,6 +20,12 @@ struct Transform
     void calculateLocalTransformMatrix();
 };
 
+struct GPURepr
+{
+    bool isDirty = true;
+    uint32_t index = 0xFFFFFFFF;
+};
+
 struct Hierarchy
 {
     ECS::EntityID parent = 0;
