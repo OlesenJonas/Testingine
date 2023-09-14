@@ -20,25 +20,25 @@ std::size_t ECS::ComponentMaskHash::operator()(const ComponentMask& key) const
     }
 }
 
-ECS::Entity::Entity(ECS& ecs, EntityID id) : ecs(ecs), id(id)
-{
-}
+ECS::Entity::Entity(EntityID id) : id(id) {}
 
 ECS::ECS()
 {
+    ptr = this;
     // create "Empty" (no components) archetype to hold empty entities by default
-    archetypes.emplace_back(ComponentMask{}, *this);
+    archetypes.emplace_back(ComponentMask{});
     assert(archetypes[0].componentMask.none());
     archetypeLUT.emplace(std::make_pair(ComponentMask{}, 0));
 }
 
 ECS::Entity ECS::createEntity()
 {
-    Entity entity{*this, entityIDCounter++};
+    Entity entity{entityIDCounter++};
 
     Archetype& emptyArchetype = archetypes[0];
     uint32_t inArchetypeIndex = emptyArchetype.entityIDs.size();
     emptyArchetype.entityIDs.push_back(entity.id);
+    emptyArchetype.storageUsed++;
 
     auto insertion = entityLUT.emplace(std::make_pair(entity.id, ArchetypeEntry{0, inArchetypeIndex}));
     auto& entry = insertion.first->second;
@@ -50,24 +50,16 @@ ECS::Entity ECS::createEntity()
 ECS::Entity ECS::getEntity(ECS::EntityID id)
 {
     assert(entityLUT.find(id) != entityLUT.end());
-    return Entity{*this, id};
+    return Entity{id};
 }
 
-ECS::EntityID ECS::Entity::getID() const
-{
-    return id;
-}
-
-ECS& ECS::Entity::getECS()
-{
-    return ecs;
-}
+ECS::EntityID ECS::Entity::getID() const { return id; }
 
 uint32_t ECS::createArchetype(ComponentMask mask)
 {
     assert(archetypeLUT.find(mask) == archetypeLUT.end());
 
-    Archetype& newArchetype = archetypes.emplace_back(mask, *this);
+    Archetype& newArchetype = archetypes.emplace_back(mask);
     uint32_t newArchetypeIndex = archetypes.size() - 1;
     archetypeLUT.emplace(std::make_pair(mask, newArchetypeIndex));
     assert(archetypeLUT.find(mask) != archetypeLUT.end());
@@ -75,12 +67,13 @@ uint32_t ECS::createArchetype(ComponentMask mask)
     return newArchetypeIndex;
 }
 
-ECS::Archetype::Archetype(ComponentMask mask, ECS& ecs) : componentMask(mask), ecs(ecs)
+ECS::Archetype::Archetype(ComponentMask mask) : componentMask(mask)
 {
     if(componentMask.none())
     {
         storageUsed = 0;
-        storageCapacity = 0;
+        storageCapacity = ~size_t(0);
+        assert(componentArrays.empty());
     }
     else
     {
@@ -94,7 +87,7 @@ ECS::Archetype::Archetype(ComponentMask mask, ECS& ecs) : componentMask(mask), e
         uint32_t currentBitmaskIndex = componentMask.find_first();
         for(int i = 0; i < componentCount; i++)
         {
-            const size_t componentSize = ecs.componentInfos[currentBitmaskIndex].size;
+            const size_t componentSize = ECS::impl()->componentInfos[currentBitmaskIndex].size;
             componentArrays[i] = malloc(componentSize * storageCapacity);
             currentBitmaskIndex = componentMask.find_next(currentBitmaskIndex);
         }
@@ -103,7 +96,6 @@ ECS::Archetype::Archetype(ComponentMask mask, ECS& ecs) : componentMask(mask), e
 
 ECS::Archetype::Archetype(Archetype&& other) noexcept
     : componentMask(other.componentMask),
-      ecs(other.ecs),
       componentArrays(std::move(other.componentArrays)),
       entityIDs(std::move(other.entityIDs)),
       storageUsed(other.storageUsed),
@@ -117,14 +109,14 @@ ECS::Archetype::~Archetype()
     uint32_t currentBitmaskIndex = componentMask.find_first();
     for(int i = 0; i < componentArrays.size(); i++)
     {
-        ComponentInfo& componentInfo = ecs.componentInfos[currentBitmaskIndex];
+        ComponentInfo& componentInfo = ECS::impl()->componentInfos[currentBitmaskIndex];
         ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
         if(destroyFunc != nullptr)
         {
             for(int j = 0; j < storageUsed; j++)
             {
-                std::byte* byteArray = (std::byte*)componentArrays[i];
-                destroyFunc(&byteArray[j * componentInfo.size]);
+                auto* componentArray = (std::byte*)componentArrays[i];
+                destroyFunc(&componentArray[j * componentInfo.size]);
             }
         }
         // destruct all objects that still exist in array
@@ -148,12 +140,12 @@ void ECS::Archetype::growStorage()
     uint32_t currentBitmaskIndex = componentMask.find_first();
     for(int i = 0; i < componentCount; i++)
     {
-        const auto& componentInfo = ecs.componentInfos[currentBitmaskIndex];
+        const auto& componentInfo = ECS::impl()->componentInfos[currentBitmaskIndex];
 
-        std::byte* oldStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
-        std::byte* newStorage = (std::byte*)malloc(componentInfo.size * newCapacity);
+        auto* oldStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
+        auto* newStorage = (std::byte*)malloc(componentInfo.size * newCapacity);
 
-        const ComponentInfo::MoveConstrFunc_t moveFunc = componentInfo.moveFunc;
+        const ComponentInfo::MoveConstrFunc_t moveFunc = componentInfo.moveConstrFunc;
         const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
         if(moveFunc == nullptr)
         {
@@ -183,37 +175,34 @@ void ECS::Archetype::growStorage()
     storageCapacity = newCapacity;
 }
 
-void ECS::Archetype::fixGap(uint32_t gapIndex)
+void ECS::Archetype::removeEntry(uint32_t index)
 {
+    assert(storageUsed > 0);
     uint32_t oldEndIndex = entityIDs.size() - 1;
-    if(!componentArrays.empty())
-        storageUsed--;
-    // move last group of components into gap to fill it
+
     uint32_t currentBitmaskIndex = componentMask.find_first();
     for(int i = 0; i < componentMask.count(); i++)
     {
-        const auto& componentInfo = ecs.componentInfos[currentBitmaskIndex];
+        const auto& componentInfo = ECS::impl()->componentInfos[currentBitmaskIndex];
 
-        std::byte* componentStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
+        auto* componentStorage = reinterpret_cast<std::byte*>(componentArrays[i]);
 
-        const ComponentInfo::MoveConstrFunc_t moveFunc = componentInfo.moveFunc;
+        const ComponentInfo::MoveConstrFunc_t moveConstrFunc = componentInfo.moveConstrFunc;
         const ComponentInfo::DestroyFunc_t destroyFunc = componentInfo.destroyFunc;
-        if(moveFunc == nullptr)
+        if(moveConstrFunc == nullptr)
         {
-            if(gapIndex != oldEndIndex)
-                // type is trivially relocatable, just memcpy components into new entry
-                memcpy(
-                    &componentStorage[gapIndex * componentInfo.size],
-                    &componentStorage[oldEndIndex * componentInfo.size],
-                    componentInfo.size);
+            // type is trivially relocatable, just memcpy component into gap slot
+            memcpy(
+                &componentStorage[index * componentInfo.size],
+                &componentStorage[oldEndIndex * componentInfo.size],
+                componentInfo.size);
         }
         else
         {
-            // move from old end into gap, and destroy old end
-            if(gapIndex != oldEndIndex)
-                moveFunc(
-                    &componentStorage[oldEndIndex * componentInfo.size],
-                    &componentStorage[gapIndex * componentInfo.size]);
+            destroyFunc(&componentStorage[index * componentInfo.size]);
+            moveConstrFunc(
+                &componentStorage[oldEndIndex * componentInfo.size],
+                &componentStorage[index * componentInfo.size]);
             destroyFunc(&componentStorage[oldEndIndex * componentInfo.size]);
         }
 
@@ -222,17 +211,18 @@ void ECS::Archetype::fixGap(uint32_t gapIndex)
 
     // do same swap and delete on the entityID vector
     assert(entityIDs.size() - 1 == oldEndIndex);
-    entityIDs[gapIndex] = entityIDs[oldEndIndex];
+    entityIDs[index] = entityIDs[oldEndIndex];
     entityIDs.pop_back();
-    assert(storageCapacity == 0 || entityIDs.size() == storageUsed);
+    storageUsed--;
+    assert(entityIDs.size() == storageUsed);
 
     // Also need to update entityLUT information of filler entity
-    if(gapIndex != oldEndIndex)
+    if(index != oldEndIndex)
     {
-        auto iter = ecs.entityLUT.find(entityIDs[gapIndex]);
-        assert(iter != ecs.entityLUT.end());
+        auto iter = ECS::impl()->entityLUT.find(entityIDs[index]);
+        assert(iter != ECS::impl()->entityLUT.end());
         assert(iter->second.inArrayIndex == oldEndIndex);
-        iter->second.inArrayIndex = gapIndex;
+        iter->second.inArrayIndex = index;
     }
 }
 

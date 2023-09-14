@@ -893,7 +893,8 @@ void VulkanDevice::destroy(Texture::Handle handle)
     else if(usedStorage)
         usage = BindlessManager::ImageUsage::Storage;
 
-    bindlessManager.freeImageBinding(resourceIndex, usage);
+    if(usedSampling || usedStorage)
+        bindlessManager.freeImageBinding(resourceIndex, usage);
 
     VkImageView imageView = get<Texture::GPU>(handle)->imageView;
     deleteQueue.pushBack([=]() { vkDestroyImageView(device, imageView, nullptr); });

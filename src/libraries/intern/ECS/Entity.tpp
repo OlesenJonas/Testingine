@@ -7,17 +7,17 @@ template <typename C, typename... Args>
     requires std::constructible_from<C, Args...>
 C* ECS::Entity::addComponent(Args&&... args)
 {
-    return ecs.addComponent<C>(this, std::forward<Args>(args)...);
+    return ECS::impl()->addComponent<C>(this->id, std::forward<Args>(args)...);
 };
 
 template <typename C>
 void ECS::Entity::removeComponent()
 {
-    ecs.removeComponent<C>(this);
+    ECS::impl()->removeComponent<C>(this->id);
 };
 
 template <typename C>
 C* ECS::Entity::getComponent()
 {
-    return ecs.getComponent<C>(this);
+    return ECS::impl()->getComponent<C>(this->id);
 };

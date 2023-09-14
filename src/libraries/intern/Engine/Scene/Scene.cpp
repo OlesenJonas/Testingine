@@ -366,7 +366,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
 
 void Scene::updateTransformHierarchy(ECS::Entity entity, glm::mat4 parentToWorld)
 {
-    ECS& ecs = entity.getECS();
+    ECS& ecs = *ECS::impl();
 
     auto* transform = entity.getComponent<Transform>();
     transform->localToWorld = parentToWorld * transform->localTransform;

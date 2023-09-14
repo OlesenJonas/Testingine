@@ -58,7 +58,7 @@ class ECSTester
         ECS::ComponentInfo& info = ecs.componentInfos[0];
         res &= CheckEqual(info.size, sizeof(Foo));
         // Foo is trivially relocatable
-        res &= CheckEqual(info.moveFunc, nullptr);
+        res &= CheckEqual(info.moveConstrFunc, nullptr);
         res &= CheckEqual(info.destroyFunc, nullptr);
         res &= CheckEqual(ecs.bitmaskIndexFromComponentType<Foo>(), 0);
         // Everything else must be unchanged
@@ -82,7 +82,7 @@ class ECSTester
         info = ecs.componentInfos[1];
         res &= CheckEqual(info.size, sizeof(Bar));
         // Foo is trivially relocatable
-        res &= CheckNotEqual(info.moveFunc, nullptr);
+        res &= CheckNotEqual(info.moveConstrFunc, nullptr);
         res &= CheckNotEqual(info.destroyFunc, nullptr);
         res &= CheckEqual(ecs.bitmaskIndexFromComponentType<Bar>(), 1);
         // Everything else must be unchanged

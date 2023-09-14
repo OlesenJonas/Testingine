@@ -238,20 +238,17 @@ Editor::Editor()
     // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
     auto* gpuPtr = (glm::mat4*)(*resourceManager.get<void*>(transformsBuffer));
     ecs.forEach<RenderInfo, Transform, GPURepr>(
-        [&](RenderInfo* renderinfos, Transform* transforms, GPURepr* gpuRepr, uint32_t count)
+        [&](RenderInfo* renderinfo, Transform* transform, GPURepr* gpuRepr)
         {
-            for(int i = 0; i < count; i++)
-            {
-                auto* name = resourceManager.get<std::string>(renderinfos[i].mesh);
-                auto freeIndex = freeTransformIndex;
+            auto* name = resourceManager.get<std::string>(renderinfo->mesh);
+            auto freeIndex = freeTransformIndex;
 
-                assert(gpuRepr[i].isDirty);
-                assert(gpuRepr[i].index == 0xFFFFFFFF);
-                gpuPtr[freeTransformIndex] = transforms[i].localToWorld;
-                gpuRepr[i].index = freeTransformIndex;
-                gpuRepr[i].isDirty = false;
-                freeTransformIndex++;
-            }
+            assert(gpuRepr->isDirty);
+            assert(gpuRepr->index == 0xFFFFFFFF);
+            gpuPtr[freeTransformIndex] = transform->localToWorld;
+            gpuRepr->index = freeTransformIndex;
+            gpuRepr->isDirty = false;
+            freeTransformIndex++;
         });
 
     // ------------------------------------------------------------------------------
@@ -715,57 +712,52 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
     uint32_t indexCount = 0;
 
     ecs.forEach<RenderInfo, GPURepr>(
-        [&](RenderInfo* renderinfos, GPURepr* gpuRepr, uint32_t count)
+        [&](RenderInfo* renderinfo, GPURepr* gpuRepr)
         {
-            for(int i = 0; i < count; i++)
+            assert(!gpuRepr->isDirty);
+            assert(gpuRepr->index != 0xFFFFFFFF);
+
+            Mesh::Handle objectMesh = renderinfo->mesh;
+            MaterialInstance::Handle objectMaterialInstance = renderinfo->materialInstance;
+
+            if(objectMaterialInstance != lastMaterialInstance)
             {
-                assert(!gpuRepr[i].isDirty);
-                assert(gpuRepr[i].index != 0xFFFFFFFF);
-
-                Mesh::Handle objectMesh = renderinfos[i].mesh;
-                MaterialInstance::Handle objectMaterialInstance = renderinfos[i].materialInstance;
-
-                if(objectMaterialInstance != lastMaterialInstance)
+                Material::Handle newMaterial = *resourceManager.get<Material::Handle>(objectMaterialInstance);
+                if(newMaterial != lastMaterial)
                 {
-                    Material::Handle newMaterial = *resourceManager.get<Material::Handle>(objectMaterialInstance);
-                    if(newMaterial != lastMaterial)
-                    {
-                        gfxDevice.setGraphicsPipelineState(
-                            offscreenCmdBuffer, *resourceManager.get<VkPipeline>(newMaterial));
+                    gfxDevice.setGraphicsPipelineState(
+                        offscreenCmdBuffer, *resourceManager.get<VkPipeline>(newMaterial));
 
-                        auto* parameters = resourceManager.get<Material::ParameterBuffer>(newMaterial);
-                        Buffer::Handle paramBuffer = parameters->deviceBuffer;
-                        if(paramBuffer.isValid())
-                            pushConstants.materialParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
-                        else
-                            pushConstants.materialParamsBuffer = 0xFFFFFFFF;
-                        lastMaterial = newMaterial;
-                    }
-
-                    Buffer::Handle paramBuffer =
-                        resourceManager.get<MaterialInstance::ParameterBuffer>(objectMaterialInstance)
-                            ->deviceBuffer;
+                    auto* parameters = resourceManager.get<Material::ParameterBuffer>(newMaterial);
+                    Buffer::Handle paramBuffer = parameters->deviceBuffer;
                     if(paramBuffer.isValid())
-                        pushConstants.materialInstanceParamsBuffer =
-                            *resourceManager.get<ResourceIndex>(paramBuffer);
+                        pushConstants.materialParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
                     else
-                        pushConstants.materialInstanceParamsBuffer = 0xFFFFFFFF;
+                        pushConstants.materialParamsBuffer = 0xFFFFFFFF;
+                    lastMaterial = newMaterial;
                 }
 
-                gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
-
-                if(objectMesh != lastMesh)
-                {
-                    auto* meshData = resourceManager.get<Mesh::RenderData>(objectMesh);
-                    indexCount = meshData->indexCount;
-                    gfxDevice.bindIndexBuffer(offscreenCmdBuffer, meshData->indexBuffer);
-                    gfxDevice.bindVertexBuffers(
-                        offscreenCmdBuffer, 0, 2, {meshData->positionBuffer, meshData->attributeBuffer}, {0, 0});
-                    lastMesh = objectMesh;
-                }
-
-                gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, gpuRepr[i].index);
+                Buffer::Handle paramBuffer =
+                    resourceManager.get<MaterialInstance::ParameterBuffer>(objectMaterialInstance)->deviceBuffer;
+                if(paramBuffer.isValid())
+                    pushConstants.materialInstanceParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
+                else
+                    pushConstants.materialInstanceParamsBuffer = 0xFFFFFFFF;
             }
+
+            gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
+
+            if(objectMesh != lastMesh)
+            {
+                auto* meshData = resourceManager.get<Mesh::RenderData>(objectMesh);
+                indexCount = meshData->indexCount;
+                gfxDevice.bindIndexBuffer(offscreenCmdBuffer, meshData->indexBuffer);
+                gfxDevice.bindVertexBuffers(
+                    offscreenCmdBuffer, 0, 2, {meshData->positionBuffer, meshData->attributeBuffer}, {0, 0});
+                lastMesh = objectMesh;
+            }
+
+            gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, gpuRepr->index);
         });
 
     gfxDevice.endRendering(offscreenCmdBuffer);

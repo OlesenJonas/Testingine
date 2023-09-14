@@ -3,7 +3,10 @@
 #include <Datastructures/ArrayHelpers.hpp>
 #include <Datastructures/Concepts.hpp>
 #include <EASTL/bitset.h>
+#include <array>
+#include <cassert>
 #include <cstdint>
+#include <functional>
 #include <unordered_map>
 #include <vector>
 
@@ -14,7 +17,16 @@ class ECSTester;
 struct ECS
 {
   private:
-    struct ComponentInfo;
+    inline static ECS* ptr = nullptr;
+
+  public:
+    [[nodiscard]] static inline ECS* impl()
+    {
+        assert(ptr != nullptr && "Static pointer for type ECS was not initialized!");
+        return ptr;
+    }
+
+  private:
     struct Archetype;
     struct ArchetypeEntry;
 
@@ -38,58 +50,41 @@ struct ECS
     /*
         Execute something for all entities holding the requested components
         The given callable needs to have the signature:
-            f(T1*, ..., TN*, uint32_t count) when the template arguments of forEach are <T1,...,TN>
-        - This function can be called multiple times internally! (once for each archetype containing all requested
-            components). For that reason "count" may not necessarily be the total amount of entities with those
-            components.
-        - This function must not create, delete, change existing entities!
-            That could relocate internal storage which would break the given pointers!
+            f(T1*, ..., TN*) when the template arguments of forEach are <T1,...,TN>
+        - This function must not create, delete, add/remove components from existing entities!
+            That could relocate internal storage which would break the internal iterators pointers!
     */
-    template <typename... Types, typename Func>
-        requires(sizeof...(Types) >= 2) &&                                   //
-                isDistinct<Types...>::value &&                               //
-                std::invocable<Func, std::add_pointer_t<Types>..., uint32_t> //
-    void forEach(Func func);
+    template <typename... Types>
+        requires(sizeof...(Types) >= 2) &&  //
+                isDistinct<Types...>::value //
+    void forEach(std::function<void(std::add_pointer_t<Types>...)> func);
     // Overload if only requesting a single component, since thats a lot easier
-    template <typename Type, typename Func>
-        requires std::invocable<Func, std::add_pointer_t<Type>, uint32_t> //
-    void forEach(Func func);
+    template <typename Type>
+    void forEach(std::function<void(std::add_pointer_t<Type>)> func);
 
   private:
     template <typename C>
     uint32_t bitmaskIndexFromComponentType();
 
-    template <typename C>
-    ComponentMask componentMaskFromComponentType();
-
     template <typename C, typename... Args>
-    C* addComponent(Entity* entity, Args&&... args);
+    C* addComponent(EntityID entity, Args&&... args);
 
     template <typename C>
-    void removeComponent(Entity* entity);
+    void removeComponent(EntityID entity);
 
     template <typename C>
-    C* getComponent(Entity* entity);
+    C* getComponent(EntityID entity);
 
+    /*
+        returns index of new archetype inside archetypes array
+    */
     uint32_t createArchetype(ComponentMask mask);
-
-    template <typename... Types, std::size_t... I>
-    void fillBitmaskAndIndices(
-        ArrayReference<uint32_t, sizeof...(Types)> indices, ComponentMask& mask, std::index_sequence<I...>);
-
-    template <typename... Types, std::size_t... I>
-    void fillPtrTuple(
-        ArrayReference<uint32_t, sizeof...(Types)> indices,
-        ECS::Archetype& archetype,
-        std::tuple<std::add_pointer_t<Types>...>& tuple,
-        std::index_sequence<I...>);
 
     //------------------------ Struct Definitions
   public:
     struct Entity
     {
         EntityID getID() const;
-        ECS& getECS();
 
         template <typename C, typename... Args>
             requires std::constructible_from<C, Args...>
@@ -103,15 +98,9 @@ struct ECS
 
       private:
         // only allow construction by ECS
-        explicit Entity(ECS& ecs, EntityID id);
+        explicit Entity(EntityID id);
 
         EntityID id;
-        // not sure if its worth it to store the reference here just for the nicer syntax of
-        //   entity.addComponent
-        //   instead of
-        //   ecs.addComponent(entity, params)
-        //   will see
-        ECS& ecs;
 
         friend ECS;
     };
@@ -124,7 +113,7 @@ struct ECS
 
     struct Archetype
     {
-        explicit Archetype(ComponentMask mask, ECS& ecs);
+        explicit Archetype(ComponentMask mask);
         Archetype(Archetype&& other) noexcept;
         ~Archetype();
         Archetype(const Archetype&) = delete;
@@ -135,10 +124,13 @@ struct ECS
         std::vector<EntityID> entityIDs;
         size_t storageUsed;
         size_t storageCapacity;
-        ECS& ecs;
 
         void growStorage();
-        void fixGap(uint32_t gapIndex);
+        /*
+            removes entry and fixes gap in storage array by swapping with end
+            assumes memory is not yet in a "destroyed state" (may be moved from though)
+        */
+        void removeEntry(uint32_t index);
         uint32_t getArrayIndex(uint32_t bitmaskIndex);
     };
     static_assert(std::is_move_constructible<Archetype>::value);
@@ -146,7 +138,7 @@ struct ECS
     /*
         Represents where an entity is stored
             archetypeIndex is the index into the ECS' "archetypes" array
-        and inArrayIndex is the index of the entity inside that archetype's component arrays
+            inArrayIndex is the index of the entity inside that archetype's component arrays
     */
     struct ArchetypeEntry
     {
@@ -170,7 +162,7 @@ struct ECS
         using MoveConstrFunc_t = void (*)(void* srcObject, void* dstptr);
         using DestroyFunc_t = void (*)(void*);
         size_t size = 0;
-        MoveConstrFunc_t moveFunc = nullptr;
+        MoveConstrFunc_t moveConstrFunc = nullptr;
         DestroyFunc_t destroyFunc = nullptr;
     };
 
@@ -192,12 +184,12 @@ struct ECS
     /*
         LUT to map a bitmask index to each unique type
     */
-    uint32_t bitmaskIndexCounter = 0;
+    uint32_t freeComponentBitmaskIndex = 0;
     std::unordered_map<ECSHelpers::TypeKey, uint32_t> componentTypeKeyToBitmaskIndexLUT;
     /*
         Data arrays
     */
-    std::vector<ComponentInfo> componentInfos;
+    std::array<ComponentInfo, MAX_COMPONENT_TYPES> componentInfos{};
     std::vector<Archetype> archetypes;
 
     friend ECSTester;

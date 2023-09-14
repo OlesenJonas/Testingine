@@ -34,22 +34,22 @@ void compileTest()
     entt2.addComponent<Foo>();
     entt2.addComponent<Bar>();
 
-    ecs.forEach<Foo>([](Foo* fp, uint32_t count) { int x = 13; });
+    ecs.forEach<Foo>([](Foo* fp) { int x = 13; });
     ecs.forEach<Foo, Bar>(
-        [](Foo* fp, Bar* bp, uint32_t count)
+        [](Foo* fp, Bar* bp)
         {
             int x = 13;
             int y = 27;
         });
     ecs.forEach<Bar, Foo>(
-        [](Bar* bp2, Foo* fp2, uint32_t count)
+        [](Bar* bp2, Foo* fp2)
         {
             int x = 13;
             int y = 27;
         });
-    ecs.forEach<Foo, Bar, Baz>([](Foo* fp, Bar* bp, Baz* bp2, uint32_t count) {});
-    ecs.forEach<Foo, Baz>([](Foo* fp, Baz* bp, uint32_t count) {});
-    ecs.forEach<Bar, Baz>([](Bar* bp, Baz* bp2, uint32_t count) {});
+    ecs.forEach<Foo, Bar, Baz>([](Foo* fp, Bar* bp, Baz* bp2) {});
+    ecs.forEach<Foo, Baz>([](Foo* fp, Baz* bp) {});
+    ecs.forEach<Bar, Baz>([](Bar* bp, Baz* bp2) {});
 }
 
 void testChange()
@@ -80,14 +80,7 @@ void testChange()
         entt.addComponent<Foo>(foo);
     }
 
-    ecs.forEach<Foo>(
-        [](Foo* fp, uint32_t count)
-        {
-            for(int i = 0; i < count; i++)
-            {
-                fp[i].i += 3;
-            }
-        });
+    ecs.forEach<Foo>([](Foo* fp) { fp->i += 3; });
 
     bool res = true;
     for(int i = 0; i < fooOnlyEntts.size(); i++)
@@ -110,14 +103,7 @@ void testChange()
     }
     assert(res);
 
-    ecs.forEach<Foo, Bar>(
-        [](Foo* fp, Bar* bp, uint32_t count)
-        {
-            for(int i = 0; i < count; i++)
-            {
-                fp[i].name = "FooAndBar";
-            }
-        });
+    ecs.forEach<Foo, Bar>([](Foo* fp, Bar* bp) { fp->name = "FooAndBar"; });
     // foo only entities should be unchaged
     for(int i = 0; i < fooOnlyEntts.size(); i++)
     {
@@ -129,14 +115,7 @@ void testChange()
     }
     assert(res);
 
-    ecs.forEach<Bar, Foo>(
-        [](Bar* bp, Foo* fp, uint32_t count)
-        {
-            for(int i = 0; i < count; i++)
-            {
-                bp[i].i += 2 * fp[i].i;
-            }
-        });
+    ecs.forEach<Bar, Foo>([](Bar* bp, Foo* fp) { bp->i += 2 * fp->i; });
     for(int i = 0; i < fooAndBarEntts.size(); i++)
     {
         auto& entt = fooAndBarEntts[i];
