@@ -15,25 +15,24 @@ struct Transform
     glm::quat orientation;
 
     glm::mat4 localTransform{1.0f};
+
     glm::mat4 localToWorld{1.0f};
 
     void calculateLocalTransformMatrix();
 };
 
-struct GPURepr
-{
-    bool isDirty = true;
-    uint32_t index = 0xFFFFFFFF;
-};
-
 struct Hierarchy
 {
-    ECS::EntityID parent = 0;
+    ECS::EntityID parent = 0xFFFFFFFF;
     std::vector<ECS::EntityID> children;
 };
 
-struct RenderInfo
+struct MeshRenderer
 {
     Mesh::Handle mesh;
     MaterialInstance::Handle materialInstance;
+
+    // GPU Transform info
+    bool isDirty = true;
+    uint32_t transformBufferIndex = 0xFFFFFFFF;
 };

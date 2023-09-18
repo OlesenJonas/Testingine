@@ -1,5 +1,5 @@
-#include "Scene.hpp"
 #include "DefaultComponents.hpp"
+#include "Scene.hpp"
 #include "glTF/glTF.hpp"
 #include "glTF/glTFtoTI.hpp"
 
@@ -35,15 +35,12 @@ ECS::Entity parseNode(
     if(glTFNode.meshIndex.has_value())
     {
         const glTF::Mesh& gltfMesh = gltf.meshes[glTFNode.meshIndex.value()];
-        auto* renderInfo = nodeEntity.addComponent<RenderInfo>();
+        auto* renderInfo = nodeEntity.addComponent<MeshRenderer>();
         // only primitive 0 gets loaded atm
         {
             renderInfo->mesh = meshes[glTFNode.meshIndex.value()];
             renderInfo->materialInstance = matInsts[gltfMesh.primitives[0].materialIndex];
         }
-        auto* gpuRepr = nodeEntity.addComponent<GPURepr>();
-        assert(gpuRepr->isDirty);
-        assert(gpuRepr->index == 0xFFFFFFFF);
     }
 
     if(glTFNode.childNodeIndices.has_value())

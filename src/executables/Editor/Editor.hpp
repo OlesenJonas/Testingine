@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Scene/Scene.hpp"
 #include <Datastructures/ThreadPool.hpp>
 #include <ECS/ECS.hpp>
 #include <Engine/Application/Application.hpp>
@@ -26,7 +27,7 @@ class Editor final : public Application
     ThreadPool threadPool;
 
     ECS ecs;
-    ECS::Entity sceneRoot;
+    Scene scene;
 
     // TODO: not sure if camera should be part of just Editor, or Application is general
     Camera mainCamera;

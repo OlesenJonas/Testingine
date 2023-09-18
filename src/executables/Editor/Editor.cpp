@@ -1,11 +1,11 @@
 #include "Editor.hpp"
+#include "Scene/DefaultComponents.hpp"
+#include "Scene/Scene.hpp"
 #include <Datastructures/Span.hpp>
 #include <Engine/Graphics/Barrier/Barrier.hpp>
 #include <Engine/Graphics/Mesh/Cube.hpp>
 #include <Engine/Graphics/Mesh/Fullscreen.hpp>
 #include <Engine/Misc/Math.hpp>
-#include <Engine/Scene/DefaultComponents.hpp>
-#include <Engine/Scene/Scene.hpp>
 #include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_glfw.h>
 #include <ImGui/imgui_impl_vulkan.h>
@@ -17,8 +17,7 @@ Editor::Editor()
     : Application(Application::CreateInfo{
           .name = "Testingine Editor",
           .windowHints = {{GLFW_MAXIMIZED, GLFW_TRUE}},
-      }),
-      sceneRoot(ecs.createEntity())
+      })
 {
     gfxDevice.startInitializationWork();
 
@@ -32,14 +31,6 @@ Editor::Editor()
     assert(index == 0);
     ThreadPool::nameCurrentThread("Main Thread");
     threadPool.start(4);
-
-    ecs.registerComponent<Transform>();
-    ecs.registerComponent<Hierarchy>();
-    ecs.registerComponent<RenderInfo>();
-    ecs.registerComponent<GPURepr>();
-
-    sceneRoot.addComponent<Transform>();
-    sceneRoot.addComponent<Hierarchy>();
 
     // rendering internals --------------------------------------------
 
@@ -115,7 +106,7 @@ Editor::Editor()
     gfxDevice.disableValidationErrorBreakpoint();
 
     // TODO: execute this while GPU is already doing work, instead of waiting for this *then* starting GPU
-    Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf", &ecs, sceneRoot);
+    Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf", &ecs, scene.root);
 
     createDefaultTextures(mainCmdBuffer);
 
@@ -182,14 +173,12 @@ Editor::Editor()
             cubeSkyboxMatInst, "cubeMap", *resourceManager.get<ResourceIndex>(skyboxTextures.cubeMap));
     }
 
-    auto skybox = ecs.createEntity();
+    auto skybox = scene.createEntity();
     {
-        auto* transform = skybox.addComponent<Transform>();
-        auto* renderInfo = skybox.addComponent<RenderInfo>();
-        renderInfo->mesh = resourceManager.getMesh("DefaultCube");
+        auto* meshRenderer = skybox.addComponent<MeshRenderer>();
+        meshRenderer->mesh = resourceManager.getMesh("DefaultCube");
         // renderInfo->materialInstance = equiSkyboxMatInst;
-        renderInfo->materialInstance = cubeSkyboxMatInst;
-        auto* gpuRepr = skybox.addComponent<GPURepr>();
+        meshRenderer->materialInstance = cubeSkyboxMatInst;
     }
 
     Mesh::Handle triangleMesh;
@@ -211,44 +200,37 @@ Editor::Editor()
             resourceManager.createMesh(triangleVertexPositions, triangleVertexAttributes, {}, "triangle");
     }
 
-    auto newRenderable = ecs.createEntity();
+    auto triangleObject = scene.createEntity();
     {
-        auto* renderInfo = newRenderable.addComponent<RenderInfo>();
-        renderInfo->mesh = triangleMesh;
-        renderInfo->materialInstance = unlitMatInst;
-        auto* transform = newRenderable.addComponent<Transform>();
+        auto* meshRenderer = triangleObject.addComponent<MeshRenderer>();
+        meshRenderer->mesh = triangleMesh;
+        meshRenderer->materialInstance = unlitMatInst;
+        auto* transform = triangleObject.getComponent<Transform>();
         transform->position = glm::vec3{3.0f, 0.0f, 0.0f};
         transform->calculateLocalTransformMatrix();
         // dont like having to call this manually
         transform->localToWorld = transform->localTransform;
-        /*
-            maybe a wrapper around entt + default component creation like
-            Scene::addObject() that just conatins Transform+Hierarchy component (and default parenting
-            settings) would be nice
-        */
-        assert(renderInfo->mesh.isValid());
-        assert(renderInfo->materialInstance.isValid());
 
-        auto* gpuRepr = newRenderable.addComponent<GPURepr>();
-        assert(gpuRepr->isDirty);
+        assert(meshRenderer->mesh.isValid());
+        assert(meshRenderer->materialInstance.isValid());
+        assert(meshRenderer->isDirty);
     }
 
     // ------------------------ Build transform buffer --------------------------------------------------
 
     // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
     auto* gpuPtr = (glm::mat4*)(*resourceManager.get<void*>(transformsBuffer));
-    ecs.forEach<RenderInfo, Transform, GPURepr>(
-        [&](RenderInfo* renderinfo, Transform* transform, GPURepr* gpuRepr)
+    ecs.forEach<MeshRenderer, Transform>(
+        [&](MeshRenderer* meshRenderer, Transform* transform)
         {
-            auto* name = resourceManager.get<std::string>(renderinfo->mesh);
-            auto freeIndex = freeTransformIndex;
+            auto* name = resourceManager.get<std::string>(meshRenderer->mesh);
+            auto freeIndex = freeTransformIndex++;
 
             assert(gpuRepr->isDirty);
             assert(gpuRepr->index == 0xFFFFFFFF);
-            gpuPtr[freeTransformIndex] = transform->localToWorld;
-            gpuRepr->index = freeTransformIndex;
-            gpuRepr->isDirty = false;
-            freeTransformIndex++;
+            gpuPtr[freeIndex] = transform->localToWorld;
+            meshRenderer->transformBufferIndex = freeIndex;
+            meshRenderer->isDirty = false;
         });
 
     // ------------------------------------------------------------------------------
@@ -711,14 +693,14 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
     MaterialInstance::Handle lastMaterialInstance = MaterialInstance::Handle::Invalid();
     uint32_t indexCount = 0;
 
-    ecs.forEach<RenderInfo, GPURepr>(
-        [&](RenderInfo* renderinfo, GPURepr* gpuRepr)
+    ecs.forEach<MeshRenderer>(
+        [&](MeshRenderer* meshRenderer)
         {
-            assert(!gpuRepr->isDirty);
-            assert(gpuRepr->index != 0xFFFFFFFF);
+            assert(!meshRenderer->isDirty);
+            assert(meshRenderer->transformBufferIndex != 0xFFFFFFFF);
 
-            Mesh::Handle objectMesh = renderinfo->mesh;
-            MaterialInstance::Handle objectMaterialInstance = renderinfo->materialInstance;
+            Mesh::Handle objectMesh = meshRenderer->mesh;
+            MaterialInstance::Handle objectMaterialInstance = meshRenderer->materialInstance;
 
             if(objectMaterialInstance != lastMaterialInstance)
             {
@@ -757,7 +739,7 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
                 lastMesh = objectMesh;
             }
 
-            gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, gpuRepr->index);
+            gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, meshRenderer->transformBufferIndex);
         });
 
     gfxDevice.endRendering(offscreenCmdBuffer);
