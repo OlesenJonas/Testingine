@@ -5,8 +5,6 @@ StructForBindless(MaterialInstanceParameters,
 );
 
 DefineShaderInputs(
-    // Frame globals
-    Handle< Placeholder > frameDataBuffer;
     // Resolution, matrices (differs in eg. shadow and default pass)
     Handle< ConstantBuffer<RenderPassData> > renderPassData;
     // Buffer with material/-instance parameters

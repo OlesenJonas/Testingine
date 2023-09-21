@@ -79,15 +79,13 @@ class Editor final : public Application
     // TODO: bitset and/or full pool logic instead
     uint32_t freeTransformIndex = 0;
 
-    struct BindlessIndices
+    struct GraphicsPushConstants
     {
-        // Frame globals
-        uint32_t FrameDataBuffer;
         // Resolution, matrices (differs in eg. shadow and default pass)
-        uint32_t RenderInfoBuffer;
+        ResourceIndex RenderInfoBuffer;
         // Buffer with material/-instance parameters
-        uint32_t materialParamsBuffer;
-        uint32_t materialInstanceParamsBuffer;
+        ResourceIndex materialParamsBuffer;
+        ResourceIndex materialInstanceParamsBuffer;
     };
 
     struct PerFrameData

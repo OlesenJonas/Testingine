@@ -134,7 +134,7 @@ class VulkanDevice
 
     void setGraphicsPipelineState(VkCommandBuffer cmd, VkPipeline pipe);
     void setComputePipelineState(VkCommandBuffer cmd, VkPipeline pipe);
-    // this explicitely uses the bindless layout, so just call this function setBindlessIndices ??
+    // this explicitely uses a predefined layout
     void pushConstants(VkCommandBuffer cmd, size_t size, void* data, size_t offset = 0);
     void bindIndexBuffer(VkCommandBuffer cmd, Buffer::Handle buffer, size_t offset = 0);
     void bindVertexBuffers(

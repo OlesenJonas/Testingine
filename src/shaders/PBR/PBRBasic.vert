@@ -16,8 +16,6 @@ struct VSOutput
 };
 
 DefineShaderInputs(
-    // Frame globals
-    Handle< Placeholder > frameDataBuffer;
     // Resolution, matrices (differs in eg. shadow and default pass)
     // Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
     Handle< ConstantBuffer<RenderPassData> > renderPassData;

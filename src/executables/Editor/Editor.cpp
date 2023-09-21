@@ -684,7 +684,7 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
         {ColorTarget{.texture = offscreenTexture, .loadOp = RenderTarget::LoadOp::Clear}},
         DepthTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
 
-    BindlessIndices pushConstants;
+    GraphicsPushConstants pushConstants;
     pushConstants.RenderInfoBuffer =
         *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
 
@@ -727,7 +727,7 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
                     pushConstants.materialInstanceParamsBuffer = 0xFFFFFFFF;
             }
 
-            gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
+            gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(GraphicsPushConstants), &pushConstants);
 
             if(objectMesh != lastMesh)
             {
@@ -773,7 +773,7 @@ VkCommandBuffer Editor::drawUI(int threadIndex)
     // Transfer offscreen image to swapchain
 
     // TODO: abstraction for this!
-    BindlessIndices pushConstants;
+    GraphicsPushConstants pushConstants;
     pushConstants.RenderInfoBuffer =
         *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
 
@@ -785,7 +785,7 @@ VkCommandBuffer Editor::drawUI(int threadIndex)
         resourceManager.get<MaterialInstance::ParameterBuffer>(writeToSwapchainMatInst)->deviceBuffer;
     pushConstants.materialInstanceParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
 
-    gfxDevice.pushConstants(onscreenCmdBuffer, sizeof(BindlessIndices), &pushConstants);
+    gfxDevice.pushConstants(onscreenCmdBuffer, sizeof(GraphicsPushConstants), &pushConstants);
 
     auto* meshData = resourceManager.get<Mesh::RenderData>(fullscreenTri);
     gfxDevice.bindIndexBuffer(onscreenCmdBuffer, meshData->indexBuffer);
