@@ -32,7 +32,6 @@ struct MeshRenderer
     Mesh::Handle mesh;
     MaterialInstance::Handle materialInstance;
 
-    // GPU Transform info
-    bool isDirty = true;
-    uint32_t transformBufferIndex = 0xFFFFFFFF;
+    // GPU Render item info
+    uint32_t renderItemIndex = 0xFFFFFFFF;
 };

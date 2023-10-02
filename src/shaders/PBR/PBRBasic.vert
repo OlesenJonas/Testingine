@@ -29,9 +29,8 @@ VSOutput main(VSInput input)
 {
     VSOutput vsOut = (VSOutput)0;
 
-    // const StructuredBuffer<float4x4> transformBuffer = globalTransformBuffer.get();
-    const StructuredBuffer<float4x4> transformBuffer = GLOBAL_TRANSFORMS;
-    const float4x4 modelMatrix = transformBuffer[input.baseInstance];
+    const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
+    const RenderItem renderItem = renderItemBuffer[input.baseInstance];
 
     // ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
     // ConstantBuffer<RenderPassData> renderPassData = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle];
@@ -41,7 +40,7 @@ VSOutput main(VSInput input)
     //todo: test mul-ing here already, like in GLSL version
     // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
     
-    float4 worldPos = mul(modelMatrix, float4(input.vPosition,1.0));
+    float4 worldPos = mul(renderItem.transform, float4(input.vPosition,1.0));
     vsOut.vPositionWS = worldPos.xyz;
     vsOut.posOut = mul(projViewMatrix, worldPos);
 
@@ -49,7 +48,7 @@ VSOutput main(VSInput input)
     vsOut.vTexCoord = input.vTexCoord;
 
     //dont think normalize is needed
-    const float3x3 modelMatrix3 = (float3x3)(modelMatrix);
+    const float3x3 modelMatrix3 = (float3x3)(renderItem.transform);
     // just using model matrix directly here. When using non-uniform scaling
     // (which I dont want to rule out) transpose(inverse(model)) is required
     //      GLSL: vNormalWS = normalize( transpose(inverse(modelMatrix3)) * vNormal);

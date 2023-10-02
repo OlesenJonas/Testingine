@@ -157,7 +157,7 @@ Mesh::Handle ResourceManager::createMesh(
         .debugName = (name + "_positionsBuffer"),
         .size = vertexPositions.size() * sizeof(glm::vec3),
         .memoryType = Buffer::MemoryType::GPU,
-        .allStates = ResourceState::VertexBuffer | ResourceState::TransferDst,
+        .allStates = ResourceState::VertexBuffer | ResourceState::Storage | ResourceState::TransferDst,
         .initialState = ResourceState::VertexBuffer,
         .initialData = {(uint8_t*)vertexPositions.data(), vertexPositions.size() * sizeof(vertexPositions[0])},
     });
@@ -166,7 +166,7 @@ Mesh::Handle ResourceManager::createMesh(
         .debugName = (name + "_attributesBuffer"),
         .size = vertexAttributes.size() * sizeof(vertexAttributes[0]),
         .memoryType = Buffer::MemoryType::GPU,
-        .allStates = ResourceState::VertexBuffer | ResourceState::TransferDst,
+        .allStates = ResourceState::VertexBuffer | ResourceState::Storage | ResourceState::TransferDst,
         .initialState = ResourceState::VertexBuffer,
         .initialData = {(uint8_t*)vertexAttributes.data(), vertexAttributes.size() * sizeof(vertexAttributes[0])},
     });
@@ -175,7 +175,7 @@ Mesh::Handle ResourceManager::createMesh(
         .debugName = (name + "_indexBuffer"),
         .size = indices.size() * sizeof(indices[0]),
         .memoryType = Buffer::MemoryType::GPU,
-        .allStates = ResourceState::IndexBuffer | ResourceState::TransferDst,
+        .allStates = ResourceState::IndexBuffer | ResourceState::Storage | ResourceState::TransferDst,
         .initialState = ResourceState::IndexBuffer,
         .initialData = {(uint8_t*)indices.data(), indices.size() * sizeof(indices[0])},
     });

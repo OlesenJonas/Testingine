@@ -24,9 +24,9 @@ VSOutput main(VSInput input)
 
     vsOut.localPos = input.vPosition;
 
-    // const StructuredBuffer<float4x4> transformBuffer = globalTransformBuffer.get();
-    const StructuredBuffer<float4x4> transformBuffer = GLOBAL_TRANSFORMS;
-    const float4x4 modelMatrix = transformBuffer[input.baseInstance];
+    const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
+    const RenderItem renderItem = renderItemBuffer[input.baseInstance];
+    const float4x4 modelMatrix = renderItem.transform;
 
     const RenderPassData renderPassData = shaderInputs.renderPassData.Load();
     const float4x4 projMatrix = renderPassData.proj;

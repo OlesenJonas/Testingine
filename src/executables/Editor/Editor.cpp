@@ -36,14 +36,14 @@ Editor::Editor()
 
     // create this first, need to ensure resourceIndex is 0 (since thats currently hardcoded in the shaders)
     //  TODO: switch to spec constant?
-    transformsBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
-        .debugName = "objectTransformsBuffer",
-        .size = sizeof(glm::mat4) * MAX_GPU_OBJECTS,
+    gpuRenderItemBuffer.buffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "renderItemBuffer",
+        .size = sizeof(RenderItem) * gpuRenderItemBuffer.limit,
         .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
         .allStates = ResourceState::Storage,
         .initialState = ResourceState::Storage,
     });
-    assert(*resourceManager.get<ResourceIndex>(transformsBuffer) == 0);
+    assert(*resourceManager.get<ResourceIndex>(gpuRenderItemBuffer.handle) == 0);
 
     for(int i = 0; i < ArraySize(perFrameData); i++)
     {
@@ -216,21 +216,28 @@ Editor::Editor()
         assert(meshRenderer->isDirty);
     }
 
-    // ------------------------ Build transform buffer --------------------------------------------------
+    // ------------------------ Build render item buffer --------------------------------------------------
 
     // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
-    auto* gpuPtr = (glm::mat4*)(*resourceManager.get<void*>(transformsBuffer));
+    auto* gpuPtr = (RenderItem*)(*resourceManager.get<void*>(gpuRenderItemBuffer.buffer));
     ecs.forEach<MeshRenderer, Transform>(
         [&](MeshRenderer* meshRenderer, Transform* transform)
         {
             auto* name = resourceManager.get<std::string>(meshRenderer->mesh);
-            auto freeIndex = freeTransformIndex++;
+            auto freeIndex = gpuRenderItemBuffer.freeIndex++;
 
-            assert(gpuRepr->isDirty);
-            assert(gpuRepr->index == 0xFFFFFFFF);
-            gpuPtr[freeIndex] = transform->localToWorld;
-            meshRenderer->transformBufferIndex = freeIndex;
-            meshRenderer->isDirty = false;
+            const Mesh::Handle mesh = meshRenderer->mesh;
+            const auto* renderData = resourceManager.get<Mesh::RenderData>(mesh);
+
+            gpuPtr[freeIndex] = RenderItem{
+                .indexBuffer = *resourceManager.get<ResourceIndex>(renderData->indexBuffer),
+                .indexCount = renderData->indexCount,
+                .positionBuffer = *resourceManager.get<ResourceIndex>(renderData->positionBuffer),
+                .attributeBuffer = *resourceManager.get<ResourceIndex>(renderData->attributeBuffer),
+                .transform = transform->localToWorld,
+            };
+
+            meshRenderer->renderItemIndex = freeIndex;
         });
 
     // ------------------------------------------------------------------------------
@@ -739,7 +746,7 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
                 lastMesh = objectMesh;
             }
 
-            gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, meshRenderer->transformBufferIndex);
+            gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, meshRenderer->renderItemIndex);
         });
 
     gfxDevice.endRendering(offscreenCmdBuffer);

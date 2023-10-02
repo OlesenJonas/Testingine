@@ -74,10 +74,21 @@ class Editor final : public Application
         float pad;
     };
 
-    const int MAX_GPU_OBJECTS = 10000;
-    Buffer::Handle transformsBuffer;
-    // TODO: bitset and/or full pool logic instead
-    uint32_t freeTransformIndex = 0;
+    struct RenderItem
+    {
+        ResourceIndex indexBuffer;
+        ResourceIndex indexCount;
+        ResourceIndex positionBuffer;
+        ResourceIndex attributeBuffer;
+        glm::mat4 transform;
+    };
+    struct RenderItemBuffer
+    {
+        const int limit = 10000;
+        Buffer::Handle buffer;
+        // TODO: bitset and/or full pool logic instead
+        uint32_t freeIndex = 0;
+    } gpuRenderItemBuffer;
 
     struct GraphicsPushConstants
     {

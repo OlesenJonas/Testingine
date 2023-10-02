@@ -25,9 +25,9 @@ VSOutput main(VSInput input)
 {
     VSOutput vsOut = (VSOutput)0;
 
-    // const StructuredBuffer<float4x4> transformBuffer = globalTransformBuffer.get();
-    const StructuredBuffer<float4x4> transformBuffer = GLOBAL_TRANSFORMS;
-    const float4x4 modelMatrix = transformBuffer[input.baseInstance];
+    const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
+    const RenderItem renderItem = renderItemBuffer[input.baseInstance];
+    const float4x4 modelMatrix = renderItem.transform;
 
     // ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
     // ConstantBuffer<RenderPassData> renderPassData = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle];
