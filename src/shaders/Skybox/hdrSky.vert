@@ -22,13 +22,24 @@ VSOutput main(VSInput input)
 {
     VSOutput vsOut = (VSOutput)0;
 
-    vsOut.localPos = input.vPosition;
-
     const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
     const RenderItem renderItem = renderItemBuffer[input.baseInstance];
     const float4x4 modelMatrix = renderItem.transform;
 
+    const StructuredBuffer<uint> indexBuffer = renderItem.indexBuffer.get();
+    const StructuredBuffer<float3> vertexPositions = renderItem.positionBuffer.get();
+    const StructuredBuffer<VertexAttributes> vertexAttributes = renderItem.attributesBuffer.get();
+    
+    uint vertexIndex = indexBuffer[input.vertexID];
+
+    const float3 vertPos = vertexPositions[vertexIndex];
+    //todo: dont just scale up by some large number, instead make forcing depth to 1.0 work!
+    float4 worldPos = mul(renderItem.transform, float4(500*vertPos,1.0));
+
+    vsOut.localPos = vertPos;
+
     const RenderPassData renderPassData = shaderInputs.renderPassData.Load();
+
     const float4x4 projMatrix = renderPassData.proj;
     const float4x4 viewMatrix = renderPassData.view;
     //remove translation component from view matrix
@@ -38,9 +49,6 @@ VSOutput main(VSInput input)
         viewMatrix[2].xyz,0.0,
         viewMatrix[3].xyz,1.0
     );
-    
-    //todo: dont just scale up by some large number, just make forcing depth to 1.0 work!
-    float4 worldPos = mul(modelMatrix, float4(500*input.vPosition,1.0));
 
     vsOut.posOut = mul(projMatrix, mul(viewMatrixNoTranslate, worldPos));
 

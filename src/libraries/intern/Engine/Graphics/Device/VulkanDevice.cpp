@@ -1043,15 +1043,25 @@ VkPipeline VulkanDevice::createGraphicsPipeline(PipelineCreateInfo&& createInfo)
         },
     };
 
-    const VertexInputDescription vertexDescription = VertexInputDescription::getDefault();
+    // TODO: parse/generate from CreateInfo
+    // const VertexInputDescription vertexDescription = VertexInputDescription::getDefault();
+    // const VkPipelineVertexInputStateCreateInfo vertexInputStateCrInfo = {
+    //     .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+    //     .pNext = nullptr,
+
+    //     .vertexBindingDescriptionCount = (uint32_t)vertexDescription.bindings.size(),
+    //     .pVertexBindingDescriptions = vertexDescription.bindings.data(),
+    //     .vertexAttributeDescriptionCount = (uint32_t)vertexDescription.attributes.size(),
+    //     .pVertexAttributeDescriptions = vertexDescription.attributes.data(),
+    // };
     const VkPipelineVertexInputStateCreateInfo vertexInputStateCrInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = nullptr,
 
-        .vertexBindingDescriptionCount = (uint32_t)vertexDescription.bindings.size(),
-        .pVertexBindingDescriptions = vertexDescription.bindings.data(),
-        .vertexAttributeDescriptionCount = (uint32_t)vertexDescription.attributes.size(),
-        .pVertexAttributeDescriptions = vertexDescription.attributes.data(),
+        .vertexBindingDescriptionCount = 0,
+        .pVertexBindingDescriptions = nullptr,
+        .vertexAttributeDescriptionCount = 0,
+        .pVertexAttributeDescriptions = nullptr,
     };
 
     const VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCrInfo = {
@@ -1736,6 +1746,16 @@ void VulkanDevice::bindVertexBuffers(
         assert(vkBuffers[i]);
     }
     vkCmdBindVertexBuffers(cmd, startBinding, count, &vkBuffers[0], offsets.data());
+}
+
+void VulkanDevice::draw(
+    VkCommandBuffer cmd,
+    uint32_t vertexCount,
+    uint32_t instanceCount,
+    uint32_t firstVertex,
+    uint32_t firstInstance)
+{
+    vkCmdDraw(cmd, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 void VulkanDevice::drawIndexed(

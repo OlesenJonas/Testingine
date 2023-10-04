@@ -75,6 +75,9 @@ class VulkanDevice
         std::string_view debugName;
         Span<uint32_t> vertexSpirv;
         Span<uint32_t> fragmentSpirv;
+        //--
+        // TODO: vertex inputs!
+        //--
         Span<const Texture::Format> colorFormats;
         Texture::Format depthFormat = Texture::Format::UNDEFINED;
         Texture::Format stencilFormat = Texture::Format::UNDEFINED;
@@ -143,6 +146,12 @@ class VulkanDevice
         uint32_t count,
         Span<const Buffer::Handle> buffers,
         Span<const uint64_t> offsets);
+    void draw(
+        VkCommandBuffer cmd,
+        uint32_t vertexCount,
+        uint32_t instanceCount,
+        uint32_t firstVertex,
+        uint32_t firstInstance);
     void drawIndexed(
         VkCommandBuffer cmd,
         uint32_t indexCount,

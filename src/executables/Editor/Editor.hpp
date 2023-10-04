@@ -36,7 +36,6 @@ class Editor final : public Application
     Texture::Handle depthTexture;
     Texture::Format offscreenRTFormat = Texture::Format::R16_G16_B16_A16_FLOAT;
     Texture::Handle offscreenTexture;
-    Mesh::Handle fullscreenTri;
     MaterialInstance::Handle writeToSwapchainMatInst;
 
     void createDefaultSamplers();

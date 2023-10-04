@@ -89,10 +89,6 @@ Editor::Editor()
     resourceManager.createMesh(Cube::positions, Cube::attributes, Cube::indices, "DefaultCube");
     assert(resourceManager.get<std::string>(resourceManager.getMesh("DefaultCube")) != nullptr);
 
-    fullscreenTri = resourceManager.createMesh(
-        FullscreenTri::positions, FullscreenTri::attributes, FullscreenTri::indices, "FullscreenTri");
-    assert(resourceManager.get<std::string>(fullscreenTri) != nullptr);
-
     mainCamera =
         Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
 
@@ -740,13 +736,10 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
             {
                 auto* meshData = resourceManager.get<Mesh::RenderData>(objectMesh);
                 indexCount = meshData->indexCount;
-                gfxDevice.bindIndexBuffer(offscreenCmdBuffer, meshData->indexBuffer);
-                gfxDevice.bindVertexBuffers(
-                    offscreenCmdBuffer, 0, 2, {meshData->positionBuffer, meshData->attributeBuffer}, {0, 0});
                 lastMesh = objectMesh;
             }
 
-            gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, meshRenderer->renderItemIndex);
+            gfxDevice.draw(offscreenCmdBuffer, indexCount, 1, 0, meshRenderer->renderItemIndex);
         });
 
     gfxDevice.endRendering(offscreenCmdBuffer);
@@ -793,12 +786,7 @@ VkCommandBuffer Editor::drawUI(int threadIndex)
     pushConstants.materialInstanceParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
 
     gfxDevice.pushConstants(onscreenCmdBuffer, sizeof(GraphicsPushConstants), &pushConstants);
-
-    auto* meshData = resourceManager.get<Mesh::RenderData>(fullscreenTri);
-    gfxDevice.bindIndexBuffer(onscreenCmdBuffer, meshData->indexBuffer);
-    gfxDevice.bindVertexBuffers(
-        onscreenCmdBuffer, 0, 2, {meshData->positionBuffer, meshData->attributeBuffer}, {0, 0});
-    gfxDevice.drawIndexed(onscreenCmdBuffer, meshData->indexCount, 1, 0, 0, 0);
+    gfxDevice.draw(onscreenCmdBuffer, 3, 1, 0, 0);
 
     gfxDevice.drawImGui(onscreenCmdBuffer);
 

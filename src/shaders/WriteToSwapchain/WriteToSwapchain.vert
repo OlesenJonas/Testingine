@@ -1,5 +1,4 @@
 #include "../Bindless/Setup.hlsl"
-#include "../VertexAttributes.hlsl"
 #include "../CommonTypes.hlsl"
 
 /*
@@ -8,7 +7,6 @@
 struct VSOutput
 {
     float4 posOut : SV_POSITION;
-    [[vk::location(0)]] float2 vTexCoord : TEXCOORD0;
 };
 
 DefineShaderInputs(
@@ -21,10 +19,13 @@ DefineShaderInputs(
     Handle< Placeholder > materialInstanceParams;
 );
 
-VSOutput main(VSInput input)
+VSOutput main(uint vertexIndex : SV_VertexID)
 {
     VSOutput vsOut = (VSOutput)0;
-    vsOut.posOut = float4(input.vPosition,1.0);
-    vsOut.vTexCoord = input.vTexCoord;
+    vsOut.posOut = float4(
+    (vertexIndex / 2u) * 4 - 1.0,
+    (vertexIndex & 1u) * 4 - 1.0,
+    0.0,
+    1.0);
     return vsOut;
 }

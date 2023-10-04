@@ -25,12 +25,16 @@ DefineShaderInputs(
     Handle< Placeholder > materialInstanceParams;
 );
 
+
+
 VSOutput main(VSInput input)
 {
-    VSOutput vsOut = (VSOutput)0;
-
     const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
     const RenderItem renderItem = renderItemBuffer[input.baseInstance];
+
+    const StructuredBuffer<uint> indexBuffer = renderItem.indexBuffer.get();
+    const StructuredBuffer<float3> vertexPositions = renderItem.positionBuffer.get();
+    const StructuredBuffer<VertexAttributes> vertexAttributes = renderItem.attributesBuffer.get();
 
     // ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
     // ConstantBuffer<RenderPassData> renderPassData = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle];
@@ -39,13 +43,18 @@ VSOutput main(VSInput input)
     // const float4x4 projViewMatrix = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle].projView;
     //todo: test mul-ing here already, like in GLSL version
     // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
-    
-    float4 worldPos = mul(renderItem.transform, float4(input.vPosition,1.0));
+
+    VSOutput vsOut = (VSOutput)0;
+
+    uint vertexIndex = indexBuffer[input.vertexID];
+    const float3 vertPos = vertexPositions[vertexIndex];
+    float4 worldPos = mul(renderItem.transform, float4(vertPos,1.0));
+
     vsOut.vPositionWS = worldPos.xyz;
     vsOut.posOut = mul(projViewMatrix, worldPos);
 
-    vsOut.vColor = input.vColor;
-    vsOut.vTexCoord = input.vTexCoord;
+    vsOut.vColor = vertexAttributes[vertexIndex].color;
+    vsOut.vTexCoord = vertexAttributes[vertexIndex].uv;
 
     //dont think normalize is needed
     const float3x3 modelMatrix3 = (float3x3)(renderItem.transform);
@@ -54,8 +63,9 @@ VSOutput main(VSInput input)
     //      GLSL: vNormalWS = normalize( transpose(inverse(modelMatrix3)) * vNormal);
     // but HLSL doesnt have a inverse() function.
     //  TODO: upload transpose(inverse()) as part of transform buffer(? packing?) to GPU
-    vsOut.vNormalWS = mul(modelMatrix3, input.vNormal);
-    vsOut.vTangentWS = float4(normalize(mul(modelMatrix3, input.vTangent.xyz)),input.vTangent.w);
+    vsOut.vNormalWS = mul(modelMatrix3, vertexAttributes[vertexIndex].normal);
+    float4 vertexTangent = vertexAttributes[vertexIndex].tangent;
+    vsOut.vTangentWS = float4(normalize(mul(modelMatrix3, vertexTangent.xyz)),vertexTangent.w);
 
     return vsOut;
 }

@@ -22,7 +22,6 @@ DefineShaderInputs(
 struct VSOutput
 {
     float4 fragCoord : SV_POSITION;
-    [[vk::location(0)]] float2 vTexCoord : TEXCOORD0;
 };
 
 float4 main(VSOutput input) : SV_TARGET

@@ -54,11 +54,22 @@ ENABLE_CONSTANT_ACCESS(name)
 
 // --------------------- Some predefined buffers
 
+ENABLE_STRUCTURED_ACCESS(uint)
+ENABLE_STRUCTURED_ACCESS(float3)
+ENABLE_STRUCTURED_ACCESS(float4)
 ENABLE_STRUCTURED_ACCESS(float4x4)
 
 #include "../CommonTypes.hlsl"
-
 ENABLE_CONSTANT_ACCESS(RenderPassData)
+
+#include "../VertexAttributes.hlsl"
+ENABLE_STRUCTURED_ACCESS(VertexAttributes)
+
+#include "../GPUSceneStructs.hlsl"
+ENABLE_STRUCTURED_ACCESS(RenderItem);
+// currently 0th buffer is hardcoded (c++ side) to be the render item buffer
+// static Handle< StructuredBuffer<RenderItem> > globalRenderItemBuffer = Handle< StructuredBuffer<RenderItem> >(0);
+#define RENDER_ITEM_BUFFER g_StructuredBuffer_RenderItem[0]
 
 // ---------------------
 

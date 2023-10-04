@@ -27,7 +27,12 @@ VSOutput main(VSInput input)
 
     const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
     const RenderItem renderItem = renderItemBuffer[input.baseInstance];
-    const float4x4 modelMatrix = renderItem.transform;
+
+    const StructuredBuffer<uint> indexBuffer = renderItem.indexBuffer.get();
+    const StructuredBuffer<float3> vertexPositions = renderItem.positionBuffer.get();
+    const StructuredBuffer<VertexAttributes> vertexAttributes = renderItem.attributesBuffer.get();
+    
+    uint vertexIndex = indexBuffer[input.vertexID];
 
     // ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
     // ConstantBuffer<RenderPassData> renderPassData = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle];
@@ -37,10 +42,10 @@ VSOutput main(VSInput input)
     //todo: test mul-ing here already, like in GLSL version
     // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
     
-    float4 worldPos = mul(modelMatrix, float4(input.vPosition,1.0));
-    vsOut.posOut = mul(projViewMatrix, worldPos);
-    
-    vsOut.vTexCoord = input.vTexCoord;
+    const float3 vertPos = vertexPositions[vertexIndex];
+    float4 worldPos = mul(renderItem.transform, float4(vertPos,1.0));
+    vsOut.posOut = mul(projViewMatrix, worldPos);    
+    vsOut.vTexCoord = vertexAttributes[vertexIndex].uv;
 
     return vsOut;
 }
