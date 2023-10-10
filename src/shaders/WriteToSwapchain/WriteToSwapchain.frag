@@ -7,16 +7,8 @@
 
 #include "../Bindless/Setup.hlsl"
 
-StructForBindless(MaterialInstanceParameters,
-    Handle< Texture2D<float4> > texture;
-);
-
 DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    Handle< Placeholder > materialParams;
-    Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
+    Handle< Texture2D<float4> > inputTex;
 );
 
 struct VSOutput
@@ -28,7 +20,7 @@ float4 main(VSOutput input) : SV_TARGET
 {
     // MaterialInstanceParameters instanceParams = shaderInputs.materialInstanceParams.Load();
     // Texture2D tex = instanceParams.texture.get();
-    Texture2D tex = shaderInputs.materialInstanceParams.get().texture.get();
+    Texture2D tex = shaderInputs.inputTex.get();
 
     float3 color = tex.Load(int3(input.fragCoord.xy, 0.0)).rgb;
 

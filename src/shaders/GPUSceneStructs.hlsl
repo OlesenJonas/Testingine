@@ -10,7 +10,15 @@ struct RenderItem
     uint indexCount;
     Handle< StructuredBuffer<float3> > positionBuffer;
     Handle< StructuredBuffer<VertexAttributes> > attributesBuffer;
+};
+
+struct InstanceInfo
+{
     float4x4 transform;
+    uint renderItemIndex;
+    uint materialIndex;
+    Handle< Placeholder > materialParamsBuffer;
+    Handle< Placeholder > materialInstanceParamsBuffer;
 };
 
 #endif

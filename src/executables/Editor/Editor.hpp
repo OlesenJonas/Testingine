@@ -36,7 +36,7 @@ class Editor final : public Application
     Texture::Handle depthTexture;
     Texture::Format offscreenRTFormat = Texture::Format::R16_G16_B16_A16_FLOAT;
     Texture::Handle offscreenTexture;
-    MaterialInstance::Handle writeToSwapchainMatInst;
+    Material::Handle writeToSwapchainMat;
 
     void createDefaultSamplers();
 
@@ -73,13 +73,13 @@ class Editor final : public Application
         float pad;
     };
 
+    // TODO: keep shader and c++ versions of structs synced
     struct RenderItem
     {
         ResourceIndex indexBuffer;
-        ResourceIndex indexCount;
+        uint32_t indexCount;
         ResourceIndex positionBuffer;
         ResourceIndex attributeBuffer;
-        glm::mat4 transform;
     };
     struct RenderItemBuffer
     {
@@ -88,14 +88,28 @@ class Editor final : public Application
         // TODO: bitset and/or full pool logic instead
         uint32_t freeIndex = 0;
     } gpuRenderItemBuffer;
+    struct InstanceInfo
+    {
+        glm::mat4 transform;
+        uint32_t renderItemIndex;
+        uint32_t materialIndex;
+        ResourceIndex materialParamsBuffer;
+        ResourceIndex materialInstanceParamsBuffer;
+    };
+    struct InstanceInfoBuffer
+    {
+        const int limit = 10000;
+        Buffer::Handle buffer;
+        // TODO: bitset and/or full pool logic instead
+        uint32_t freeIndex = 0;
+    } gpuInstanceInfoBuffer;
 
     struct GraphicsPushConstants
     {
         // Resolution, matrices (differs in eg. shadow and default pass)
-        ResourceIndex RenderInfoBuffer;
-        // Buffer with material/-instance parameters
-        ResourceIndex materialParamsBuffer;
-        ResourceIndex materialInstanceParamsBuffer;
+        ResourceIndex renderInfoBuffer;
+
+        ResourceIndex instanceBuffer;
     };
 
     struct PerFrameData

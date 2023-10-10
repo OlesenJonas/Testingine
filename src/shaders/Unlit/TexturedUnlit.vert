@@ -9,24 +9,26 @@ struct VSOutput
 {
     float4 posOut : SV_POSITION;
     [[vk::location(0)]] float2 vTexCoord : TEXCOORD0;
+    [[vk::location(1)]] int instanceIndex : INSTANCE_INDEX;
 };
 
 DefineShaderInputs(
     // Resolution, matrices (differs in eg. shadow and default pass)
-    // Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
     Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    // using placeholder, since parameter types arent defined here
-    Handle< Placeholder > materialParamsBuffer;
-    Handle< Placeholder > materialInstanceParams;
+    // Buffer with information about all instances that are being rendered
+    Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
 );
 
 VSOutput main(VSInput input)
 {
-    VSOutput vsOut = (VSOutput)0;
-
+    const StructuredBuffer<InstanceInfo> instanceInfoBuffer = shaderInputs.instanceBuffer.get();
+    const InstanceInfo instanceInfo = instanceInfoBuffer[input.baseInstance];
+    
     const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
-    const RenderItem renderItem = renderItemBuffer[input.baseInstance];
+    const RenderItem renderItem = renderItemBuffer[instanceInfo.renderItemIndex];
+
+    VSOutput vsOut = (VSOutput)0;
+    vsOut.instanceIndex = input.baseInstance;
 
     const StructuredBuffer<uint> indexBuffer = renderItem.indexBuffer.get();
     const StructuredBuffer<float3> vertexPositions = renderItem.positionBuffer.get();
@@ -43,7 +45,7 @@ VSOutput main(VSInput input)
     // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
     
     const float3 vertPos = vertexPositions[vertexIndex];
-    float4 worldPos = mul(renderItem.transform, float4(vertPos,1.0));
+    float4 worldPos = mul(instanceInfo.transform, float4(vertPos,1.0));
     vsOut.posOut = mul(projViewMatrix, worldPos);    
     vsOut.vTexCoord = vertexAttributes[vertexIndex].uv;
 

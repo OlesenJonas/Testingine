@@ -13,25 +13,31 @@ struct VSOutput
     [[vk::location(2)]] float4 vTangentWS : TANGENT0;
     [[vk::location(3)]] float3 vColor : COLOR0;  
     [[vk::location(4)]] float2 vTexCoord : TEXCOORD0;
+    [[vk::location(5)]] int baseInstance : BASE_INSTANCE;
 };
 
 DefineShaderInputs(
     // Resolution, matrices (differs in eg. shadow and default pass)
-    // Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
     Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    // using placeholder, since parameter types arent defined here
-    Handle< Placeholder > materialParamsBuffer;
-    Handle< Placeholder > materialInstanceParams;
+    // Buffer with information about all instances that are being rendered
+    Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
+
+    //TODO: remove
+    Handle< StructuredBuffer<uint> > indexBuffer;
+    Handle< StructuredBuffer<float3> > positionBuffer;
+    Handle< StructuredBuffer<VertexAttributes> > attributesBuffer;
 );
-
-
 
 VSOutput main(VSInput input)
 {
+    const StructuredBuffer<InstanceInfo> instanceInfoBuffer = shaderInputs.instanceBuffer.get();
+    const InstanceInfo instanceInfo = instanceInfoBuffer[input.baseInstance];
+    
     const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
-    const RenderItem renderItem = renderItemBuffer[input.baseInstance];
+    const RenderItem renderItem = renderItemBuffer[instanceInfo.renderItemIndex];
 
+    // const StructuredBuffer<uint> indexBuffer = shaderInputs.indexBuffer.get();
+    // const StructuredBuffer<float3> vertexPositions = shaderInputs.positionBuffer.get();
     const StructuredBuffer<uint> indexBuffer = renderItem.indexBuffer.get();
     const StructuredBuffer<float3> vertexPositions = renderItem.positionBuffer.get();
     const StructuredBuffer<VertexAttributes> vertexAttributes = renderItem.attributesBuffer.get();
@@ -45,10 +51,11 @@ VSOutput main(VSInput input)
     // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
 
     VSOutput vsOut = (VSOutput)0;
+    vsOut.baseInstance = input.baseInstance;
 
     uint vertexIndex = indexBuffer[input.vertexID];
     const float3 vertPos = vertexPositions[vertexIndex];
-    float4 worldPos = mul(renderItem.transform, float4(vertPos,1.0));
+    float4 worldPos = mul(instanceInfo.transform, float4(vertPos,1.0));
 
     vsOut.vPositionWS = worldPos.xyz;
     vsOut.posOut = mul(projViewMatrix, worldPos);
@@ -57,7 +64,7 @@ VSOutput main(VSInput input)
     vsOut.vTexCoord = vertexAttributes[vertexIndex].uv;
 
     //dont think normalize is needed
-    const float3x3 modelMatrix3 = (float3x3)(renderItem.transform);
+    const float3x3 modelMatrix3 = (float3x3)(instanceInfo.transform);
     // just using model matrix directly here. When using non-uniform scaling
     // (which I dont want to rule out) transpose(inverse(model)) is required
     //      GLSL: vNormalWS = normalize( transpose(inverse(modelMatrix3)) * vNormal);

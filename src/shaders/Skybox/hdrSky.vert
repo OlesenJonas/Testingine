@@ -6,25 +6,23 @@ struct VSOutput
 {
     float4 posOut : SV_POSITION;
     [[vk::location(0)]]	float3 localPos : POSITIONT;
+    [[vk::location(1)]] int instanceIndex : INSTANCE_INDEX;
 };
 
 DefineShaderInputs(
     // Resolution, matrices (differs in eg. shadow and default pass)
-    // Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
     Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    // using placeholder, since parameter types arent defined here
-    Handle< Placeholder > materialParamsBuffer;
-    Handle< Placeholder > materialInstanceParams;
+    // Buffer with information about all instances that are being rendered
+    Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
 );
 
 VSOutput main(VSInput input)
 {
-    VSOutput vsOut = (VSOutput)0;
-
+    const StructuredBuffer<InstanceInfo> instanceInfoBuffer = shaderInputs.instanceBuffer.get();
+    const InstanceInfo instanceInfo = instanceInfoBuffer[input.baseInstance];
+    
     const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
-    const RenderItem renderItem = renderItemBuffer[input.baseInstance];
-    const float4x4 modelMatrix = renderItem.transform;
+    const RenderItem renderItem = renderItemBuffer[instanceInfo.renderItemIndex];
 
     const StructuredBuffer<uint> indexBuffer = renderItem.indexBuffer.get();
     const StructuredBuffer<float3> vertexPositions = renderItem.positionBuffer.get();
@@ -32,9 +30,12 @@ VSOutput main(VSInput input)
     
     uint vertexIndex = indexBuffer[input.vertexID];
 
+    VSOutput vsOut = (VSOutput)0;
+    vsOut.instanceIndex = input.baseInstance;
+
     const float3 vertPos = vertexPositions[vertexIndex];
     //todo: dont just scale up by some large number, instead make forcing depth to 1.0 work!
-    float4 worldPos = mul(renderItem.transform, float4(500*vertPos,1.0));
+    float4 worldPos = float4(500*vertPos,1.0);
 
     vsOut.localPos = vertPos;
 

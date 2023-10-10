@@ -14,21 +14,23 @@ StructForBindless(MaterialInstanceParameters,
 DefineShaderInputs(
     // Resolution, matrices (differs in eg. shadow and default pass)
     Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    Handle< Placeholder > materialParams;
-    Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
+    // Buffer with information about all instances that are being rendered
+    Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
 );
 
 struct VSOutput
 {
     [[vk::location(0)]] float2 vTexCoord : TEXCOORD0;
+    [[vk::location(1)]] int instanceIndex : INSTANCE_INDEX;
 };
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    // MaterialInstanceParameters instanceParams = shaderInputs.materialInstanceParams.Load();
-    // Texture2D tex = instanceParams.texture.get();
-    Texture2D tex = shaderInputs.materialInstanceParams.get().texture.get();
+    const StructuredBuffer<InstanceInfo> instanceInfoBuffer = shaderInputs.instanceBuffer.get();
+    const InstanceInfo instanceInfo = instanceInfoBuffer[input.instanceIndex];
+
+    ConstantBuffer<MaterialInstanceParameters> instanceParams = instanceInfo.materialInstanceParamsBuffer.specify<ConstantBuffer<MaterialInstanceParameters> >().get();
+    Texture2D tex = instanceParams.texture.get();
     float3 baseColor = tex.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
 
     return float4(baseColor, 1.0);

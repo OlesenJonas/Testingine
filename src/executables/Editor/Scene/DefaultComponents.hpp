@@ -30,8 +30,9 @@ struct Hierarchy
 struct MeshRenderer
 {
     Mesh::Handle mesh;
+    // TODO: also store Material::Handle here for 1 less indirection?
     MaterialInstance::Handle materialInstance;
 
     // GPU Render item info
-    uint32_t renderItemIndex = 0xFFFFFFFF;
+    uint32_t instanceBufferIndex = 0xFFFFFFFF;
 };

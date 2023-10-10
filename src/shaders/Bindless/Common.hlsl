@@ -8,6 +8,13 @@
 #define UNIFORM_BUFFER_SET 2
 #define STORAGE_BUFFER_SET 3
 
+/*
+    Since im using strongly types buffers, and not all structs may be defined
+    in all shader stage files, this Placeholder is defined, enabling a neat way
+    of just writing Handle<Placeholder> ...
+*/
+struct Placeholder{};
+
 template<typename T>
 struct Handle
 {
@@ -19,12 +26,6 @@ struct Handle
     }
 };
 
-/*
-    Since im using strongly types buffers, and not all structs may be defined
-    in all shader stage files, this Placeholder is defined, enabling a neat way
-    of just writing Handle<Placeholder> ...
-*/
-struct Placeholder{};
 template<>
 struct Handle<Placeholder>
 {
@@ -33,6 +34,12 @@ struct Handle<Placeholder>
     Placeholder get()
     {
         return (Placeholder)0;
+    }
+
+    template<typename T>
+    Handle<T> specify()
+    {
+        return (Handle<T>)resourceHandle;
     }
 };
 

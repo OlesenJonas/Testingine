@@ -21,6 +21,23 @@ struct Handle< ConstantBuffer<X> >
 
 // ---------------------
 
+// ByteAddressBuffers are always treated as storage buffers :(
+
+[[vk::binding(0, STORAGE_BUFFER_SET)]]                                   
+ByteAddressBuffer g_ByteAddressBuffer[];
+
+template<>
+struct Handle< ByteAddressBuffer >
+{
+    uint resourceHandle;
+    ByteAddressBuffer get()
+    {
+        return g_ByteAddressBuffer[resourceHandle];
+    }
+};
+
+// ---------------------
+
 #define ENABLE_STRUCTURED_ACCESS(TYPE)                                      \
 DECLARE_TEMPLATED_ARRAY(StructuredBuffer, TYPE, STORAGE_BUFFER_SET, 0)      \
 template <>                                                                 \
@@ -67,6 +84,7 @@ ENABLE_STRUCTURED_ACCESS(VertexAttributes)
 
 #include "../GPUSceneStructs.hlsl"
 ENABLE_STRUCTURED_ACCESS(RenderItem);
+ENABLE_STRUCTURED_ACCESS(InstanceInfo);
 // currently 0th buffer is hardcoded (c++ side) to be the render item buffer
 // static Handle< StructuredBuffer<RenderItem> > globalRenderItemBuffer = Handle< StructuredBuffer<RenderItem> >(0);
 #define RENDER_ITEM_BUFFER g_StructuredBuffer_RenderItem[0]

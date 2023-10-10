@@ -30,9 +30,8 @@ StructForBindless(MaterialInstanceParameters,
 DefineShaderInputs(
     // Resolution, matrices (differs in eg. shadow and default pass)
     Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    Handle< ConstantBuffer<MaterialParameters> > materialParams;
-    Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
+    // Buffer with information about all instances that are being rendered
+    Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
 );
 
 struct VSOutput
@@ -42,12 +41,22 @@ struct VSOutput
     [[vk::location(2)]] float4 vTangentWS : TANGENT0;
     [[vk::location(3)]] float3 vColor : COLOR0;  
     [[vk::location(4)]] float2 vTexCoord : TEXCOORD0;
+    [[vk::location(5)]] int baseInstance : BASE_INSTANCE;
 };
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    ConstantBuffer<MaterialParameters> params = shaderInputs.materialParams.get();
-    ConstantBuffer<MaterialInstanceParameters> instanceParams = shaderInputs.materialInstanceParams.get();
+    const StructuredBuffer<InstanceInfo> instanceInfoBuffer = shaderInputs.instanceBuffer.get();
+    const InstanceInfo instanceInfo = instanceInfoBuffer[input.baseInstance];
+    
+    const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
+    const RenderItem renderItem = renderItemBuffer[instanceInfo.renderItemIndex];
+
+    Handle< ConstantBuffer<MaterialParameters> > paramHandle = instanceInfo.materialParamsBuffer.specify<ConstantBuffer<MaterialParameters> >();
+    ConstantBuffer<MaterialParameters> params = paramHandle.get();
+    Handle< ConstantBuffer<MaterialInstanceParameters> > instanceParamHandle = instanceInfo.materialInstanceParamsBuffer.specify<ConstantBuffer<MaterialInstanceParameters> >();
+    ConstantBuffer<MaterialInstanceParameters> instanceParams = instanceParamHandle.get();
+
     Texture2D normalTexture =  instanceParams.normalTexture.get();
 
     float3 nrmSampleTS = normalTexture.Sample(LinearRepeatSampler, input.vTexCoord).xyz;

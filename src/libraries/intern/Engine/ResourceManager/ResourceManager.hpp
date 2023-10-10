@@ -117,6 +117,7 @@ class ResourceManager
 
     auto& getMaterialPool() { return materialPool; }
     auto& getMaterialInstancePool() { return materialInstancePool; }
+    const auto& getMeshPool() { return meshPool; }
 
   private:
     bool _initialized = false;

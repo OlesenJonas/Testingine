@@ -10,13 +10,7 @@ struct VSOutput
 };
 
 DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    // Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    // using placeholder, since parameter types arent defined here
-    Handle< Placeholder > materialParamsBuffer;
-    Handle< Placeholder > materialInstanceParams;
+    Handle< Texture2D<float4> > inputTex;
 );
 
 VSOutput main(uint vertexIndex : SV_VertexID)

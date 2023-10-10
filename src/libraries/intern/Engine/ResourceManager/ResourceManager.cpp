@@ -187,6 +187,7 @@ Mesh::Handle ResourceManager::createMesh(
             .indexBuffer = indexBufferHandle,
             .positionBuffer = positionBufferHandle,
             .attributeBuffer = attributesBufferHandle,
+            .gpuIndex = 0xFFFFFFFF,
         });
 
     nameToMeshLUT.insert({std::string{name}, newMeshHandle});
