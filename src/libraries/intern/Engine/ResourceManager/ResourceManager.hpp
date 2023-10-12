@@ -122,16 +122,9 @@ class ResourceManager
   private:
     bool _initialized = false;
 
-    MultiPool<std::string, Mesh::RenderData> meshPool;
-    MultiPool<
-        std::string,
-        VkPipeline,
-        Material::ParameterMap,
-        Material::InstanceParameterMap,
-        Material::ParameterBuffer,
-        bool>
-        materialPool;
-    MultiPool<std::string, Material::Handle, MaterialInstance::ParameterBuffer, bool> materialInstancePool;
+    MultiPoolFromHandle<Mesh::Handle> meshPool;
+    MultiPoolFromHandle<Material::Handle> materialPool;
+    MultiPoolFromHandle<MaterialInstance::Handle> materialInstancePool;
     Pool<ComputeShader> computeShaderPool;
 
     // just using standard unordered_map here, because I dont want to think about yet another datastructure atm

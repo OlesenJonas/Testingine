@@ -330,3 +330,18 @@ using MultiPool = MultiPoolImpl<PoolHelper::unlimited, Ts...>;
 
 template <uint32_t limit, typename... Ts>
 using MultiPoolLimited = MultiPoolImpl<limit, Ts...>;
+
+template <uint32_t limit, typename>
+struct PoolWithTypesFromHandle;
+
+template <uint32_t limit, template <typename...> typename H, typename... Ts>
+struct PoolWithTypesFromHandle<limit, H<Ts...>>
+{
+    using type = MultiPoolImpl<limit, Ts...>;
+};
+
+template <typename T>
+using MultiPoolFromHandle = PoolWithTypesFromHandle<PoolHelper::unlimited, T>::type;
+
+template <uint32_t limit, typename T>
+using MultiPoolLimitedFromHandle = PoolWithTypesFromHandle<limit, T>::type;

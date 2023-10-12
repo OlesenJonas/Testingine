@@ -30,8 +30,8 @@ class VulkanDevice
 
     // --------- Resources
 
-    MultiPool<std::string, Buffer::Descriptor, VkBuffer, void*, Buffer::Allocation, ResourceIndex> bufferPool;
-    MultiPool<std::string, Texture::Descriptor, Texture::GPU, ResourceIndex, Texture::Allocation> texturePool;
+    MultiPoolFromHandle<Buffer::Handle> bufferPool;
+    MultiPoolFromHandle<Texture::Handle> texturePool;
     Pool<TextureView> textureViewPool;
     // this value needs to match "GLOBAL_SAMPLER_COUNT" in the bindless shader code! Pass as eg. spec constant?
     PoolLimited<BindlessManager::samplerLimit, Sampler> samplerPool;
