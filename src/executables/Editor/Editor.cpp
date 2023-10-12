@@ -730,6 +730,8 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
         *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
     pushConstants.instanceBuffer = *resourceManager.get<ResourceIndex>(gpuInstanceInfoBuffer.buffer);
 
+    gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(GraphicsPushConstants), &pushConstants);
+
     Mesh::Handle lastMesh = Mesh::Handle::Invalid();
     Material::Handle lastMaterial = Material::Handle::Invalid();
     MaterialInstance::Handle lastMaterialInstance = MaterialInstance::Handle::Invalid();
@@ -758,8 +760,6 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
                 indexCount = meshData->indexCount;
                 lastMesh = objectMesh;
             }
-
-            gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(GraphicsPushConstants), &pushConstants);
 
             gfxDevice.draw(offscreenCmdBuffer, indexCount, 1, 0, meshRenderer->instanceBufferIndex);
         });
