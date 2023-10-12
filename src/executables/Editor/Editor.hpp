@@ -74,20 +74,20 @@ class Editor final : public Application
     };
 
     // TODO: keep shader and c++ versions of structs synced
-    struct RenderItem
+    struct GPUMeshData
     {
         ResourceIndex indexBuffer;
         uint32_t indexCount;
         ResourceIndex positionBuffer;
         ResourceIndex attributeBuffer;
     };
-    struct RenderItemBuffer
+    struct GPUMeshDataBuffer
     {
         const int limit = 10000;
         Buffer::Handle buffer;
         // TODO: bitset and/or full pool logic instead
         uint32_t freeIndex = 0;
-    } gpuRenderItemBuffer;
+    } gpuMeshDataBuffer;
     struct InstanceInfo
     {
         glm::mat4 transform;

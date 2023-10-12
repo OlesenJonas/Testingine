@@ -36,14 +36,14 @@ Editor::Editor()
 
     // create this first, need to ensure resourceIndex is 0 (since thats currently hardcoded in the shaders)
     //  TODO: switch to spec constant?
-    gpuRenderItemBuffer.buffer = resourceManager.createBuffer(Buffer::CreateInfo{
-        .debugName = "renderItemBuffer",
-        .size = sizeof(RenderItem) * gpuRenderItemBuffer.limit,
+    gpuMeshDataBuffer.buffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "MeshDataBuffer",
+        .size = sizeof(GPUMeshData) * gpuMeshDataBuffer.limit,
         .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
         .allStates = ResourceState::Storage,
         .initialState = ResourceState::Storage,
     });
-    assert(*resourceManager.get<ResourceIndex>(gpuRenderItemBuffer.buffer) == 0);
+    assert(*resourceManager.get<ResourceIndex>(gpuMeshDataBuffer.buffer) == 0);
 
     gpuInstanceInfoBuffer.buffer = resourceManager.createBuffer(Buffer::CreateInfo{
         .debugName = "instanceInfoBuffer",
@@ -221,20 +221,20 @@ Editor::Editor()
     auto& rm = resourceManager;
 
     // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
-    auto* gpuPtr = (RenderItem*)(*rm.get<void*>(gpuRenderItemBuffer.buffer));
+    auto* gpuPtr = (GPUMeshData*)(*rm.get<void*>(gpuMeshDataBuffer.buffer));
     // fill renderItem buffer with all meshes
     //      TODO: not all, just the ones being used in scene!
     const auto& meshPool = rm.getMeshPool();
     for(auto iter = meshPool.begin(); iter != meshPool.end(); iter++)
     {
-        auto freeIndex = gpuRenderItemBuffer.freeIndex++;
+        auto freeIndex = gpuMeshDataBuffer.freeIndex++;
 
         // TODO: const correctness
         Mesh::Handle mesh = *iter;
         auto* renderData = resourceManager.get<Mesh::RenderData>(mesh);
         assert(renderData->gpuIndex == 0xFFFFFFFF);
         renderData->gpuIndex = freeIndex;
-        gpuPtr[freeIndex] = RenderItem{
+        gpuPtr[freeIndex] = GPUMeshData{
             .indexBuffer = *rm.get<ResourceIndex>(renderData->indexBuffer),
             .indexCount = renderData->indexCount,
             .positionBuffer = *rm.get<ResourceIndex>(renderData->positionBuffer),
