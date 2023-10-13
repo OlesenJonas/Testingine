@@ -5,22 +5,6 @@
 
 // ---------------------
 
-// ConstantBuffers cant correctly be stored inside variables
-// (https://github.com/microsoft/DirectXShaderCompiler/issues/5401)
-// So Handle< ConstantBuffer<> > only offers a method to load the
-// contained data directly from the bindless array
-template<typename X>
-struct Handle< ConstantBuffer<X> >
-{
-    uint resourceHandle;
-
-    X Load();
-
-    ConstantBuffer<X> get();
-};
-
-// ---------------------
-
 // ByteAddressBuffers are always treated as storage buffers :(
 
 [[vk::binding(0, STORAGE_BUFFER_SET)]]                                   
@@ -38,26 +22,22 @@ struct Handle< ByteAddressBuffer >
 
 // ---------------------
 
-#define ENABLE_STRUCTURED_ACCESS(TYPE)                                      \
-DECLARE_TEMPLATED_ARRAY(StructuredBuffer, TYPE, STORAGE_BUFFER_SET, 0)      \
-template <>                                                                 \
-StructuredBuffer<TYPE> Handle< StructuredBuffer<TYPE> >::get()              \
-{                                                                           \
-    return g_StructuredBuffer_##TYPE[resourceHandle];                       \
-}
+#define ENABLE_STRUCTURED_ACCESS(TYPE)                                              \
+DECLARE_RESOURCE_ARRAY_TEMPLATED(StructuredBuffer, TYPE, STORAGE_BUFFER_SET, 0)     \
+IMPLEMENT_HANDLE_GETTER(StructuredBuffer, TYPE)
 
-#define ENABLE_CONSTANT_ACCESS(TYPE)                                        \
-DECLARE_TEMPLATED_ARRAY(ConstantBuffer, TYPE, UNIFORM_BUFFER_SET, 0)        \
-template <>                                                                 \
-TYPE Handle< ConstantBuffer<TYPE> >::Load()                                 \
-{                                                                           \
-    return g_ConstantBuffer_##TYPE[resourceHandle];                         \
-}                                                                           \
-template <>                                                                 \
-ConstantBuffer<TYPE> Handle< ConstantBuffer<TYPE> >::get()                  \
-{                                                                           \
-    return g_ConstantBuffer_##TYPE[resourceHandle];                         \
-}                                                                           
+#define ENABLE_RWSTRUCTURED_ACCESS(TYPE)                                            \
+DECLARE_RESOURCE_ARRAY_TEMPLATED(RWStructuredBuffer, TYPE, STORAGE_BUFFER_SET, 0)   \
+IMPLEMENT_HANDLE_GETTER(RWStructuredBuffer, TYPE)
+
+#define ENABLE_CONSTANT_ACCESS(TYPE)                                                \
+DECLARE_RESOURCE_ARRAY_TEMPLATED(ConstantBuffer, TYPE, UNIFORM_BUFFER_SET, 0)       \
+IMPLEMENT_HANDLE_GETTER(ConstantBuffer, TYPE)
+
+#define ENABLE_BINDLESS_BUFFER_ACCESS(TYPE)     \
+ENABLE_STRUCTURED_ACCESS(TYPE)                  \
+ENABLE_RWSTRUCTURED_ACCESS(TYPE)                \
+ENABLE_CONSTANT_ACCESS(TYPE)
 
 // ---------------------
 

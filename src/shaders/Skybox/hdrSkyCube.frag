@@ -22,7 +22,7 @@ float4 main(VSOutput input) : SV_TARGET
     const StructuredBuffer<InstanceInfo> instanceInfoBuffer = shaderInputs.instanceBuffer.get();
     const InstanceInfo instanceInfo = instanceInfoBuffer[input.instanceIndex];
 
-    const MaterialInstanceParameters params = instanceInfo.materialInstanceParamsBuffer.specify<ConstantBuffer<MaterialInstanceParameters> >().Load();
+    const ConstantBuffer<MaterialInstanceParameters> params = instanceInfo.materialInstanceParamsBuffer.specify<ConstantBuffer<MaterialInstanceParameters> >().get();
     const TextureCube<float4> cubeMap = params.cubeMap.get();
 
     float4 color = cubeMap.Sample(LinearRepeatSampler, normalize(input.localPos));

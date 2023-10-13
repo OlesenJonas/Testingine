@@ -31,11 +31,6 @@ struct Handle<Placeholder>
 {
     uint resourceHandle;
 
-    Placeholder get()
-    {
-        return (Placeholder)0;
-    }
-
     template<typename T>
     Handle<T> specify()
     {
@@ -43,8 +38,15 @@ struct Handle<Placeholder>
     }
 };
 
-#define DECLARE_TEMPLATED_ARRAY(TYPE, TEMPLATE, SET, BINDING)   \
-[[vk::binding(BINDING, SET)]]                                   \
-TYPE<TEMPLATE> g_##TYPE##_##TEMPLATE[];                         \
+#define DECLARE_RESOURCE_ARRAY_TEMPLATED(TYPE, TEMPLATE, SET, BINDING)      \
+[[vk::binding(BINDING, SET)]]                                               \
+TYPE<TEMPLATE> g_##TYPE##_##TEMPLATE[];                         
+
+#define IMPLEMENT_HANDLE_GETTER(TYPE, TEMPLATE)                             \
+template <>                                                                 \
+TYPE<TEMPLATE> Handle< TYPE<TEMPLATE> >::get()                              \
+{                                                                           \
+    return g_##TYPE##_##TEMPLATE[resourceHandle];                           \
+}
 
 #endif 

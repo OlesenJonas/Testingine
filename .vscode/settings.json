@@ -16,6 +16,7 @@
         "-Od",
         "-Ges",
         "-spirv",
+        // "-fvk-allow-rwstructuredbuffer-arrays",
         "-fspv-target-env=vulkan1.3"
     ],
     "files.associations": {

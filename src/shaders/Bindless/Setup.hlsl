@@ -8,20 +8,15 @@
 
 // ------------- Textures                                                            
 
-#define DEFINE_DEFAULT_HANDLE_GETTER(TYPE, TEMPLATE)                        \
-template <>                                                                 \
-TYPE<TEMPLATE> Handle< TYPE<TEMPLATE> >::get()                              \
-{                                                                           \
-    return g_##TYPE##_##TEMPLATE[resourceHandle];                           \
-}
 
-#define ENABLE_SAMPLED_TEXTURE_ACCESS(TYPE, TEMPLATE)                               \
-DECLARE_TEMPLATED_ARRAY(TYPE, TEMPLATE, SAMPLED_IMG_SET, GLOBAL_SAMPLER_COUNT)      \
-DEFINE_DEFAULT_HANDLE_GETTER(TYPE, TEMPLATE)
 
-#define ENABLE_STORAGE_TEXTURE_ACCESS(TYPE, TEMPLATE)           \
-DECLARE_TEMPLATED_ARRAY(TYPE, TEMPLATE, STORAGE_IMG_SET, 0)     \
-DEFINE_DEFAULT_HANDLE_GETTER(TYPE, TEMPLATE)
+#define ENABLE_SAMPLED_TEXTURE_ACCESS(TYPE, TEMPLATE)                                       \
+DECLARE_RESOURCE_ARRAY_TEMPLATED(TYPE, TEMPLATE, SAMPLED_IMG_SET, GLOBAL_SAMPLER_COUNT)     \
+IMPLEMENT_HANDLE_GETTER(TYPE, TEMPLATE)
+
+#define ENABLE_STORAGE_TEXTURE_ACCESS(TYPE, TEMPLATE)                   \
+DECLARE_RESOURCE_ARRAY_TEMPLATED(TYPE, TEMPLATE, STORAGE_IMG_SET, 0)    \
+IMPLEMENT_HANDLE_GETTER(TYPE, TEMPLATE)
 
 ENABLE_SAMPLED_TEXTURE_ACCESS(Texture2D, float2)
 ENABLE_SAMPLED_TEXTURE_ACCESS(Texture2D, float4)

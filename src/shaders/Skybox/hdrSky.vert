@@ -39,7 +39,7 @@ VSOutput main(VSInput input)
 
     vsOut.localPos = vertPos;
 
-    const RenderPassData renderPassData = shaderInputs.renderPassData.Load();
+    const ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
 
     const float4x4 projMatrix = renderPassData.proj;
     const float4x4 viewMatrix = renderPassData.view;

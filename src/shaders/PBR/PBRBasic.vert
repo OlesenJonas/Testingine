@@ -44,7 +44,7 @@ VSOutput main(VSInput input)
 
     // ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
     // ConstantBuffer<RenderPassData> renderPassData = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle];
-    RenderPassData renderPassData = shaderInputs.renderPassData.Load();
+    ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
     const float4x4 projViewMatrix = renderPassData.projView;
     // const float4x4 projViewMatrix = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle].projView;
     //todo: test mul-ing here already, like in GLSL version
