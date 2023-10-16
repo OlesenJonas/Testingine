@@ -1,6 +1,5 @@
-#include "../Bindless/Setup.hlsl"
-#include "../VertexAttributes.hlsl"
-#include "../CommonTypes.hlsl"
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
 
 struct VSOutput
 {
@@ -9,24 +8,14 @@ struct VSOutput
     [[vk::location(1)]] int instanceIndex : INSTANCE_INDEX;
 };
 
-DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with information about all instances that are being rendered
-    Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
-);
-
 VSOutput main(VSInput input)
 {
-    const StructuredBuffer<InstanceInfo> instanceInfoBuffer = shaderInputs.instanceBuffer.get();
-    const InstanceInfo instanceInfo = instanceInfoBuffer[input.baseInstance];
-    
-    const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
-    const RenderItem renderItem = renderItemBuffer[instanceInfo.renderItemIndex];
+    const InstanceInfo instanceInfo = getInstanceInfo(input.baseInstance);
+    const MeshData meshData = getMeshData(instanceInfo);
 
-    const StructuredBuffer<uint> indexBuffer = renderItem.indexBuffer.get();
-    const StructuredBuffer<float3> vertexPositions = renderItem.positionBuffer.get();
-    const StructuredBuffer<VertexAttributes> vertexAttributes = renderItem.attributesBuffer.get();
+    const StructuredBuffer<uint> indexBuffer = meshData.indexBuffer.get();
+    const StructuredBuffer<float3> vertexPositions = meshData.positionBuffer.get();
+    const StructuredBuffer<VertexAttributes> vertexAttributes = meshData.attributesBuffer.get();
     
     uint vertexIndex = indexBuffer[input.vertexID];
 
@@ -39,7 +28,7 @@ VSOutput main(VSInput input)
 
     vsOut.localPos = vertPos;
 
-    const ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
+    const ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
 
     const float4x4 projMatrix = renderPassData.proj;
     const float4x4 viewMatrix = renderPassData.view;

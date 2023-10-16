@@ -16,8 +16,9 @@
         "-Od",
         "-Ges",
         "-spirv",
-        "-fvk-allow-rwstructuredbuffer-arrays",
-        "-fspv-target-env=vulkan1.3"
+        "-fspv-target-env=vulkan1.3",
+        "-fvk-use-scalar-layout",
+        "-fvk-allow-rwstructuredbuffer-arrays"
     ],
     "files.associations": {
         "*.frag": "hlsl",

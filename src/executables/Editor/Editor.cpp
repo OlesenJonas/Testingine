@@ -216,13 +216,13 @@ Editor::Editor()
         assert(meshRenderer->materialInstance.isValid());
     }
 
-    // ------------------------ Build RenderItem & InstanceInfo buffer ------------------------------------------
+    // ------------------------ Build MeshData & InstanceInfo buffer ------------------------------------------
 
     auto& rm = resourceManager;
 
     // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
     auto* gpuPtr = (GPUMeshData*)(*rm.get<void*>(gpuMeshDataBuffer.buffer));
-    // fill renderItem buffer with all meshes
+    // fill MeshData buffer with all meshes
     //      TODO: not all, just the ones being used in scene!
     const auto& meshPool = rm.getMeshPool();
     for(auto iter = meshPool.begin(); iter != meshPool.end(); iter++)
@@ -264,7 +264,7 @@ Editor::Editor()
 
             gpuInstancePtr[freeIndex] = InstanceInfo{
                 .transform = transform->localToWorld,
-                .renderItemIndex = renderData->gpuIndex,
+                .meshDataIndex = renderData->gpuIndex,
                 .materialIndex = 0xFFFFFFFF, // TODO: correct value
                 .materialParamsBuffer = hasMatParameters ? *rm.get<ResourceIndex>(matParamBuffer) : 0xFFFFFFFF,
                 .materialInstanceParamsBuffer =
@@ -344,7 +344,7 @@ void Editor::createDefaultSamplers()
     //       smth!
     //          also think about how this works once .spirvs are distributed (outside of source tree) etc...
     std::ofstream defaultSamplerDefines(
-        SHADERS_PATH "/Bindless/DefaultSamplers.hlsl", std::ofstream::out | std::ofstream::trunc);
+        SHADERS_PATH "/includes/Bindless/DefaultSamplers.hlsl", std::ofstream::out | std::ofstream::trunc);
     for(auto& info : defaultInfos)
     {
         defaultSamplerDefines << std::format("#define {} {}\n", info.name, info.index);

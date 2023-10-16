@@ -1,6 +1,7 @@
-#include "../Bindless/Setup.hlsl"
+#define NO_DEFAULT_PUSH_CONSTANTS
+#include "../includes/Bindless/Setup.hlsl"
 
-DefineShaderInputs(
+DefinePushConstants(
     Handle< RWTexture2D<float2> > outTex;
 );
 
@@ -92,7 +93,7 @@ void main(uint3 GlobalInvocationID : SV_DispatchThreadID)
 {
     int3 id = GlobalInvocationID;
 
-    RWTexture2D<float2> outTex = shaderInputs.outTex.get();
+    RWTexture2D<float2> outTex = pushConstants.outTex.get();
     int2 outSize;
     outTex.GetDimensions(outSize.x,outSize.y);
 

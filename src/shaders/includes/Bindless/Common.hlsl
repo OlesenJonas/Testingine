@@ -30,12 +30,6 @@ template<>
 struct Handle<Placeholder>
 {
     uint resourceHandle;
-
-    template<typename T>
-    Handle<T> specify()
-    {
-        return (Handle<T>)resourceHandle;
-    }
 };
 
 #define DECLARE_RESOURCE_ARRAY_TEMPLATED(TYPE, TEMPLATE, SET, BINDING)      \

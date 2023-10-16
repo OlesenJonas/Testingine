@@ -91,7 +91,7 @@ class Editor final : public Application
     struct InstanceInfo
     {
         glm::mat4 transform;
-        uint32_t renderItemIndex;
+        uint32_t meshDataIndex;
         uint32_t materialIndex;
         ResourceIndex materialParamsBuffer;
         ResourceIndex materialInstanceParamsBuffer;

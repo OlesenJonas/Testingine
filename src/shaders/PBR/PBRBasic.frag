@@ -5,10 +5,12 @@
         https://github.com/KhronosGroup/glTF-Sample-Viewer
 */
 
-#include "../Bindless/Setup.hlsl"
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
+#include "../includes/MaterialParams.hlsl"
 #include "PBR.hlsl"
 
-StructForBindless(MaterialParameters,
+MaterialParameters(
     /* TODO: should be part of scene information, not material ? */
     Handle< TextureCube<float4> > irradianceTex;
     Handle< TextureCube<float4> > prefilterTex;
@@ -16,7 +18,7 @@ StructForBindless(MaterialParameters,
     Handle< Texture2D<float2> > brdfLUT;
 );
 
-StructForBindless(MaterialInstanceParameters,
+MaterialInstanceParameters(
     //TODO: check again, but im pretty sure these are all float4 textures
     Handle< Texture2D<float4> > normalTexture;
 
@@ -25,13 +27,6 @@ StructForBindless(MaterialInstanceParameters,
     Handle< Texture2D<float4> > metalRoughTexture;
 
     Handle< Texture2D<float4> > occlusionTexture;
-);
-
-DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with information about all instances that are being rendered
-    Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
 );
 
 struct VSOutput
@@ -46,16 +41,11 @@ struct VSOutput
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    const StructuredBuffer<InstanceInfo> instanceInfoBuffer = shaderInputs.instanceBuffer.get();
-    const InstanceInfo instanceInfo = instanceInfoBuffer[input.baseInstance];
-    
-    const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
-    const RenderItem renderItem = renderItemBuffer[instanceInfo.renderItemIndex];
+    const InstanceInfo instanceInfo = getInstanceInfo(input.baseInstance);
+    const MeshData meshData = getMeshDataBuffer()[instanceInfo.meshDataIndex];
 
-    Handle< ConstantBuffer<MaterialParameters> > paramHandle = instanceInfo.materialParamsBuffer.specify<ConstantBuffer<MaterialParameters> >();
-    ConstantBuffer<MaterialParameters> params = paramHandle.get();
-    Handle< ConstantBuffer<MaterialInstanceParameters> > instanceParamHandle = instanceInfo.materialInstanceParamsBuffer.specify<ConstantBuffer<MaterialInstanceParameters> >();
-    ConstantBuffer<MaterialInstanceParameters> instanceParams = instanceParamHandle.get();
+    ConstantBuffer<MaterialParameters> params = getMaterialParameters(instanceInfo);
+    ConstantBuffer<MaterialInstanceParameters> instanceParams = getMaterialInstanceParameters(instanceInfo);
 
     Texture2D normalTexture =  instanceParams.normalTexture.get();
 
@@ -72,7 +62,7 @@ float4 main(VSOutput input) : SV_TARGET
         nrmSampleTS.z * input.vNormalWS
     );
 
-    ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
+    ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
     const float3 cameraPositionWS = renderPassData.cameraPositionWS;
 
     Texture2D colorTexture = instanceParams.baseColorTexture.get();

@@ -1,7 +1,5 @@
-#include "../Bindless/Setup.hlsl"
-#include "../VertexAttributes.hlsl"
-#include "../CommonTypes.hlsl"
-
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
 /*
     Not sure if semantic names are needed when compiling only to spirv
 */
@@ -16,35 +14,18 @@ struct VSOutput
     [[vk::location(5)]] int baseInstance : BASE_INSTANCE;
 };
 
-DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with information about all instances that are being rendered
-    Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
-
-    //TODO: remove
-    Handle< StructuredBuffer<uint> > indexBuffer;
-    Handle< StructuredBuffer<float3> > positionBuffer;
-    Handle< StructuredBuffer<VertexAttributes> > attributesBuffer;
-);
-
 VSOutput main(VSInput input)
 {
-    const StructuredBuffer<InstanceInfo> instanceInfoBuffer = shaderInputs.instanceBuffer.get();
-    const InstanceInfo instanceInfo = instanceInfoBuffer[input.baseInstance];
-    
-    const StructuredBuffer<RenderItem> renderItemBuffer = RENDER_ITEM_BUFFER;
-    const RenderItem renderItem = renderItemBuffer[instanceInfo.renderItemIndex];
+    const InstanceInfo instanceInfo = getInstanceInfo(input.baseInstance);
+    const MeshData meshData = getMeshDataBuffer()[instanceInfo.meshDataIndex];
 
-    // const StructuredBuffer<uint> indexBuffer = shaderInputs.indexBuffer.get();
-    // const StructuredBuffer<float3> vertexPositions = shaderInputs.positionBuffer.get();
-    const StructuredBuffer<uint> indexBuffer = renderItem.indexBuffer.get();
-    const StructuredBuffer<float3> vertexPositions = renderItem.positionBuffer.get();
-    const StructuredBuffer<VertexAttributes> vertexAttributes = renderItem.attributesBuffer.get();
+    const StructuredBuffer<uint> indexBuffer = meshData.indexBuffer.get();
+    const StructuredBuffer<float3> vertexPositions = meshData.positionBuffer.get();
+    const StructuredBuffer<VertexAttributes> vertexAttributes = meshData.attributesBuffer.get();
 
     // ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
     // ConstantBuffer<RenderPassData> renderPassData = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle];
-    ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
+    ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
     const float4x4 projViewMatrix = renderPassData.projView;
     // const float4x4 projViewMatrix = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle].projView;
     //todo: test mul-ing here already, like in GLSL version

@@ -1,5 +1,6 @@
-#include "../Bindless/Setup.hlsl"
-#include "../CommonTypes.hlsl"
+#define NO_DEFAULT_PUSH_CONSTANTS
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
 
 /*
     Not sure if semantic names are needed when compiling only to spirv
@@ -9,7 +10,7 @@ struct VSOutput
     float4 posOut : SV_POSITION;
 };
 
-DefineShaderInputs(
+DefinePushConstants(
     Handle< Texture2D<float4> > inputTex;
 );
 

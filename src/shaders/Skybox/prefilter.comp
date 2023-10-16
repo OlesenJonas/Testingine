@@ -1,6 +1,7 @@
-#include "../Bindless/Setup.hlsl"
+#define NO_DEFAULT_PUSH_CONSTANTS
+#include "../includes/Bindless/Setup.hlsl"
 
-DefineShaderInputs(
+DefinePushConstants(
     Handle< TextureCube<float4> > sourceTex;
     Handle< RWTexture2DArray<float4> > targetTex;
     float roughness;
@@ -51,12 +52,12 @@ void main(uint3 GlobalInvocationID : SV_DispatchThreadID)
 {
     int3 id = GlobalInvocationID;
 
-    TextureCube<float4> sourceTex = shaderInputs.sourceTex.get();
+    TextureCube<float4> sourceTex = pushConstants.sourceTex.get();
     int2 sourceSize;
     sourceTex.GetDimensions(sourceSize.x,sourceSize.y);
 
     //TODO: getLocalPos(tex, id) helper function?
-    RWTexture2DArray<float4> targetTex = shaderInputs.targetTex.get();
+    RWTexture2DArray<float4> targetTex = pushConstants.targetTex.get();
     int3 size;
     targetTex.GetDimensions(size.x, size.y, size.z);
     float2 uv = float2(id.xy + 0.5) / size.xy;
@@ -91,13 +92,13 @@ void main(uint3 GlobalInvocationID : SV_DispatchThreadID)
     for (int i=0; i<SAMPLES; i++)
     {
         float2 Xi = Hammersley(i, SAMPLES);
-        float3 H = ImportanceSampleGGX(Xi, N, shaderInputs.roughness);
+        float3 H = ImportanceSampleGGX(Xi, N, pushConstants.roughness);
         float3 L = normalize(2 * dot(V,H) * H - V);
 
         float NdotL = max(dot(N,L), 0.0);
         if(NdotL > 0.0)
         {
-            float D = NDFTrowbridgeReitzGGX(N, H, shaderInputs.roughness);
+            float D = NDFTrowbridgeReitzGGX(N, H, pushConstants.roughness);
             float NdotH = max(dot(N,H),0.0);
             float HdotV = max(dot(H,V),0.0);
             float pdf = (D * NdotH / (4 * HdotV)) + 0.0001;
@@ -105,7 +106,7 @@ void main(uint3 GlobalInvocationID : SV_DispatchThreadID)
             float saTexel = 4.0 * PI / (6.0 * sourceSize.x * sourceSize.y);
             float saSample = 1.0/(SAMPLES * pdf + 0.0001);
 
-            float mipLevel = shaderInputs.roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
+            float mipLevel = pushConstants.roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
 
             prefilteredColor += sourceTex.SampleLevel(LinearRepeatSampler, L, mipLevel).rgb * NdotL;
             totalWeight += NdotL;

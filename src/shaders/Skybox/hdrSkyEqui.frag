@@ -1,14 +1,9 @@
-#include "../Bindless/Setup.hlsl"
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
+#include "../includes/MaterialParams.hlsl"
 
-StructForBindless(MaterialInstanceParameters,
+MaterialInstanceParameters(
     Handle< Texture2D<float4> > equirectangularMap;
-);
-
-DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with information about all instances that are being rendered
-    Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
 );
 
 static const float2 invAtan = float2(0.1591, 0.3183);
@@ -28,10 +23,9 @@ struct VSOutput
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    const StructuredBuffer<InstanceInfo> instanceInfoBuffer = shaderInputs.instanceBuffer.get();
-    const InstanceInfo instanceInfo = instanceInfoBuffer[input.instanceIndex];
+    const InstanceInfo instanceInfo = getInstanceInfo(input.instanceIndex);
 
-    const ConstantBuffer<MaterialInstanceParameters> params = instanceInfo.materialInstanceParamsBuffer.specify<ConstantBuffer<MaterialInstanceParameters> >().get();
+    const ConstantBuffer<MaterialInstanceParameters> params = getMaterialInstanceParameters(instanceInfo);
     const Texture2D<float4> equirectangularMap = params.equirectangularMap.get();
 
     float4 color = equirectangularMap.Sample(LinearRepeatSampler, sampleSphericalMap(normalize(input.localPos)));

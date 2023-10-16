@@ -1,10 +1,10 @@
-#ifndef GPUSCENESTRUCTS_HLSL
-#define GPUSCENESTRUCTS_HLSL
+#ifndef GPUSCENE_STRUCTS_HLSL
+#define GPUSCENE_STRUCTS_HLSL
 
-#include "Bindless/Common.hlsl"
-#include "VertexAttributes.hlsl"
+#include "../VertexAttributes.hlsl"
+#include "../Bindless/Common.hlsl"
 
-struct RenderItem
+struct MeshData
 {
     Handle< StructuredBuffer<uint> > indexBuffer;
     uint indexCount;
@@ -15,7 +15,7 @@ struct RenderItem
 struct InstanceInfo
 {
     float4x4 transform;
-    uint renderItemIndex;
+    uint meshDataIndex;
     uint materialIndex;
     Handle< Placeholder > materialParamsBuffer;
     Handle< Placeholder > materialInstanceParamsBuffer;

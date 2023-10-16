@@ -52,32 +52,4 @@ struct name                                                         \
 };                                                                  \
 ENABLE_BINDLESS_BUFFER_ACCESS(name)                                      
 
-// --------------------- Some predefined buffers
-
-ENABLE_BINDLESS_STRUC_BUFFER_ACCESS(uint)
-ENABLE_BINDLESS_STRUC_BUFFER_ACCESS(uint2)
-ENABLE_BINDLESS_STRUC_BUFFER_ACCESS(uint3)
-ENABLE_BINDLESS_STRUC_BUFFER_ACCESS(uint4)
-
-ENABLE_BINDLESS_STRUC_BUFFER_ACCESS(float)
-ENABLE_BINDLESS_STRUC_BUFFER_ACCESS(float2)
-ENABLE_BINDLESS_STRUC_BUFFER_ACCESS(float3)
-ENABLE_BINDLESS_STRUC_BUFFER_ACCESS(float4)
-
-ENABLE_BINDLESS_STRUC_BUFFER_ACCESS(float4x4)
-
-#include "../CommonTypes.hlsl"
-ENABLE_BINDLESS_BUFFER_ACCESS(RenderPassData)
-
-#include "../VertexAttributes.hlsl"
-ENABLE_BINDLESS_BUFFER_ACCESS(VertexAttributes)
-
-#include "../GPUSceneStructs.hlsl"
-ENABLE_BINDLESS_BUFFER_ACCESS(RenderItem);
-ENABLE_BINDLESS_BUFFER_ACCESS(InstanceInfo);
-
-// currently 0th buffer is hardcoded (c++ side) to be the render item buffer
-// static Handle< StructuredBuffer<RenderItem> > globalRenderItemBuffer = Handle< StructuredBuffer<RenderItem> >(0);
-#define RENDER_ITEM_BUFFER g_StructuredBuffer_RenderItem[0]
-
 #endif
