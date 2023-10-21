@@ -118,6 +118,8 @@ class MultiPoolImpl
         const Handle<Ts...> newHandle{index, generations[index]};
         assert(isHandleValid(newHandle));
 
+        usedStorage++;
+
         return newHandle;
     }
 
@@ -140,6 +142,8 @@ class MultiPoolImpl
             }(),
             ... //
         );
+
+        usedStorage--;
 
         inUseMask.clearBit(handle.getIndex());
     }
@@ -184,6 +188,8 @@ class MultiPoolImpl
 
         return handle.getGeneration() == generations[handle.getIndex()];
     }
+
+    uint32_t size() const { return usedStorage; }
 
     template <typename... Args>
     Handle<Ts...> find(std::function<bool(std::add_pointer_t<Args>...)> pred)
@@ -319,6 +325,7 @@ class MultiPoolImpl
     static constexpr bool isLimited = limit != PoolHelper::unlimited;
 
     uint32_t capacity = 0;
+    uint32_t usedStorage = 0;
     void** storage = nullptr;
     // bit set == element currently contains active object
     DynamicBitset inUseMask{0};

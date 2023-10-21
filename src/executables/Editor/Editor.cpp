@@ -39,18 +39,18 @@ Editor::Editor()
     gpuMeshDataBuffer.buffer = resourceManager.createBuffer(Buffer::CreateInfo{
         .debugName = "MeshDataBuffer",
         .size = sizeof(GPUMeshData) * gpuMeshDataBuffer.limit,
-        .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
-        .allStates = ResourceState::Storage,
-        .initialState = ResourceState::Storage,
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::Storage | ResourceState::TransferDst,
+        .initialState = ResourceState::TransferDst,
     });
     assert(*resourceManager.get<ResourceIndex>(gpuMeshDataBuffer.buffer) == 0);
 
     gpuInstanceInfoBuffer.buffer = resourceManager.createBuffer(Buffer::CreateInfo{
         .debugName = "instanceInfoBuffer",
         .size = sizeof(InstanceInfo) * gpuInstanceInfoBuffer.limit,
-        .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
-        .allStates = ResourceState::Storage,
-        .initialState = ResourceState::Storage,
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::Storage | ResourceState::TransferDst,
+        .initialState = ResourceState::TransferDst,
     });
 
     for(int i = 0; i < ArraySize(perFrameData); i++)
@@ -220,8 +220,15 @@ Editor::Editor()
 
     auto& rm = resourceManager;
 
+    Buffer::Handle meshDataAllocBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "tempMeshDataBuffer",
+        .size = sizeof(GPUMeshData) * resourceManager.getMeshPool().size(),
+        .memoryType = Buffer::MemoryType::CPU,
+        .allStates = ResourceState::TransferSrc,
+        .initialState = ResourceState::TransferSrc,
+    });
     // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
-    auto* gpuPtr = (GPUMeshData*)(*rm.get<void*>(gpuMeshDataBuffer.buffer));
+    auto* gpuPtr = (GPUMeshData*)(*rm.get<void*>(meshDataAllocBuffer));
     // fill MeshData buffer with all meshes
     //      TODO: not all, just the ones being used in scene!
     const auto& meshPool = rm.getMeshPool();
@@ -241,9 +248,18 @@ Editor::Editor()
             .attributeBuffer = *rm.get<ResourceIndex>(renderData->attributeBuffer),
         };
     }
+    gfxDevice.copyBuffer(mainCmdBuffer, meshDataAllocBuffer, gpuMeshDataBuffer.buffer);
+    gfxDevice.destroy(meshDataAllocBuffer);
 
     // create instance info for each object in scene
-    auto* gpuInstancePtr = (InstanceInfo*)(*rm.get<void*>(gpuInstanceInfoBuffer.buffer));
+    Buffer::Handle instanceAllocBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "tempInstanceInfoBuffer",
+        .size = sizeof(InstanceInfo) * ecs.count<MeshRenderer, Transform>(),
+        .memoryType = Buffer::MemoryType::CPU,
+        .allStates = ResourceState::TransferSrc,
+        .initialState = ResourceState::TransferSrc,
+    });
+    auto* gpuInstancePtr = (InstanceInfo*)(*rm.get<void*>(instanceAllocBuffer));
     ecs.forEach<MeshRenderer, Transform>(
         [&](MeshRenderer* meshRenderer, Transform* transform)
         {
@@ -273,6 +289,8 @@ Editor::Editor()
 
             meshRenderer->instanceBufferIndex = freeIndex;
         });
+    gfxDevice.copyBuffer(mainCmdBuffer, instanceAllocBuffer, gpuInstanceInfoBuffer.buffer);
+    gfxDevice.destroy(instanceAllocBuffer);
 
     // ------------------------------------------------------------------------------
 
