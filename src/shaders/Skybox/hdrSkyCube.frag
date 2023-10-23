@@ -1,25 +1,22 @@
-#include "../Bindless/Setup.hlsl"
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
+#include "../includes/MaterialParams.hlsl"
 
-StructForBindless(MaterialInstanceParameters,
+MaterialInstanceParameters(
     Handle< TextureCube<float4> > cubeMap;
-);
-
-DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    Handle< Placeholder > materialParamsBuffer;
-    Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
 );
 
 struct VSOutput
 {
     [[vk::location(0)]]	float3 localPos : POSITIONT;
+    [[vk::location(1)]] int instanceIndex : INSTANCE_INDEX;
 };
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    const MaterialInstanceParameters params = shaderInputs.materialInstanceParams.Load();
+    const InstanceInfo instanceInfo = getInstanceInfo(input.instanceIndex);
+
+    const ConstantBuffer<MaterialInstanceParameters> params = getMaterialInstanceParameters(instanceInfo);
     const TextureCube<float4> cubeMap = params.cubeMap.get();
 
     float4 color = cubeMap.Sample(LinearRepeatSampler, normalize(input.localPos));

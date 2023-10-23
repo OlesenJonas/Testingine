@@ -1,7 +1,5 @@
-#include "../Bindless/Setup.hlsl"
-#include "../VertexAttributes.hlsl"
-#include "../CommonTypes.hlsl"
-
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
 /*
     Not sure if semantic names are needed when compiling only to spirv
 */
@@ -13,50 +11,49 @@ struct VSOutput
     [[vk::location(2)]] float4 vTangentWS : TANGENT0;
     [[vk::location(3)]] float3 vColor : COLOR0;  
     [[vk::location(4)]] float2 vTexCoord : TEXCOORD0;
+    [[vk::location(5)]] int baseInstance : BASE_INSTANCE;
 };
-
-DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    // Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    // using placeholder, since parameter types arent defined here
-    Handle< Placeholder > materialParamsBuffer;
-    Handle< Placeholder > materialInstanceParams;
-);
 
 VSOutput main(VSInput input)
 {
-    VSOutput vsOut = (VSOutput)0;
+    const InstanceInfo instanceInfo = getInstanceInfo(input.baseInstance);
+    const MeshData meshData = getMeshDataBuffer()[instanceInfo.meshDataIndex];
 
-    // const StructuredBuffer<float4x4> transformBuffer = globalTransformBuffer.get();
-    const StructuredBuffer<float4x4> transformBuffer = GLOBAL_TRANSFORMS;
-    const float4x4 modelMatrix = transformBuffer[input.baseInstance];
+    const StructuredBuffer<uint> indexBuffer = meshData.indexBuffer.get();
+    const StructuredBuffer<float3> vertexPositions = meshData.positionBuffer.get();
+    const StructuredBuffer<VertexAttributes> vertexAttributes = meshData.attributesBuffer.get();
 
     // ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
     // ConstantBuffer<RenderPassData> renderPassData = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle];
-    RenderPassData renderPassData = shaderInputs.renderPassData.Load();
+    ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
     const float4x4 projViewMatrix = renderPassData.projView;
     // const float4x4 projViewMatrix = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle].projView;
     //todo: test mul-ing here already, like in GLSL version
     // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
-    
-    float4 worldPos = mul(modelMatrix, float4(input.vPosition,1.0));
+
+    VSOutput vsOut = (VSOutput)0;
+    vsOut.baseInstance = input.baseInstance;
+
+    uint vertexIndex = indexBuffer[input.vertexID];
+    const float3 vertPos = vertexPositions[vertexIndex];
+    float4 worldPos = mul(instanceInfo.transform, float4(vertPos,1.0));
+
     vsOut.vPositionWS = worldPos.xyz;
     vsOut.posOut = mul(projViewMatrix, worldPos);
 
-    vsOut.vColor = input.vColor;
-    vsOut.vTexCoord = input.vTexCoord;
+    vsOut.vColor = vertexAttributes[vertexIndex].color;
+    vsOut.vTexCoord = vertexAttributes[vertexIndex].uv;
 
     //dont think normalize is needed
-    const float3x3 modelMatrix3 = (float3x3)(modelMatrix);
+    const float3x3 modelMatrix3 = (float3x3)(instanceInfo.transform);
     // just using model matrix directly here. When using non-uniform scaling
     // (which I dont want to rule out) transpose(inverse(model)) is required
     //      GLSL: vNormalWS = normalize( transpose(inverse(modelMatrix3)) * vNormal);
     // but HLSL doesnt have a inverse() function.
     //  TODO: upload transpose(inverse()) as part of transform buffer(? packing?) to GPU
-    vsOut.vNormalWS = mul(modelMatrix3, input.vNormal);
-    vsOut.vTangentWS = float4(normalize(mul(modelMatrix3, input.vTangent.xyz)),input.vTangent.w);
+    vsOut.vNormalWS = mul(modelMatrix3, vertexAttributes[vertexIndex].normal);
+    float4 vertexTangent = vertexAttributes[vertexIndex].tangent;
+    vsOut.vTangentWS = float4(normalize(mul(modelMatrix3, vertexTangent.xyz)),vertexTangent.w);
 
     return vsOut;
 }

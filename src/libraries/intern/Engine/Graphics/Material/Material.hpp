@@ -18,7 +18,9 @@ namespace Material
         std::string_view debugName;
         Shaders::StageCreateInfo vertexShader;
         Shaders::StageCreateInfo fragmentShader;
-        // TODO: shouldnt be part of general material
+        // vertex input
+
+        // fragment output
         Span<const Texture::Format> colorFormats;
         Texture::Format depthFormat = Texture::Format::UNDEFINED;
         Texture::Format stencilFormat = Texture::Format::UNDEFINED;

@@ -36,14 +36,22 @@ Editor::Editor()
 
     // create this first, need to ensure resourceIndex is 0 (since thats currently hardcoded in the shaders)
     //  TODO: switch to spec constant?
-    transformsBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
-        .debugName = "objectTransformsBuffer",
-        .size = sizeof(glm::mat4) * MAX_GPU_OBJECTS,
-        .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
-        .allStates = ResourceState::Storage,
-        .initialState = ResourceState::Storage,
+    gpuMeshDataBuffer.buffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "MeshDataBuffer",
+        .size = sizeof(GPUMeshData) * gpuMeshDataBuffer.limit,
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::Storage | ResourceState::TransferDst,
+        .initialState = ResourceState::TransferDst,
     });
-    assert(*resourceManager.get<ResourceIndex>(transformsBuffer) == 0);
+    assert(*resourceManager.get<ResourceIndex>(gpuMeshDataBuffer.buffer) == 0);
+
+    gpuInstanceInfoBuffer.buffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "instanceInfoBuffer",
+        .size = sizeof(InstanceInfo) * gpuInstanceInfoBuffer.limit,
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::Storage | ResourceState::TransferDst,
+        .initialState = ResourceState::TransferDst,
+    });
 
     for(int i = 0; i < ArraySize(perFrameData); i++)
     {
@@ -89,10 +97,6 @@ Editor::Editor()
     resourceManager.createMesh(Cube::positions, Cube::attributes, Cube::indices, "DefaultCube");
     assert(resourceManager.get<std::string>(resourceManager.getMesh("DefaultCube")) != nullptr);
 
-    fullscreenTri = resourceManager.createMesh(
-        FullscreenTri::positions, FullscreenTri::attributes, FullscreenTri::indices, "FullscreenTri");
-    assert(resourceManager.get<std::string>(fullscreenTri) != nullptr);
-
     mainCamera =
         Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
 
@@ -129,15 +133,12 @@ Editor::Editor()
     auto unlitMatInst = resourceManager.createMaterialInstance(unlitTexturedMaterial);
     MaterialInstance::setResource(unlitMatInst, "texture", *resourceManager.get<ResourceIndex>(mipDebugTex));
 
-    auto writeToSwapchainMat = resourceManager.createMaterial({
+    writeToSwapchainMat = resourceManager.createMaterial({
         .debugName = "writeToSwapchain",
         .vertexShader = {.sourcePath = SHADERS_PATH "/WriteToSwapchain/WriteToSwapchain.vert"},
         .fragmentShader = {.sourcePath = SHADERS_PATH "/WriteToSwapchain/WriteToSwapchain.frag"},
         .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
     });
-    writeToSwapchainMatInst = resourceManager.createMaterialInstance(writeToSwapchainMat);
-    MaterialInstance::setResource(
-        writeToSwapchainMatInst, "texture", *resourceManager.get<ResourceIndex>(offscreenTexture));
 
     Material::Handle pbrMat = resourceManager.getMaterial("PBRBasic");
     Material::setResource(
@@ -213,25 +214,83 @@ Editor::Editor()
 
         assert(meshRenderer->mesh.isValid());
         assert(meshRenderer->materialInstance.isValid());
-        assert(meshRenderer->isDirty);
     }
 
-    // ------------------------ Build transform buffer --------------------------------------------------
+    // ------------------------ Build MeshData & InstanceInfo buffer ------------------------------------------
 
+    auto& rm = resourceManager;
+
+    Buffer::Handle meshDataAllocBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "tempMeshDataBuffer",
+        .size = sizeof(GPUMeshData) * resourceManager.getMeshPool().size(),
+        .memoryType = Buffer::MemoryType::CPU,
+        .allStates = ResourceState::TransferSrc,
+        .initialState = ResourceState::TransferSrc,
+    });
     // not sure how good assigning single GPUObjectDatas is (vs CPU buffer and then one memcpy)
-    auto* gpuPtr = (glm::mat4*)(*resourceManager.get<void*>(transformsBuffer));
+    auto* gpuPtr = (GPUMeshData*)(*rm.get<void*>(meshDataAllocBuffer));
+    // fill MeshData buffer with all meshes
+    //      TODO: not all, just the ones being used in scene!
+    const auto& meshPool = rm.getMeshPool();
+    for(auto iter = meshPool.begin(); iter != meshPool.end(); iter++)
+    {
+        auto freeIndex = gpuMeshDataBuffer.freeIndex++;
+
+        // TODO: const correctness
+        Mesh::Handle mesh = *iter;
+        auto* renderData = resourceManager.get<Mesh::RenderData>(mesh);
+        assert(renderData->gpuIndex == 0xFFFFFFFF);
+        renderData->gpuIndex = freeIndex;
+        gpuPtr[freeIndex] = GPUMeshData{
+            .indexBuffer = *rm.get<ResourceIndex>(renderData->indexBuffer),
+            .indexCount = renderData->indexCount,
+            .positionBuffer = *rm.get<ResourceIndex>(renderData->positionBuffer),
+            .attributeBuffer = *rm.get<ResourceIndex>(renderData->attributeBuffer),
+        };
+    }
+    gfxDevice.copyBuffer(mainCmdBuffer, meshDataAllocBuffer, gpuMeshDataBuffer.buffer);
+    gfxDevice.destroy(meshDataAllocBuffer);
+
+    // create instance info for each object in scene
+    Buffer::Handle instanceAllocBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "tempInstanceInfoBuffer",
+        .size = sizeof(InstanceInfo) * ecs.count<MeshRenderer, Transform>(),
+        .memoryType = Buffer::MemoryType::CPU,
+        .allStates = ResourceState::TransferSrc,
+        .initialState = ResourceState::TransferSrc,
+    });
+    auto* gpuInstancePtr = (InstanceInfo*)(*rm.get<void*>(instanceAllocBuffer));
     ecs.forEach<MeshRenderer, Transform>(
         [&](MeshRenderer* meshRenderer, Transform* transform)
         {
-            auto* name = resourceManager.get<std::string>(meshRenderer->mesh);
-            auto freeIndex = freeTransformIndex++;
+            assert(meshRenderer->instanceBufferIndex == 0xFFFFFFFF);
 
-            assert(gpuRepr->isDirty);
-            assert(gpuRepr->index == 0xFFFFFFFF);
-            gpuPtr[freeIndex] = transform->localToWorld;
-            meshRenderer->transformBufferIndex = freeIndex;
-            meshRenderer->isDirty = false;
+            auto freeIndex = gpuInstanceInfoBuffer.freeIndex++;
+
+            const Mesh::Handle mesh = meshRenderer->mesh;
+            auto* name = rm.get<std::string>(mesh);
+            const auto* renderData = rm.get<Mesh::RenderData>(mesh);
+            assert(renderData->gpuIndex != 0xFFFFFFFF);
+            const MaterialInstance::Handle matInst = meshRenderer->materialInstance;
+            const Buffer::Handle matInstParamBuffer = rm.get<Material::ParameterBuffer>(matInst)->deviceBuffer;
+            bool hasMatInstParameters = matInstParamBuffer.isValid();
+            const Material::Handle mat = *rm.get<Material::Handle>(matInst);
+            const Buffer::Handle matParamBuffer = rm.get<Material::ParameterBuffer>(mat)->deviceBuffer;
+            bool hasMatParameters = matParamBuffer.isValid();
+
+            gpuInstancePtr[freeIndex] = InstanceInfo{
+                .transform = transform->localToWorld,
+                .meshDataIndex = renderData->gpuIndex,
+                .materialIndex = 0xFFFFFFFF, // TODO: correct value
+                .materialParamsBuffer = hasMatParameters ? *rm.get<ResourceIndex>(matParamBuffer) : 0xFFFFFFFF,
+                .materialInstanceParamsBuffer =
+                    hasMatInstParameters ? *rm.get<ResourceIndex>(matInstParamBuffer) : 0xFFFFFFFF,
+            };
+
+            meshRenderer->instanceBufferIndex = freeIndex;
         });
+    gfxDevice.copyBuffer(mainCmdBuffer, instanceAllocBuffer, gpuInstanceInfoBuffer.buffer);
+    gfxDevice.destroy(instanceAllocBuffer);
 
     // ------------------------------------------------------------------------------
 
@@ -303,7 +362,7 @@ void Editor::createDefaultSamplers()
     //       smth!
     //          also think about how this works once .spirvs are distributed (outside of source tree) etc...
     std::ofstream defaultSamplerDefines(
-        SHADERS_PATH "/Bindless/DefaultSamplers.hlsl", std::ofstream::out | std::ofstream::trunc);
+        SHADERS_PATH "/includes/Bindless/DefaultSamplers.hlsl", std::ofstream::out | std::ofstream::trunc);
     for(auto& info : defaultInfos)
     {
         defaultSamplerDefines << std::format("#define {} {}\n", info.name, info.index);
@@ -685,8 +744,11 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
         DepthTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
 
     GraphicsPushConstants pushConstants;
-    pushConstants.RenderInfoBuffer =
+    pushConstants.renderInfoBuffer =
         *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
+    pushConstants.instanceBuffer = *resourceManager.get<ResourceIndex>(gpuInstanceInfoBuffer.buffer);
+
+    gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(GraphicsPushConstants), &pushConstants);
 
     Mesh::Handle lastMesh = Mesh::Handle::Invalid();
     Material::Handle lastMaterial = Material::Handle::Invalid();
@@ -696,9 +758,6 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
     ecs.forEach<MeshRenderer>(
         [&](MeshRenderer* meshRenderer)
         {
-            assert(!meshRenderer->isDirty);
-            assert(meshRenderer->transformBufferIndex != 0xFFFFFFFF);
-
             Mesh::Handle objectMesh = meshRenderer->mesh;
             MaterialInstance::Handle objectMaterialInstance = meshRenderer->materialInstance;
 
@@ -709,37 +768,18 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
                 {
                     gfxDevice.setGraphicsPipelineState(
                         offscreenCmdBuffer, *resourceManager.get<VkPipeline>(newMaterial));
-
-                    auto* parameters = resourceManager.get<Material::ParameterBuffer>(newMaterial);
-                    Buffer::Handle paramBuffer = parameters->deviceBuffer;
-                    if(paramBuffer.isValid())
-                        pushConstants.materialParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
-                    else
-                        pushConstants.materialParamsBuffer = 0xFFFFFFFF;
                     lastMaterial = newMaterial;
                 }
-
-                Buffer::Handle paramBuffer =
-                    resourceManager.get<MaterialInstance::ParameterBuffer>(objectMaterialInstance)->deviceBuffer;
-                if(paramBuffer.isValid())
-                    pushConstants.materialInstanceParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
-                else
-                    pushConstants.materialInstanceParamsBuffer = 0xFFFFFFFF;
             }
-
-            gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(GraphicsPushConstants), &pushConstants);
 
             if(objectMesh != lastMesh)
             {
                 auto* meshData = resourceManager.get<Mesh::RenderData>(objectMesh);
                 indexCount = meshData->indexCount;
-                gfxDevice.bindIndexBuffer(offscreenCmdBuffer, meshData->indexBuffer);
-                gfxDevice.bindVertexBuffers(
-                    offscreenCmdBuffer, 0, 2, {meshData->positionBuffer, meshData->attributeBuffer}, {0, 0});
                 lastMesh = objectMesh;
             }
 
-            gfxDevice.drawIndexed(offscreenCmdBuffer, indexCount, 1, 0, 0, meshRenderer->transformBufferIndex);
+            gfxDevice.draw(offscreenCmdBuffer, indexCount, 1, 0, meshRenderer->instanceBufferIndex);
         });
 
     gfxDevice.endRendering(offscreenCmdBuffer);
@@ -772,26 +812,12 @@ VkCommandBuffer Editor::drawUI(int threadIndex)
 
     // Transfer offscreen image to swapchain
 
-    // TODO: abstraction for this!
-    GraphicsPushConstants pushConstants;
-    pushConstants.RenderInfoBuffer =
-        *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
+    Material::Handle material = writeToSwapchainMat;
+    gfxDevice.setGraphicsPipelineState(onscreenCmdBuffer, *resourceManager.get<VkPipeline>(material));
+    ResourceIndex inputTex = *resourceManager.get<ResourceIndex>(offscreenTexture);
+    gfxDevice.pushConstants(onscreenCmdBuffer, sizeof(ResourceIndex), &inputTex);
 
-    Material::Handle newMaterial = *resourceManager.get<Material::Handle>(writeToSwapchainMatInst);
-
-    gfxDevice.setGraphicsPipelineState(onscreenCmdBuffer, *resourceManager.get<VkPipeline>(newMaterial));
-
-    Buffer::Handle paramBuffer =
-        resourceManager.get<MaterialInstance::ParameterBuffer>(writeToSwapchainMatInst)->deviceBuffer;
-    pushConstants.materialInstanceParamsBuffer = *resourceManager.get<ResourceIndex>(paramBuffer);
-
-    gfxDevice.pushConstants(onscreenCmdBuffer, sizeof(GraphicsPushConstants), &pushConstants);
-
-    auto* meshData = resourceManager.get<Mesh::RenderData>(fullscreenTri);
-    gfxDevice.bindIndexBuffer(onscreenCmdBuffer, meshData->indexBuffer);
-    gfxDevice.bindVertexBuffers(
-        onscreenCmdBuffer, 0, 2, {meshData->positionBuffer, meshData->attributeBuffer}, {0, 0});
-    gfxDevice.drawIndexed(onscreenCmdBuffer, meshData->indexCount, 1, 0, 0, 0);
+    gfxDevice.draw(onscreenCmdBuffer, 3, 1, 0, 0);
 
     gfxDevice.drawImGui(onscreenCmdBuffer);
 

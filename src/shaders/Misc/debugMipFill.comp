@@ -1,6 +1,7 @@
-#include "../Bindless/Setup.hlsl"
+#define NO_DEFAULT_PUSH_CONSTANTS
+#include "../includes/Bindless/Setup.hlsl"
 
-DefineShaderInputs(
+DefinePushConstants(
     Handle< RWTexture2D<float4> > outTex;
     uint level;
 );
@@ -10,7 +11,7 @@ void main(uint3 GlobalInvocationID : SV_DispatchThreadID)
 {
     int3 id = GlobalInvocationID;
 
-    uint level = shaderInputs.level;
+    uint level = pushConstants.level;
 
     float4 color = float4(
         (level & 4u) > 0,
@@ -19,7 +20,7 @@ void main(uint3 GlobalInvocationID : SV_DispatchThreadID)
         1
     );
 
-    RWTexture2D<float4> outTex = shaderInputs.outTex.get();
+    RWTexture2D<float4> outTex = pushConstants.outTex.get();
 
     outTex[id.xy] = color;
 }

@@ -1,34 +1,35 @@
-#include "../Bindless/Setup.hlsl"
-#include "../VertexAttributes.hlsl"
-#include "../CommonTypes.hlsl"
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
 
 struct VSOutput
 {
     float4 posOut : SV_POSITION;
     [[vk::location(0)]]	float3 localPos : POSITIONT;
+    [[vk::location(1)]] int instanceIndex : INSTANCE_INDEX;
 };
-
-DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    // Handle< ConstantBuffer_fix<RenderPassData> > renderPassData;
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    // using placeholder, since parameter types arent defined here
-    Handle< Placeholder > materialParamsBuffer;
-    Handle< Placeholder > materialInstanceParams;
-);
 
 VSOutput main(VSInput input)
 {
+    const InstanceInfo instanceInfo = getInstanceInfo(input.baseInstance);
+    const MeshData meshData = getMeshData(instanceInfo);
+
+    const StructuredBuffer<uint> indexBuffer = meshData.indexBuffer.get();
+    const StructuredBuffer<float3> vertexPositions = meshData.positionBuffer.get();
+    const StructuredBuffer<VertexAttributes> vertexAttributes = meshData.attributesBuffer.get();
+    
+    uint vertexIndex = indexBuffer[input.vertexID];
+
     VSOutput vsOut = (VSOutput)0;
+    vsOut.instanceIndex = input.baseInstance;
 
-    vsOut.localPos = input.vPosition;
+    const float3 vertPos = vertexPositions[vertexIndex];
+    //todo: dont just scale up by some large number, instead make forcing depth to 1.0 work!
+    float4 worldPos = float4(500*vertPos,1.0);
 
-    // const StructuredBuffer<float4x4> transformBuffer = globalTransformBuffer.get();
-    const StructuredBuffer<float4x4> transformBuffer = GLOBAL_TRANSFORMS;
-    const float4x4 modelMatrix = transformBuffer[input.baseInstance];
+    vsOut.localPos = vertPos;
 
-    const RenderPassData renderPassData = shaderInputs.renderPassData.Load();
+    const ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
+
     const float4x4 projMatrix = renderPassData.proj;
     const float4x4 viewMatrix = renderPassData.view;
     //remove translation component from view matrix
@@ -38,9 +39,6 @@ VSOutput main(VSInput input)
         viewMatrix[2].xyz,0.0,
         viewMatrix[3].xyz,1.0
     );
-    
-    //todo: dont just scale up by some large number, just make forcing depth to 1.0 work!
-    float4 worldPos = mul(modelMatrix, float4(500*input.vPosition,1.0));
 
     vsOut.posOut = mul(projMatrix, mul(viewMatrixNoTranslate, worldPos));
 

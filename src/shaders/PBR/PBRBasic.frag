@@ -5,10 +5,12 @@
         https://github.com/KhronosGroup/glTF-Sample-Viewer
 */
 
-#include "../Bindless/Setup.hlsl"
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
+#include "../includes/MaterialParams.hlsl"
 #include "PBR.hlsl"
 
-StructForBindless(MaterialParameters,
+MaterialParameters(
     /* TODO: should be part of scene information, not material ? */
     Handle< TextureCube<float4> > irradianceTex;
     Handle< TextureCube<float4> > prefilterTex;
@@ -16,7 +18,7 @@ StructForBindless(MaterialParameters,
     Handle< Texture2D<float2> > brdfLUT;
 );
 
-StructForBindless(MaterialInstanceParameters,
+MaterialInstanceParameters(
     //TODO: check again, but im pretty sure these are all float4 textures
     Handle< Texture2D<float4> > normalTexture;
 
@@ -27,27 +29,24 @@ StructForBindless(MaterialInstanceParameters,
     Handle< Texture2D<float4> > occlusionTexture;
 );
 
-DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    Handle< ConstantBuffer<MaterialParameters> > materialParams;
-    Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
-);
-
 struct VSOutput
 {
     [[vk::location(0)]]	float3 vPositionWS : POSITIONT;
     [[vk::location(1)]] float3 vNormalWS : NORMAL0;
     [[vk::location(2)]] float4 vTangentWS : TANGENT0;
-    [[vk::location(3)]] float3 vColor : COLOR0;  
+    [[vk::location(3)]] float3 vColor : COLOR0;
     [[vk::location(4)]] float2 vTexCoord : TEXCOORD0;
+    [[vk::location(5)]] int baseInstance : BASE_INSTANCE;
 };
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    ConstantBuffer<MaterialParameters> params = shaderInputs.materialParams.get();
-    ConstantBuffer<MaterialInstanceParameters> instanceParams = shaderInputs.materialInstanceParams.get();
+    const InstanceInfo instanceInfo = getInstanceInfo(input.baseInstance);
+    const MeshData meshData = getMeshDataBuffer()[instanceInfo.meshDataIndex];
+
+    ConstantBuffer<MaterialParameters> params = getMaterialParameters(instanceInfo);
+    ConstantBuffer<MaterialInstanceParameters> instanceParams = getMaterialInstanceParameters(instanceInfo);
+
     Texture2D normalTexture =  instanceParams.normalTexture.get();
 
     float3 nrmSampleTS = normalTexture.Sample(LinearRepeatSampler, input.vTexCoord).xyz;
@@ -63,7 +62,7 @@ float4 main(VSOutput input) : SV_TARGET
         nrmSampleTS.z * input.vNormalWS
     );
 
-    ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
+    ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
     const float3 cameraPositionWS = renderPassData.cameraPositionWS;
 
     Texture2D colorTexture = instanceParams.baseColorTexture.get();

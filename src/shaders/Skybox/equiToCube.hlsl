@@ -1,6 +1,7 @@
-#include "../Bindless/Setup.hlsl"
+#define NO_DEFAULT_PUSH_CONSTANTS
+#include "../includes/Bindless/Setup.hlsl"
 
-DefineShaderInputs(
+DefinePushConstants(
     Handle< Texture2D<float4> > sourceTex;
     Handle< RWTexture2DArray<float4> > targetTex;
 );
@@ -23,7 +24,7 @@ void main(
     int3 id = GlobalInvocationID;
 
     int3 size;
-    RWTexture2DArray<float4> targetTex = shaderInputs.targetTex.get();
+    RWTexture2DArray<float4> targetTex = pushConstants.targetTex.get();
     targetTex.GetDimensions(size.x, size.y, size.z);
     float2 uv = float2(id.xy + 0.5) / size.xy;
     uv.y = 1.0 - uv.y;
@@ -44,7 +45,7 @@ void main(
         localPos = float3(-uv.x, uv.y, -1.0); // neg z
 
     float3 color =
-        shaderInputs.sourceTex.get().SampleLevel(
+        pushConstants.sourceTex.get().SampleLevel(
             LinearRepeatSampler,
             sampleSphericalMap(normalize(localPos)),
             0

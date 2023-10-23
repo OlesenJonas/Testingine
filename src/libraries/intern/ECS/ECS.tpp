@@ -81,6 +81,30 @@ void ECS::forEach(std::function<void(std::add_pointer_t<Type>)> func)
     }
 };
 
+template <typename... Types>
+uint32_t ECS::count()
+{
+    ComponentMask componentMask;
+    int i = 0;
+    (
+        [&]()
+        {
+            componentMask.set(bitmaskIndexFromComponentType<Types>());
+            i++;
+        }(),
+        ... //
+    );
+
+    uint32_t result = 0;
+    for(auto& arch : archetypes)
+    {
+        if((arch.componentMask & componentMask) == componentMask)
+            result += arch.storageUsed;
+    }
+
+    return result;
+}
+
 template <typename C>
 uint32_t ECS::bitmaskIndexFromComponentType()
 {

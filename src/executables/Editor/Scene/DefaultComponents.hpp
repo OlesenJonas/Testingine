@@ -30,9 +30,9 @@ struct Hierarchy
 struct MeshRenderer
 {
     Mesh::Handle mesh;
+    // TODO: also store Material::Handle here for 1 less indirection?
     MaterialInstance::Handle materialInstance;
 
-    // GPU Transform info
-    bool isDirty = true;
-    uint32_t transformBufferIndex = 0xFFFFFFFF;
+    // GPU Render item info
+    uint32_t instanceBufferIndex = 0xFFFFFFFF;
 };

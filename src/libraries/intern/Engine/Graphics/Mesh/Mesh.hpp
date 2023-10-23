@@ -42,8 +42,13 @@ struct Mesh
         Buffer::Handle indexBuffer;
         Buffer::Handle positionBuffer;
         Buffer::Handle attributeBuffer;
+
+        uint32_t gpuIndex;
     };
 
+    /*
+        uint is GPU buffer index, TODO: wrap in type?
+    */
     using Handle = Handle<std::string, RenderData>;
 
     // --------------------------------------------------------

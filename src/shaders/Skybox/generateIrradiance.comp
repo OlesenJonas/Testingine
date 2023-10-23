@@ -1,6 +1,7 @@
-#include "../Bindless/Setup.hlsl"
+#define NO_DEFAULT_PUSH_CONSTANTS
+#include "../includes/Bindless/Setup.hlsl"
 
-DefineShaderInputs(
+DefinePushConstants(
     Handle< TextureCube<float4> > sourceTex;
     Handle< RWTexture2DArray<float4> > irradianceTex;
 );
@@ -17,10 +18,10 @@ void main(
 {
     int3 id = GlobalInvocationID;
 
-    TextureCube<float4> sourceTex = shaderInputs.sourceTex.get();
+    TextureCube<float4> sourceTex = pushConstants.sourceTex.get();
 
     //TODO: getLocalPos(tex, id) helper function?
-    RWTexture2DArray<float4> targetTex = shaderInputs.irradianceTex.get();
+    RWTexture2DArray<float4> targetTex = pushConstants.irradianceTex.get();
     int3 size;
     targetTex.GetDimensions(size.x, size.y, size.z);
     float2 uv = float2(id.xy + 0.5) / size.xy;

@@ -1,34 +1,23 @@
-/*
-    Based on the learnOpenGL.com glTF spec and glTF-Sample-Viewer
-        https://learnopengl.com/PBR/Theory
-        https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#appendix-b-brdf-implementation
-        https://github.com/KhronosGroup/glTF-Sample-Viewer
-*/
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
+#include "../includes/MaterialParams.hlsl"
 
-#include "../Bindless/Setup.hlsl"
-
-StructForBindless(MaterialInstanceParameters,
+MaterialInstanceParameters(
     Handle< Texture2D<float4> > texture;
-);
-
-DefineShaderInputs(
-    // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
-    // Buffer with material/-instance parameters
-    Handle< Placeholder > materialParams;
-    Handle< ConstantBuffer<MaterialInstanceParameters> > materialInstanceParams;
 );
 
 struct VSOutput
 {
     [[vk::location(0)]] float2 vTexCoord : TEXCOORD0;
+    [[vk::location(1)]] int instanceIndex : INSTANCE_INDEX;
 };
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    // MaterialInstanceParameters instanceParams = shaderInputs.materialInstanceParams.Load();
-    // Texture2D tex = instanceParams.texture.get();
-    Texture2D tex = shaderInputs.materialInstanceParams.get().texture.get();
+    const InstanceInfo instanceInfo = getInstanceInfo(input.instanceIndex);
+
+    ConstantBuffer<MaterialInstanceParameters> instanceParams = getMaterialInstanceParameters(instanceInfo);
+    Texture2D tex = instanceParams.texture.get();
     float3 baseColor = tex.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
 
     return float4(baseColor, 1.0);

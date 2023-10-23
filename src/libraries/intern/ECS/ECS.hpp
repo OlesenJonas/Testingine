@@ -62,6 +62,9 @@ struct ECS
     template <typename Type>
     void forEach(std::function<void(std::add_pointer_t<Type>)> func);
 
+    template <typename... Types>
+    uint32_t count();
+
   private:
     template <typename C>
     uint32_t bitmaskIndexFromComponentType();
