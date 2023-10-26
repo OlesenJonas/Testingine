@@ -119,14 +119,16 @@ struct glTF::TextureParams
 struct glTF::PBRMetalRoughParams
 {
     TextureParams baseColorTexture;
-    TextureParams metallicRoughnessTexture;
+    std::optional<TextureParams> metallicRoughnessTexture;
+    float metallicFactor;
+    float roughnessFactor;
 };
 
 struct glTF::Material
 {
     PBRMetalRoughParams pbrMetallicRoughness;
-    TextureParams occlusionTexture;
-    TextureParams normalTexture;
+    std::optional<TextureParams> occlusionTexture;
+    std::optional<TextureParams> normalTexture;
     // todo: parse other members
 };
 struct glTF::Texture

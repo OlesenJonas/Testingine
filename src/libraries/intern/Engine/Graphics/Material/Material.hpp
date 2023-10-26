@@ -57,6 +57,7 @@ namespace Material
     using Handle = Handle<std::string, VkPipeline, ParameterMap, InstanceParameterMap, ParameterBuffer, bool>;
 
     void setResource(Handle handle, std::string_view name, ResourceIndex index);
+    void setFloat(Handle handle, std::string_view name, float value);
 
 }; // namespace Material
 
@@ -66,4 +67,5 @@ namespace MaterialInstance
     using Handle = Handle<std::string, Material::Handle, ParameterBuffer, bool>;
 
     void setResource(Handle handle, std::string_view name, ResourceIndex index);
+    void setFloat(Handle handle, std::string_view name, float value);
 }; // namespace MaterialInstance

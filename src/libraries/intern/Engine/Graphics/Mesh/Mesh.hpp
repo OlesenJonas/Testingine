@@ -36,20 +36,26 @@ struct Mesh
         TexCoordType uv;
     };
 
+    static constexpr auto MAX_SUBMESHES = 6;
+
     struct RenderData
     {
         uint32_t indexCount = 0;
-        Buffer::Handle indexBuffer;
-        Buffer::Handle positionBuffer;
-        Buffer::Handle attributeBuffer;
+        Buffer::Handle indexBuffer = Buffer::Handle::Invalid();
+        Buffer::Handle positionBuffer = Buffer::Handle::Invalid();
+        Buffer::Handle attributeBuffer = Buffer::Handle::Invalid();
 
-        uint32_t gpuIndex;
+        uint32_t gpuIndex = 0xFFFFFFFF;
     };
+    using SubMeshes = std::array<RenderData, MAX_SUBMESHES>;
+    static_assert(std::is_trivially_move_constructible<SubMeshes>::value);
+    static_assert(std::is_trivially_destructible<SubMeshes>::value);
 
     /*
         uint is GPU buffer index, TODO: wrap in type?
+        Also store submesh count? so dont need to interate over all? (atm MAX is 6 so not that bad)
     */
-    using Handle = Handle<std::string, RenderData>;
+    using Handle = Handle<std::string, SubMeshes>;
 
     // --------------------------------------------------------
 

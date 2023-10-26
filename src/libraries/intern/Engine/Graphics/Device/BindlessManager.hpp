@@ -50,7 +50,7 @@ class BindlessManager
     static constexpr uint32_t sampledImagesLimit = 128;
     static constexpr uint32_t storageImagesLimit = 128;
     static constexpr uint32_t uniformBuffersLimit = 128;
-    static constexpr uint32_t storageBuffersLimit = 128;
+    static constexpr uint32_t storageBuffersLimit = 1024;
 
   private:
     struct BindlessSet

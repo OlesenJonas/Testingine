@@ -27,6 +27,9 @@ MaterialInstanceParameters(
     Handle< Texture2D<float4> > metalRoughTexture;
 
     Handle< Texture2D<float4> > occlusionTexture;
+
+    float metallicFactor;
+    float roughnessFactor;
 );
 
 struct VSOutput
@@ -47,20 +50,28 @@ float4 main(VSOutput input) : SV_TARGET
     ConstantBuffer<MaterialParameters> params = getMaterialParameters(instanceInfo);
     ConstantBuffer<MaterialInstanceParameters> instanceParams = getMaterialInstanceParameters(instanceInfo);
 
-    Texture2D normalTexture =  instanceParams.normalTexture.get();
+    float3 normalWS;
+    if(instanceParams.normalTexture.isValid())
+    {
+        Texture2D normalTexture =  instanceParams.normalTexture.get();
 
-    float3 nrmSampleTS = normalTexture.Sample(LinearRepeatSampler, input.vTexCoord).xyz;
-    nrmSampleTS = 2 * nrmSampleTS - 1;
-    // normal map is OpenGL style y direction
-    //  todo: make parameter? Can be controlled through texture view?
-    nrmSampleTS.y *= -1;
+        float3 nrmSampleTS = normalTexture.Sample(LinearRepeatSampler, input.vTexCoord).xyz;
+        nrmSampleTS = 2 * nrmSampleTS - 1;
+        // normal map is OpenGL style y direction
+        //  todo: make parameter? Can be controlled through texture view?
+        nrmSampleTS.y *= -1;
 
-    float3 vBitangentWS = input.vTangentWS.w * cross(input.vNormalWS, input.vTangentWS.xyz);
-    float3 normalWS = normalize(
-        nrmSampleTS.x * input.vTangentWS.xyz +
-        nrmSampleTS.y * vBitangentWS   +
-        nrmSampleTS.z * input.vNormalWS
-    );
+        float3 vBitangentWS = input.vTangentWS.w * cross(input.vNormalWS, input.vTangentWS.xyz);
+        normalWS = normalize(
+            nrmSampleTS.x * input.vTangentWS.xyz +
+            nrmSampleTS.y * vBitangentWS   +
+            nrmSampleTS.z * input.vNormalWS
+        );
+    }
+    else
+    {
+        normalWS = input.vNormalWS;
+    }
 
     ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
     const float3 cameraPositionWS = renderPassData.cameraPositionWS;
@@ -68,13 +79,22 @@ float4 main(VSOutput input) : SV_TARGET
     Texture2D colorTexture = instanceParams.baseColorTexture.get();
     float3 baseColor = colorTexture.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
 
-    Texture2D mrTexture = instanceParams.metalRoughTexture.get();
-    float3 metalRough = mrTexture.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
-    float metal = metalRough.z;
-    float roughness = metalRough.y;
+    float metal = instanceParams.metallicFactor;
+    float roughness = instanceParams.roughnessFactor;
+    if(instanceParams.metalRoughTexture.isValid())
+    {
+        Texture2D mrTexture = instanceParams.metalRoughTexture.get();
+        float3 metalRough = mrTexture.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
+        metal *= metalRough.z;
+        roughness *= metalRough.y;
+    }
 
-    Texture2D occlusionTexture = instanceParams.occlusionTexture.get();
-    float occlusion = occlusionTexture.Sample(LinearRepeatSampler, input.vTexCoord).x;
+    float occlusion = 1.0;
+    if(instanceParams.occlusionTexture.isValid())
+    {   
+        Texture2D occlusionTexture = instanceParams.occlusionTexture.get();
+        occlusion = occlusionTexture.Sample(LinearRepeatSampler, input.vTexCoord).x;
+    }
 
     // float3 color = 0.5+0.5*vNormalWS;
     // float3 color = 0.5+0.5*normalWS;

@@ -32,6 +32,7 @@ namespace MaterialInstance
         if(iterator == parameterLUT.end())
         {
             // todo: emit some warning
+            BREAKPOINT;
             return;
         }
         const auto& parameterInfo = iterator->second;
@@ -39,6 +40,26 @@ namespace MaterialInstance
         auto* paramBuffer = ResourceManager::impl()->get<MaterialInstance::ParameterBuffer>(handle);
         auto* ptr = (uint32_t*)(&paramBuffer->writeBuffer[parameterInfo.byteOffsetInBuffer]);
         *ptr = index;
+        *ResourceManager::impl()->get<bool>(handle) = true;
+    }
+
+    void setFloat(Handle handle, std::string_view name, float value)
+    {
+        Material::Handle parent = *ResourceManager::impl()->get<Material::Handle>(handle);
+
+        const auto& parameterLUT = ResourceManager::impl()->get<Material::InstanceParameterMap>(parent)->map;
+        const auto& iterator = parameterLUT.find(name);
+        if(iterator == parameterLUT.end())
+        {
+            // todo: emit some warning
+            BREAKPOINT;
+            return;
+        }
+        const auto& parameterInfo = iterator->second;
+
+        auto* paramBuffer = ResourceManager::impl()->get<MaterialInstance::ParameterBuffer>(handle);
+        auto* ptr = (float*)(&paramBuffer->writeBuffer[parameterInfo.byteOffsetInBuffer]);
+        *ptr = value;
         *ResourceManager::impl()->get<bool>(handle) = true;
     }
 } // namespace MaterialInstance

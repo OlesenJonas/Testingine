@@ -30,8 +30,8 @@ struct Hierarchy
 struct MeshRenderer
 {
     Mesh::Handle mesh;
-    // TODO: also store Material::Handle here for 1 less indirection?
-    MaterialInstance::Handle materialInstance;
+    // TODO: also store Material::Handle-s here for less indirections?
+    std::array<MaterialInstance::Handle, Mesh::MAX_SUBMESHES> materialInstances;
 
     // GPU Render item info
     uint32_t instanceBufferIndex = 0xFFFFFFFF;

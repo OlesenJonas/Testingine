@@ -24,6 +24,11 @@ struct Handle
     {
         return (T)0;
     }
+
+    bool isValid() 
+    {
+        return resourceHandle != 0xFFFFFFFF;
+    }
 };
 
 template<>

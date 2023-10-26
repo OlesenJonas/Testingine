@@ -110,7 +110,8 @@ Editor::Editor()
     gfxDevice.disableValidationErrorBreakpoint();
 
     // TODO: execute this while GPU is already doing work, instead of waiting for this *then* starting GPU
-    Scene::load("C:/Users/jonas/Documents/Models/DamagedHelmet/DamagedHelmet.gltf", &ecs, scene.root);
+    // https://developer.nvidia.com/ue4-sun-temple (exported from blender as gltf)
+    Scene::load("C:/Users/jonas/Documents/Models/SunTemple_custom/Processed/SunTemple.gltf", &ecs, scene.root);
 
     createDefaultTextures(mainCmdBuffer);
 
@@ -179,7 +180,7 @@ Editor::Editor()
         auto* meshRenderer = skybox.addComponent<MeshRenderer>();
         meshRenderer->mesh = resourceManager.getMesh("DefaultCube");
         // renderInfo->materialInstance = equiSkyboxMatInst;
-        meshRenderer->materialInstance = cubeSkyboxMatInst;
+        meshRenderer->materialInstances[0] = cubeSkyboxMatInst;
     }
 
     Mesh::Handle triangleMesh;
@@ -205,7 +206,7 @@ Editor::Editor()
     {
         auto* meshRenderer = triangleObject.addComponent<MeshRenderer>();
         meshRenderer->mesh = triangleMesh;
-        meshRenderer->materialInstance = unlitMatInst;
+        meshRenderer->materialInstances[0] = unlitMatInst;
         auto* transform = triangleObject.getComponent<Transform>();
         transform->position = glm::vec3{3.0f, 0.0f, 0.0f};
         transform->calculateLocalTransformMatrix();
@@ -213,7 +214,7 @@ Editor::Editor()
         transform->localToWorld = transform->localTransform;
 
         assert(meshRenderer->mesh.isValid());
-        assert(meshRenderer->materialInstance.isValid());
+        assert(meshRenderer->materialInstances[0].isValid());
     }
 
     // ------------------------ Build MeshData & InstanceInfo buffer ------------------------------------------
@@ -238,14 +239,14 @@ Editor::Editor()
 
         // TODO: const correctness
         Mesh::Handle mesh = *iter;
-        auto* renderData = resourceManager.get<Mesh::RenderData>(mesh);
-        assert(renderData->gpuIndex == 0xFFFFFFFF);
-        renderData->gpuIndex = freeIndex;
+        Mesh::RenderData& renderData = (*resourceManager.get<Mesh::SubMeshes>(mesh))[0];
+        assert(renderData.gpuIndex == 0xFFFFFFFF);
+        renderData.gpuIndex = freeIndex;
         gpuPtr[freeIndex] = GPUMeshData{
-            .indexBuffer = *rm.get<ResourceIndex>(renderData->indexBuffer),
-            .indexCount = renderData->indexCount,
-            .positionBuffer = *rm.get<ResourceIndex>(renderData->positionBuffer),
-            .attributeBuffer = *rm.get<ResourceIndex>(renderData->attributeBuffer),
+            .indexBuffer = *rm.get<ResourceIndex>(renderData.indexBuffer),
+            .indexCount = renderData.indexCount,
+            .positionBuffer = *rm.get<ResourceIndex>(renderData.positionBuffer),
+            .attributeBuffer = *rm.get<ResourceIndex>(renderData.attributeBuffer),
         };
     }
     gfxDevice.copyBuffer(mainCmdBuffer, meshDataAllocBuffer, gpuMeshDataBuffer.buffer);
@@ -269,9 +270,9 @@ Editor::Editor()
 
             const Mesh::Handle mesh = meshRenderer->mesh;
             auto* name = rm.get<std::string>(mesh);
-            const auto* renderData = rm.get<Mesh::RenderData>(mesh);
-            assert(renderData->gpuIndex != 0xFFFFFFFF);
-            const MaterialInstance::Handle matInst = meshRenderer->materialInstance;
+            const Mesh::RenderData& renderData = (*rm.get<Mesh::SubMeshes>(mesh))[0];
+            assert(renderData.gpuIndex != 0xFFFFFFFF);
+            const MaterialInstance::Handle matInst = meshRenderer->materialInstances[0];
             const Buffer::Handle matInstParamBuffer = rm.get<Material::ParameterBuffer>(matInst)->deviceBuffer;
             bool hasMatInstParameters = matInstParamBuffer.isValid();
             const Material::Handle mat = *rm.get<Material::Handle>(matInst);
@@ -280,7 +281,7 @@ Editor::Editor()
 
             gpuInstancePtr[freeIndex] = InstanceInfo{
                 .transform = transform->localToWorld,
-                .meshDataIndex = renderData->gpuIndex,
+                .meshDataIndex = renderData.gpuIndex,
                 .materialIndex = 0xFFFFFFFF, // TODO: correct value
                 .materialParamsBuffer = hasMatParameters ? *rm.get<ResourceIndex>(matParamBuffer) : 0xFFFFFFFF,
                 .materialInstanceParamsBuffer =
@@ -759,7 +760,7 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
         [&](MeshRenderer* meshRenderer)
         {
             Mesh::Handle objectMesh = meshRenderer->mesh;
-            MaterialInstance::Handle objectMaterialInstance = meshRenderer->materialInstance;
+            MaterialInstance::Handle objectMaterialInstance = meshRenderer->materialInstances[0];
 
             if(objectMaterialInstance != lastMaterialInstance)
             {
@@ -774,8 +775,8 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
 
             if(objectMesh != lastMesh)
             {
-                auto* meshData = resourceManager.get<Mesh::RenderData>(objectMesh);
-                indexCount = meshData->indexCount;
+                const Mesh::RenderData& meshData = (*resourceManager.get<Mesh::SubMeshes>(objectMesh))[0];
+                indexCount = meshData.indexCount;
                 lastMesh = objectMesh;
             }
 

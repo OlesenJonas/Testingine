@@ -8,6 +8,9 @@ template <typename... Ts>
 class Handle
 {
   public:
+    template <typename T>
+    constexpr static bool holdsType = (std::is_same_v<T, Ts> || ...);
+
     Handle() = default;
     Handle(uint32_t index, uint32_t generation) : index(index), generation(generation){};
     static Handle Invalid() { return {0, 0}; }

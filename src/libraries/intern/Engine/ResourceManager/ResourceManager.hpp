@@ -55,6 +55,7 @@ class ResourceManager
         std::string name);
     void destroy(Mesh::Handle handle);
     template <typename T>
+        requires Mesh::Handle::holdsType<T>
     inline T* get(Mesh::Handle handle)
     {
         return meshPool.get<T>(handle);

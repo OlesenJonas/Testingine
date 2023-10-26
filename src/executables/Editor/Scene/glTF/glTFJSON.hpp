@@ -6,25 +6,35 @@
 template <typename T, T defaultValue>
 struct ValueOrDefault
 {
-    inline T operator()()
-    {
-        return defaultValue;
-    }
-    inline T operator()(T value)
-    {
-        return value;
-    }
+    inline T operator()() const { return defaultValue; }
+    inline T operator()(T value) const { return value; }
 };
 
 namespace daw::json
 {
     template <JSONNAMETYPE Name, typename T, T defaultValue>
-    using json_number_or_default = json_number_null<
+        requires std::is_integral_v<T>
+    using json_number_or_default_int = json_number_null<
         Name,                             //
         T,                                //
         number_opts_def,                  //
         JsonNullable::Nullable,           //
         ValueOrDefault<T, defaultValue>>; //
+
+    template <JSONNAMETYPE Name, typename defaultProducer>
+    using json_number_or_default_float = json_number_null<
+        Name,                   //
+        float,                  //
+        number_opts_def,        //
+        JsonNullable::Nullable, //
+        defaultProducer>;       //
+};                              // namespace daw::json
+
+// ugly but only way I know of atm (and it works)
+struct DefaultValue_1_0
+{
+    inline float operator()() const { return 1.0f; }
+    inline float operator()(float value) const { return value; };
 };
 
 namespace daw::json
@@ -42,25 +52,13 @@ namespace daw::json
     template <>                                                                                                   \
     struct daw::json::json_data_contract<T>
 
-JSONType(glm::vec3)
-{
-    using type = json_ordered_member_list<float, float, float>;
-};
+JSONType(glm::vec3) { using type = json_ordered_member_list<float, float, float>; };
 
-JSONType(glm::vec4)
-{
-    using type = json_ordered_member_list<float, float, float, float>;
-};
+JSONType(glm::vec4) { using type = json_ordered_member_list<float, float, float, float>; };
 
-JSONType(glTF::AssetInfo)
-{
-    using type = json_member_list<json_string<"version">>;
-};
+JSONType(glTF::AssetInfo) { using type = json_member_list<json_string<"version">>; };
 
-JSONType(glTF::Scene)
-{
-    using type = json_member_list<json_array<"nodes", int>>;
-};
+JSONType(glTF::Scene) { using type = json_member_list<json_array<"nodes", int>>; };
 
 JSONType(glTF::Node)
 {
@@ -102,12 +100,12 @@ JSONType(glTF::Mesh)
 
 JSONType(glTF::Accessor)
 {
-    using type = json_member_list<                         //
-        json_number<"bufferView", uint32_t>,               //
-        json_number_or_default<"byteOffset", uint32_t, 0>, //
-        json_number<"componentType", uint32_t>,            //
-        json_number<"count", uint32_t>,                    //
-        json_string<"type">                                //
+    using type = json_member_list<                             //
+        json_number<"bufferView", uint32_t>,                   //
+        json_number_or_default_int<"byteOffset", uint32_t, 0>, //
+        json_number<"componentType", uint32_t>,                //
+        json_number<"count", uint32_t>,                        //
+        json_string<"type">                                    //
         >;
 };
 
@@ -120,18 +118,20 @@ JSONType(glTF::TextureParams)
 
 JSONType(glTF::PBRMetalRoughParams)
 {
-    using type = json_member_list<                                  //
-        json_class<"baseColorTexture", glTF::TextureParams>,        //
-        json_class<"metallicRoughnessTexture", glTF::TextureParams> //
+    using type = json_member_list<                                                       //
+        json_class<"baseColorTexture", glTF::TextureParams>,                             //
+        json_class_null<"metallicRoughnessTexture", std::optional<glTF::TextureParams>>, //
+        json_number_or_default_float<"metallicFactor", DefaultValue_1_0>,                //
+        json_number_or_default_float<"roughnessFactor", DefaultValue_1_0>                //
         >;
 };
 
 JSONType(glTF::Material)
 {
-    using type = json_member_list<                                     //
-        json_class<"pbrMetallicRoughness", glTF::PBRMetalRoughParams>, //
-        json_class<"occlusionTexture", glTF::TextureParams>,           //
-        json_class<"normalTexture", glTF::TextureParams>               //
+    using type = json_member_list<                                               //
+        json_class<"pbrMetallicRoughness", glTF::PBRMetalRoughParams>,           //
+        json_class_null<"occlusionTexture", std::optional<glTF::TextureParams>>, //
+        json_class_null<"normalTexture", std::optional<glTF::TextureParams>>     //
         >;
 };
 
@@ -152,21 +152,21 @@ JSONType(glTF::Image)
 
 JSONType(glTF::Sampler)
 {
-    using type = json_member_list<                           //
-        json_number_or_default<"magFilter", uint32_t, 9729>, //
-        json_number_or_default<"minFilter", uint32_t, 9987>, //
-        json_number_or_default<"wrapS", uint32_t, 10497>,    //
-        json_number_or_default<"wrapT", uint32_t, 10497>     //
+    using type = json_member_list<                               //
+        json_number_or_default_int<"magFilter", uint32_t, 9729>, //
+        json_number_or_default_int<"minFilter", uint32_t, 9987>, //
+        json_number_or_default_int<"wrapS", uint32_t, 10497>,    //
+        json_number_or_default_int<"wrapT", uint32_t, 10497>     //
         >;
 };
 
 JSONType(glTF::BufferView)
 {
-    using type = json_member_list<                         //
-        json_number<"buffer", uint32_t>,                   //
-        json_number_or_default<"byteOffset", uint32_t, 0>, //
-        json_number<"byteLength", uint32_t>,               //
-        json_number_or_default<"byteStride", uint32_t, 0>  //
+    using type = json_member_list<                             //
+        json_number<"buffer", uint32_t>,                       //
+        json_number_or_default_int<"byteOffset", uint32_t, 0>, //
+        json_number<"byteLength", uint32_t>,                   //
+        json_number_or_default_int<"byteStride", uint32_t, 0>  //
         >;
 };
 
