@@ -182,7 +182,7 @@ class MultiPoolImpl
         return {index, generations[index]};
     }
 
-    bool isHandleValid(Handle<Ts...> handle)
+    bool isHandleValid(Handle<Ts...> handle) const
     {
         assert(handle.getIndex() < capacity);
 

@@ -12,7 +12,7 @@
 #include <vulkan/vulkan_core.h>
 
 ECS::Entity parseNode(
-    Span<Mesh::Handle> meshes,
+    Span<std::array<Mesh::Handle, Mesh::MAX_SUBMESHES>> meshes,
     Span<MaterialInstance::Handle> matInsts,
     const glTF::Main& gltf,
     ECS& ecs,
@@ -38,7 +38,8 @@ ECS::Entity parseNode(
         auto* renderInfo = nodeEntity.addComponent<MeshRenderer>();
         // only primitive 0 gets loaded atm
         {
-            renderInfo->mesh = meshes[glTFNode.meshIndex.value()];
+            // TODO: USE ARRAY
+            renderInfo->subMeshes = meshes[glTFNode.meshIndex.value()];
             renderInfo->materialInstances[0] = matInsts[gltfMesh.primitives[0].materialIndex];
         }
     }
@@ -144,8 +145,8 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
     }
 
     // Load/create Meshes
-    std::vector<Mesh::Handle> meshes;
-    meshes.resize(gltf.meshes.size());
+    std::vector<std::array<Mesh::Handle, Mesh::MAX_SUBMESHES>> meshes;
+    meshes.resize(gltf.meshes.size(), FilledArray<Mesh::Handle, Mesh::MAX_SUBMESHES>(Mesh::Handle::Invalid()));
     for(int i = 0; i < gltf.meshes.size(); i++)
     {
         // not just using the bufferView/Accessors as defined by gltf
@@ -159,146 +160,157 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             // TODO: warn more than max allowed submeshes
         }
 
-        const auto& primitive = mesh.primitives[0];
-        const glTF::Accessor& positionAccessor = gltf.accessors[primitive.attributes.positionAccessor];
-        const glTF::Accessor& normalAccessor = gltf.accessors[primitive.attributes.normalAccessor];
-        const glTF::Accessor& uv0Accessor = gltf.accessors[primitive.attributes.uv0Accessor];
-        // todo: load vertex colors (if available)
-        const uint32_t vertexCount = positionAccessor.count;
-        assert(normalAccessor.count == vertexCount);
-        assert(uv0Accessor.count == vertexCount);
-
-        std::vector<Mesh::VertexAttributes> vertexAttributes;
-        vertexAttributes.resize(vertexCount);
-        std::vector<Mesh::PositionType> vertexPositions;
-        vertexPositions.resize(vertexCount);
-
-        // read positions
+        for(int prim = 0; prim < glm::min<int>(Mesh::MAX_SUBMESHES, mesh.primitives.size()); prim++)
         {
-            const glTF::BufferView& bufferView = gltf.bufferViews[positionAccessor.bufferViewIndex];
-            char* startAddress =
-                &(buffers[bufferView.bufferIndex][bufferView.byteOffset + positionAccessor.byteOffset]);
+            const auto& primitive = mesh.primitives[prim];
 
-            // Position must be of type float3
-            assert(positionAccessor.componentType == glTF::Accessor::f32);
-            assert(positionAccessor.type == glTF::Accessor::vec3);
-            auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 3;
+            const glTF::Accessor& positionAccessor = gltf.accessors[primitive.attributes.positionAccessor];
+            const glTF::Accessor& normalAccessor = gltf.accessors[primitive.attributes.normalAccessor];
+            const glTF::Accessor& uv0Accessor = gltf.accessors[primitive.attributes.uv0Accessor];
+            // todo: load vertex colors (if available)
+            const uint32_t vertexCount = positionAccessor.count;
+            assert(normalAccessor.count == vertexCount);
+            assert(uv0Accessor.count == vertexCount);
 
-            for(int j = 0; j < vertexCount; j++)
+            std::vector<Mesh::PositionType> vertexPositions;
+            vertexPositions.resize(vertexCount);
+            std::vector<Mesh::VertexAttributes> vertexAttributes;
+            vertexAttributes.resize(vertexCount);
+
+            // read positions
             {
-                vertexPositions[j] = *((glm::vec3*)(startAddress + static_cast<size_t>(j * effectiveStride)));
-            }
-        }
+                const glTF::BufferView& bufferView = gltf.bufferViews[positionAccessor.bufferViewIndex];
+                char* startAddress =
+                    &(buffers[bufferView.bufferIndex][bufferView.byteOffset + positionAccessor.byteOffset]);
 
-        // read normals
-        {
-            const glTF::Accessor& accessor = normalAccessor;
-            const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
-            char* startAddress = &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
+                // Position must be of type float3
+                assert(positionAccessor.componentType == glTF::Accessor::f32);
+                assert(positionAccessor.type == glTF::Accessor::vec3);
+                auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 3;
 
-            // normals must be of type float3
-            assert(accessor.componentType == glTF::Accessor::f32);
-            assert(accessor.type == glTF::Accessor::vec3);
-            auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 3;
-
-            for(int j = 0; j < vertexCount; j++)
-            {
-                vertexAttributes[j].normal =
-                    *((glm::vec3*)(startAddress + static_cast<size_t>(j * effectiveStride)));
-            }
-        }
-
-        // read uvs
-        {
-            const glTF::Accessor& accessor = uv0Accessor;
-            const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
-            char* startAddress = &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
-
-            // uvs must be of type float2
-            assert(accessor.componentType == glTF::Accessor::f32);
-            assert(accessor.type == glTF::Accessor::vec2);
-            auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 2;
-
-            for(int j = 0; j < vertexCount; j++)
-            {
-                vertexAttributes[j].uv = *((glm::vec2*)(startAddress + static_cast<size_t>(j * effectiveStride)));
-            }
-        }
-
-        std::vector<uint32_t> indices;
-        if(primitive.indexAccessor.has_value())
-        {
-            const glTF::Accessor& accessor = gltf.accessors[primitive.indexAccessor.value()];
-            indices.resize(accessor.count);
-            const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
-            char* startAddress = &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
-
-            // indices must be scalar
-            assert(accessor.type == glTF::Accessor::scalar);
-            // for mesh attributes this should be != 0
-            //       todo: if some files *do* have stride == 0, need to lookup stride for tight packing from
-            //       size(componentType)*size(type)
-
-            uint32_t byteStride = bufferView.byteStride;
-            assert(byteStride == 0 && "TODO: if not 0");
-
-            if(accessor.componentType == glTF::Accessor::ComponentType::uint16)
-            {
-                Span<uint16_t> data{(uint16_t*)startAddress, accessor.count};
-                for(int j = 0; j < accessor.count; j++)
+                for(int j = 0; j < vertexCount; j++)
                 {
-                    indices[j] = data[j];
+                    vertexPositions[j] = *((glm::vec3*)(startAddress + static_cast<size_t>(j * effectiveStride)));
                 }
             }
-            else if(accessor.componentType == glTF::Accessor::ComponentType::uint32)
-            {
-                Span<uint32_t> data{(uint32_t*)startAddress, accessor.count};
-                for(int j = 0; j < accessor.count; j++)
-                {
-                    indices[j] = data[j];
-                }
-            }
-            else
-            {
-                assert(false && "TODO? does this even occur?");
-            }
-        }
-        else
-        {
-            indices.resize(vertexAttributes.size());
-            for(int j = 0; j < indices.size(); j++)
-                indices[j] = j;
-        }
 
-        // read or create tangents
-        {
-            const bool glTFhasTangents = primitive.attributes.tangentAccessor.has_value();
-            if(glTFhasTangents)
+            // read normals
             {
-                const glTF::Accessor& accessor = gltf.accessors[primitive.attributes.tangentAccessor.value()];
+                const glTF::Accessor& accessor = normalAccessor;
                 const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
                 char* startAddress =
                     &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
 
-                // tangents must be of type float4
+                // normals must be of type float3
                 assert(accessor.componentType == glTF::Accessor::f32);
-                assert(accessor.type == glTF::Accessor::vec4);
-                auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 4;
+                assert(accessor.type == glTF::Accessor::vec3);
+                auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 3;
 
                 for(int j = 0; j < vertexCount; j++)
                 {
-                    vertexAttributes[j].tangent =
-                        *((glm::vec4*)(startAddress + static_cast<size_t>(j * effectiveStride)));
-                    vertexAttributes[j].tangent.w *= -1;
+                    vertexAttributes[j].normal =
+                        *((glm::vec3*)(startAddress + static_cast<size_t>(j * effectiveStride)));
+                }
+            }
+
+            // read uvs
+            {
+                const glTF::Accessor& accessor = uv0Accessor;
+                const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
+                char* startAddress =
+                    &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
+
+                // uvs must be of type float2
+                assert(accessor.componentType == glTF::Accessor::f32);
+                assert(accessor.type == glTF::Accessor::vec2);
+                auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 2;
+
+                for(int j = 0; j < vertexCount; j++)
+                {
+                    vertexAttributes[j].uv =
+                        *((glm::vec2*)(startAddress + static_cast<size_t>(j * effectiveStride)));
+                }
+            }
+
+            std::vector<uint32_t> indices;
+            if(primitive.indexAccessor.has_value())
+            {
+                const glTF::Accessor& accessor = gltf.accessors[primitive.indexAccessor.value()];
+                indices.resize(accessor.count);
+
+                const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
+                char* startAddress =
+                    &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
+
+                // indices must be scalar
+                assert(accessor.type == glTF::Accessor::scalar);
+                // for mesh attributes this should be != 0
+                //       todo: if some files *do* have stride == 0, need to lookup stride for tight packing from
+                //       size(componentType)*size(type)
+
+                uint32_t byteStride = bufferView.byteStride;
+                assert(byteStride == 0 && "TODO: if not 0");
+
+                if(accessor.componentType == glTF::Accessor::ComponentType::uint16)
+                {
+                    Span<uint16_t> data{(uint16_t*)startAddress, accessor.count};
+                    for(int j = 0; j < accessor.count; j++)
+                    {
+                        indices[j] = data[j];
+                    }
+                }
+                else if(accessor.componentType == glTF::Accessor::ComponentType::uint32)
+                {
+                    Span<uint32_t> data{(uint32_t*)startAddress, accessor.count};
+                    for(int j = 0; j < accessor.count; j++)
+                    {
+                        indices[j] = data[j];
+                    }
+                }
+                else
+                {
+                    assert(false && "TODO? does this even occur?");
                 }
             }
             else
             {
-                Mesh::generateTangents(vertexPositions, vertexAttributes, indices);
+                indices.resize(vertexAttributes.size());
+                for(int j = 0; j < indices.size(); j++)
+                    indices[j] = j;
             }
-        }
 
-        meshes[i] = rm->createMesh(vertexPositions, vertexAttributes, indices, mesh.name);
+            // read or create tangents
+            {
+                const bool glTFhasTangents = primitive.attributes.tangentAccessor.has_value();
+                if(glTFhasTangents)
+                {
+                    const glTF::Accessor& accessor = gltf.accessors[primitive.attributes.tangentAccessor.value()];
+                    const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
+                    char* startAddress =
+                        &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
+
+                    // tangents must be of type float4
+                    assert(accessor.componentType == glTF::Accessor::f32);
+                    assert(accessor.type == glTF::Accessor::vec4);
+                    auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 4;
+
+                    for(int j = 0; j < vertexCount; j++)
+                    {
+                        vertexAttributes[j].tangent =
+                            *((glm::vec4*)(startAddress + static_cast<size_t>(j * effectiveStride)));
+                        vertexAttributes[j].tangent.w *= -1;
+                    }
+                }
+                else
+                {
+                    Mesh::generateTangents(vertexPositions, vertexAttributes, indices);
+                }
+            }
+
+            Mesh::Handle newMesh = rm->createMesh(
+                vertexPositions, vertexAttributes, indices, mesh.name + "_sub" + std::to_string(prim));
+            meshes[i][prim] = newMesh;
+        }
     }
 
     // Create material instances (materials in glTF)

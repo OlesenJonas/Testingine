@@ -250,8 +250,9 @@ uint32_t DynamicBitset::getNextBitSet(uint32_t index) const
     }
 
     // check inside word of start index
-    const uint32_t restBitsInStartWord = internal[startWordIndex] >> (startIndexInsideWord + 1);
-    if(startIndexInsideWord != 31u && restBitsInStartWord > 0u)
+    uint32_t restBitsInStartWord = internal[startWordIndex] >> startIndexInsideWord;
+    restBitsInStartWord = restBitsInStartWord >> 1u;
+    if(restBitsInStartWord > 0u)
     {
         return std::countr_zero(restBitsInStartWord) + index + 1;
     }
@@ -265,7 +266,7 @@ uint32_t DynamicBitset::getNextBitSet(uint32_t index) const
     if(internal[internal.size() - 1] == 0u)
         return 0xFFFFFFFF;
 
-    return std::countr_zero(internal[internal.size() - 1]) + (internal.size() - 1) * 32u + 1;
+    return std::countr_zero(internal[internal.size() - 1]) + (internal.size() - 1) * 32u;
 }
 
 uint32_t DynamicBitset::getSize() const { return size; }

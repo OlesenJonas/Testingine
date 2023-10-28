@@ -12,9 +12,13 @@ class Handle
     constexpr static bool holdsType = (std::is_same_v<T, Ts> || ...);
 
     Handle() = default;
-    Handle(uint32_t index, uint32_t generation) : index(index), generation(generation){};
-    static Handle Invalid() { return {0, 0}; }
+    constexpr Handle(uint32_t index, uint32_t generation) : index(index), generation(generation){};
+    static constexpr Handle Invalid() { return {0, 0}; }
     static Handle Null() { return Invalid(); }
+    /*
+      This only checks if handle is non-null, it *does not* check if generation and index
+      match the entry in the actual pool! use pool.isHandleValid(Handle) for that!
+    */
     [[nodiscard]] bool isValid() const { return generation != 0u || index != 0u; }
     bool operator==(const Handle<Ts...>& other) const
     {

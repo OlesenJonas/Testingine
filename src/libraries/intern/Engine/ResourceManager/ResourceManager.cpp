@@ -180,17 +180,15 @@ Mesh::Handle ResourceManager::createMesh(
         .initialData = {(uint8_t*)indices.data(), indices.size() * sizeof(indices[0])},
     });
 
-    std::array<Mesh::RenderData, 6> submeshes = {
+    Mesh::Handle newMeshHandle = meshPool.insert(
+        name,
         Mesh::RenderData{
             .indexCount = uint32_t(indices.size()),
             .indexBuffer = indexBufferHandle,
             .positionBuffer = positionBufferHandle,
             .attributeBuffer = attributesBufferHandle,
             .gpuIndex = 0xFFFFFFFF,
-        },
-    };
-
-    Mesh::Handle newMeshHandle = meshPool.insert(name, submeshes);
+        });
 
     nameToMeshLUT.insert({std::string{name}, newMeshHandle});
 
@@ -207,7 +205,7 @@ void ResourceManager::destroy(Mesh::Handle handle)
     nameToMeshLUT.erase(iter);
 
     VulkanDevice* device = VulkanDevice::impl();
-    Mesh::RenderData& renderData = (*get<Mesh::SubMeshes>(handle))[0];
+    Mesh::RenderData& renderData = *get<Mesh::RenderData>(handle);
     device->destroy(renderData.positionBuffer);
     device->destroy(renderData.attributeBuffer);
     device->destroy(renderData.indexBuffer);

@@ -27,12 +27,25 @@ struct Hierarchy
     std::vector<ECS::EntityID> children;
 };
 
+// TODO: where to put this
+template <typename T, size_t N>
+consteval auto FilledArray(T value)
+{
+    std::array<T, N> arr;
+    std::fill(arr.begin(), arr.end(), value);
+    return arr;
+}
+
 struct MeshRenderer
 {
-    Mesh::Handle mesh;
+    std::array<Mesh::Handle, Mesh::MAX_SUBMESHES> subMeshes =
+        FilledArray<Mesh::Handle, Mesh::MAX_SUBMESHES>(Mesh::Handle::Invalid());
+
     // TODO: also store Material::Handle-s here for less indirections?
-    std::array<MaterialInstance::Handle, Mesh::MAX_SUBMESHES> materialInstances;
+    std::array<MaterialInstance::Handle, Mesh::MAX_SUBMESHES> materialInstances =
+        FilledArray<MaterialInstance::Handle, Mesh::MAX_SUBMESHES>(MaterialInstance::Handle::Invalid());
 
     // GPU Render item info
-    uint32_t instanceBufferIndex = 0xFFFFFFFF;
+    std::array<uint32_t, Mesh::MAX_SUBMESHES> instanceBufferIndices =
+        FilledArray<uint32_t, Mesh::MAX_SUBMESHES>(0xFFFFFFFF);
 };

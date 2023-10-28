@@ -47,15 +47,12 @@ struct Mesh
 
         uint32_t gpuIndex = 0xFFFFFFFF;
     };
-    using SubMeshes = std::array<RenderData, MAX_SUBMESHES>;
-    static_assert(std::is_trivially_move_constructible<SubMeshes>::value);
-    static_assert(std::is_trivially_destructible<SubMeshes>::value);
 
     /*
         uint is GPU buffer index, TODO: wrap in type?
         Also store submesh count? so dont need to interate over all? (atm MAX is 6 so not that bad)
     */
-    using Handle = Handle<std::string, SubMeshes>;
+    using Handle = Handle<std::string, RenderData>;
 
     // --------------------------------------------------------
 
