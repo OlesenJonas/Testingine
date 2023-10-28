@@ -288,7 +288,7 @@ Editor::Editor()
                 auto* name = rm.get<std::string>(mesh);
 
                 auto freeIndex = gpuInstanceInfoBuffer.freeIndex++;
-                const MaterialInstance::Handle matInst = meshRenderer->materialInstances[0]; // TODO: USE ARRAY
+                const MaterialInstance::Handle matInst = meshRenderer->materialInstances[i];
                 const Buffer::Handle matInstParamBuffer = rm.get<Material::ParameterBuffer>(matInst)->deviceBuffer;
                 bool hasMatInstParameters = matInstParamBuffer.isValid();
                 const Material::Handle mat = *rm.get<Material::Handle>(matInst);
@@ -783,8 +783,7 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
                     break;
                 }
 
-                // TODO: USE ARRAY
-                MaterialInstance::Handle objectMaterialInstance = meshRenderer->materialInstances[0];
+                MaterialInstance::Handle objectMaterialInstance = meshRenderer->materialInstances[i];
 
                 if(objectMaterialInstance != lastMaterialInstance)
                 {

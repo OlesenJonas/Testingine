@@ -34,13 +34,12 @@ ECS::Entity parseNode(
 
     if(glTFNode.meshIndex.has_value())
     {
-        const glTF::Mesh& gltfMesh = gltf.meshes[glTFNode.meshIndex.value()];
         auto* renderInfo = nodeEntity.addComponent<MeshRenderer>();
-        // only primitive 0 gets loaded atm
+        const glTF::Mesh& gltfMesh = gltf.meshes[glTFNode.meshIndex.value()];
+        renderInfo->subMeshes = meshes[glTFNode.meshIndex.value()];
+        for(int i = 0; i < gltfMesh.primitives.size(); i++)
         {
-            // TODO: USE ARRAY
-            renderInfo->subMeshes = meshes[glTFNode.meshIndex.value()];
-            renderInfo->materialInstances[0] = matInsts[gltfMesh.primitives[0].materialIndex];
+            renderInfo->materialInstances[i] = matInsts[gltfMesh.primitives[i].materialIndex];
         }
     }
 
