@@ -20,6 +20,8 @@ std::size_t ECS::ComponentMaskHash::operator()(const ComponentMask& key) const
     }
 }
 
+ECS::Entity::Entity() { id = ~(static_cast<decltype(id)>(0u)); }
+
 ECS::Entity::Entity(EntityID id) : id(id) {}
 
 ECS::ECS()

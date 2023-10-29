@@ -10,7 +10,7 @@
 
 struct Transform
 {
-    glm::vec3 position;
+    glm::vec3 position{0.f, 0.f, 0.f};
     glm::vec3 scale{1.0f, 1.0f, 1.0f};
     glm::quat orientation;
 
@@ -23,8 +23,8 @@ struct Transform
 
 struct Hierarchy
 {
-    ECS::EntityID parent = 0xFFFFFFFF;
-    std::vector<ECS::EntityID> children;
+    ECS::Entity parent;
+    std::vector<ECS::Entity> children;
 };
 
 // TODO: where to put this

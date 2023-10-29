@@ -10,7 +10,7 @@ Scene::Scene() : root(ECS::impl()->createEntity())
     ecs.registerComponent<MeshRenderer>();
 
     root.addComponent<Transform>();
-    root.addComponent<Hierarchy>(root.getID());
+    root.addComponent<Hierarchy>(root);
 }
 
 ECS::Entity Scene::createEntity() { return createEntity(root); }
@@ -19,7 +19,7 @@ ECS::Entity Scene::createEntity(ECS::Entity parent)
 {
     ECS::Entity newEntt = ECS::impl()->createEntity();
     newEntt.addComponent<Transform>();
-    newEntt.addComponent<Hierarchy>(parent.getID());
+    newEntt.addComponent<Hierarchy>(parent);
 
     return newEntt;
 }

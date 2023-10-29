@@ -11,51 +11,6 @@
 #include <fstream>
 #include <vulkan/vulkan_core.h>
 
-ECS::Entity parseNode(
-    Span<std::array<Mesh::Handle, Mesh::MAX_SUBMESHES>> meshes,
-    Span<MaterialInstance::Handle> matInsts,
-    const glTF::Main& gltf,
-    ECS& ecs,
-    uint32_t nodeIndex,
-    ECS::Entity& parent)
-{
-    const glTF::Node& glTFNode = gltf.nodes[nodeIndex];
-
-    auto nodeEntity = ecs.createEntity();
-    auto* nodeTransform = nodeEntity.addComponent<Transform>();
-    nodeTransform->position = glTFNode.translation;
-    nodeTransform->orientation = glm::quat{
-        glTFNode.rotationAsVec.w, glTFNode.rotationAsVec.x, glTFNode.rotationAsVec.y, glTFNode.rotationAsVec.z};
-    nodeTransform->scale = glTFNode.scale;
-    nodeTransform->calculateLocalTransformMatrix();
-
-    auto* nodeHierarchy = nodeEntity.addComponent<Hierarchy>();
-    nodeHierarchy->parent = parent.getID();
-
-    if(glTFNode.meshIndex.has_value())
-    {
-        auto* renderInfo = nodeEntity.addComponent<MeshRenderer>();
-        const glTF::Mesh& gltfMesh = gltf.meshes[glTFNode.meshIndex.value()];
-        renderInfo->subMeshes = meshes[glTFNode.meshIndex.value()];
-        for(int i = 0; i < gltfMesh.primitives.size(); i++)
-        {
-            renderInfo->materialInstances[i] = matInsts[gltfMesh.primitives[i].materialIndex];
-        }
-    }
-
-    if(glTFNode.childNodeIndices.has_value())
-    {
-        for(uint32_t childNodeIndex : glTFNode.childNodeIndices.value())
-        {
-            ECS::Entity childEnTT = parseNode(meshes, matInsts, gltf, ecs, childNodeIndex, nodeEntity);
-            nodeHierarchy->children.push_back(childEnTT.getID());
-        }
-    }
-
-    return nodeEntity;
-};
-
-// TODO: remove
 #include <daw/json/daw_json_exception.h>
 
 void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
@@ -386,19 +341,82 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         materialInstances[i] = matInst;
     }
 
-    ECS::Entity sceneRoot = parent;
-    // Load scene(s)
-    //  just the first one for now, not sure how to handle multiple
-    //  (and if im even planning on using files with multiple)
-    {
-        for(uint32_t rootIndex : gltf.scenes[0].nodeIndices)
-        {
-            ECS::Entity rootNode = parseNode(meshes, materialInstances, gltf, *ecs, rootIndex, sceneRoot);
+    std::vector<ECS::Entity> gltfNodes;
+    gltfNodes.reserve(gltf.nodes.size());
 
-            updateTransformHierarchy(rootNode, glm::mat4{1.0f});
+    // Create all nodes
+    for(int i = 0; i < gltf.nodes.size(); i++)
+    {
+        const glTF::Node& glTFNode = gltf.nodes[i];
+
+        ECS::Entity& nodeEntity = gltfNodes.emplace_back(ecs->createEntity());
+
+        auto* nodeTransform = nodeEntity.addComponent<Transform>();
+        nodeTransform->position = glTFNode.translation;
+        nodeTransform->orientation = glm::quat{
+            glTFNode.rotationAsVec.w,
+            glTFNode.rotationAsVec.x,
+            glTFNode.rotationAsVec.y,
+            glTFNode.rotationAsVec.z};
+        nodeTransform->scale = glTFNode.scale;
+        nodeTransform->calculateLocalTransformMatrix();
+
+        if(glTFNode.meshIndex.has_value())
+        {
+            auto* renderInfo = nodeEntity.addComponent<MeshRenderer>();
+            const glTF::Mesh& gltfMesh = gltf.meshes[glTFNode.meshIndex.value()];
+            renderInfo->subMeshes = meshes[glTFNode.meshIndex.value()];
+            for(int i = 0; i < gltfMesh.primitives.size(); i++)
+            {
+                renderInfo->materialInstances[i] = materialInstances[gltfMesh.primitives[i].materialIndex];
+            }
+        }
+
+        auto* nodeHierarchy = nodeEntity.addComponent<Hierarchy>();
+    }
+    assert(gltfNodes.size() == gltf.nodes.size());
+
+    // link up hierarchies
+    // From scene parents to nodes
+    std::vector<ECS::Entity> sceneRoots;
+    sceneRoots.reserve(gltf.scenes.size());
+    for(int i = 0; i < gltf.scenes.size(); i++)
+    {
+        const glTF::Scene& scene = gltf.scenes[i];
+        ECS::Entity& sceneRoot = sceneRoots.emplace_back(ecs->createEntity());
+        sceneRoot.addComponent<Transform>();
+        auto* rootHierarchy = sceneRoot.addComponent<Hierarchy>();
+        rootHierarchy->parent = parent;
+        parent.getComponent<Hierarchy>()->children.push_back(sceneRoot);
+
+        for(const int& child : scene.nodeIndices)
+        {
+            ECS::Entity childNode = gltfNodes[child];
+            rootHierarchy->children.push_back(childNode);
+            auto* childHierarchy = childNode.getComponent<Hierarchy>();
+            childHierarchy->parent = sceneRoot;
+        }
+    }
+    // From nodes to other nodes
+    for(int i = 0; i < gltf.nodes.size(); i++)
+    {
+        const glTF::Node& gltfParent = gltf.nodes[i];
+        ECS::Entity& parentEntity = gltfNodes[i];
+        auto* parentHierarchy = parentEntity.getComponent<Hierarchy>();
+
+        if(gltfParent.childNodeIndices.has_value())
+        {
+            for(const int& child : gltfParent.childNodeIndices.value())
+            {
+                ECS::Entity childEntity = gltfNodes[child];
+                parentHierarchy->children.push_back(childEntity);
+                auto* childHierarchy = childEntity.getComponent<Hierarchy>();
+                childHierarchy->parent = parentEntity;
+            }
         }
     }
 
+    updateTransformHierarchy(parent, glm::mat4{1.0f});
     // BREAKPOINT;
 }
 
@@ -407,11 +425,12 @@ void Scene::updateTransformHierarchy(ECS::Entity entity, glm::mat4 parentToWorld
     ECS& ecs = *ECS::impl();
 
     auto* transform = entity.getComponent<Transform>();
+    assert(transform);
     transform->localToWorld = parentToWorld * transform->localTransform;
 
     auto* hierarchy = entity.getComponent<Hierarchy>();
-    for(auto& childID : hierarchy->children)
+    for(ECS::Entity& child : hierarchy->children)
     {
-        updateTransformHierarchy(ecs.getEntity(childID), transform->localToWorld);
+        updateTransformHierarchy(child, transform->localToWorld);
     }
 }

@@ -87,6 +87,15 @@ struct ECS
   public:
     struct Entity
     {
+        /*
+            "Invalid" constructor (for use with vector etc)
+            sets Id to id max
+        */
+        Entity();
+
+        Entity(const Entity& other) = default;
+        // Entity(Entity&& other) = default;
+
         EntityID getID() const;
 
         template <typename C, typename... Args>
