@@ -44,14 +44,9 @@ VSOutput main(VSInput input)
     vsOut.vColor = vertexAttributes[vertexIndex].color;
     vsOut.vTexCoord = vertexAttributes[vertexIndex].uv;
 
-    //dont think normalize is needed
     const float3x3 modelMatrix3 = (float3x3)(instanceInfo.transform);
-    // just using model matrix directly here. When using non-uniform scaling
-    // (which I dont want to rule out) transpose(inverse(model)) is required
-    //      GLSL: vNormalWS = normalize( transpose(inverse(modelMatrix3)) * vNormal);
-    // but HLSL doesnt have a inverse() function.
-    //  TODO: upload transpose(inverse()) as part of transform buffer(? packing?) to GPU
-    vsOut.vNormalWS = mul(modelMatrix3, vertexAttributes[vertexIndex].normal);
+    const float3x3 invTranspModelMatrix3 = (float3x3)(instanceInfo.invTranspTransform);
+    vsOut.vNormalWS = normalize(mul(invTranspModelMatrix3, vertexAttributes[vertexIndex].normal));
     float4 vertexTangent = vertexAttributes[vertexIndex].tangent;
     vsOut.vTangentWS = float4(normalize(mul(modelMatrix3, vertexTangent.xyz)),vertexTangent.w);
 

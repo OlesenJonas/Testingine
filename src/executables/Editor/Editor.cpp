@@ -297,6 +297,7 @@ Editor::Editor()
 
                 gpuInstancePtr[freeIndex] = InstanceInfo{
                     .transform = transform->localToWorld,
+                    .invTranspTransform = glm::inverseTranspose(transform->localToWorld),
                     .meshDataIndex = renderData.gpuIndex,
                     .materialIndex = 0xFFFFFFFF, // TODO: correct value
                     .materialParamsBuffer = hasMatParameters ? *rm.get<ResourceIndex>(matParamBuffer) : 0xFFFFFFFF,

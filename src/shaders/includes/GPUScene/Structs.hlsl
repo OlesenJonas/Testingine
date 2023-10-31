@@ -15,6 +15,7 @@ struct MeshData
 struct InstanceInfo
 {
     float4x4 transform;
+    float4x4 invTranspTransform;
     uint meshDataIndex;
     uint materialIndex;
     Handle< Placeholder > materialParamsBuffer;

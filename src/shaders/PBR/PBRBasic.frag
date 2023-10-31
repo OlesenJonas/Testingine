@@ -70,7 +70,7 @@ float4 main(VSOutput input) : SV_TARGET
     }
     else
     {
-        normalWS = input.vNormalWS;
+        normalWS = normalize(input.vNormalWS);
     }
 
     ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
