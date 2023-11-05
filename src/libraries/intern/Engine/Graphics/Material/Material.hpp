@@ -29,7 +29,7 @@ namespace Material
     struct ParameterBuffer
     {
         uint32_t size = 0;
-        uint8_t* writeBuffer = nullptr;
+        uint8_t* cpuBuffer = nullptr;
         Buffer::Handle deviceBuffer = Buffer::Handle::Invalid();
     };
 

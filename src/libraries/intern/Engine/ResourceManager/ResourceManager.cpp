@@ -1,9 +1,7 @@
 #include "ResourceManager.hpp"
 #include "Graphics/Buffer/Buffer.hpp"
 #include "Graphics/Device/VulkanDevice.hpp"
-#include "Graphics/Shaders/GLSL.hpp"
 #include "Graphics/Shaders/HLSL.hpp"
-#include "SPIRV-Reflect/spirv_reflect.h"
 #include <Datastructures/ArrayHelpers.hpp>
 #include <Engine/Application/Application.hpp>
 #include <Engine/Graphics/Material/Material.hpp>
@@ -285,144 +283,59 @@ Material::Handle ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
     auto iterator = nameToMaterialLUT.find(crInfo.debugName);
     assert(iterator == nameToMaterialLUT.end());
 
-    std::vector<uint32_t> vertexBinary;
-    std::vector<uint32_t> fragmentBinary;
-    if(crInfo.vertexShader.sourceLanguage == Shaders::Language::HLSL)
-        vertexBinary = compileHLSL(crInfo.vertexShader.sourcePath, Shaders::Stage::Vertex);
-    else
-        vertexBinary = compileGLSL(crInfo.vertexShader.sourcePath, Shaders::Stage::Vertex);
-
-    if(crInfo.fragmentShader.sourceLanguage == Shaders::Language::HLSL)
-        fragmentBinary = compileHLSL(crInfo.fragmentShader.sourcePath, Shaders::Stage::Fragment);
-    else
-        fragmentBinary = compileGLSL(crInfo.fragmentShader.sourcePath, Shaders::Stage::Fragment);
+    std::vector<uint32_t> vertexBinary = compileHLSL(crInfo.vertexShader.sourcePath, Shaders::Stage::Vertex);
+    std::vector<uint32_t> fragmentBinary = compileHLSL(crInfo.fragmentShader.sourcePath, Shaders::Stage::Fragment);
 
     // Parse Shader Interface -------------
 
-    // todo: wrap into function taking shader byte code(s) (span)? could be moved into Shaders.cpp
-    //       not sure yet, only really needed in one or two places, and also only with a fixed amount of shader
-    //       stages so far
+    Shaders::Reflection::Module vertModule{vertexBinary};
+    Shaders::Reflection::Module fragModule{fragmentBinary};
 
-    SpvReflectShaderModule vertModule;
-    SpvReflectShaderModule fragModule;
-    SpvReflectResult result;
-    result = spvReflectCreateShaderModule(vertexBinary.size() * 4, vertexBinary.data(), &vertModule);
-    assert(result == SPV_REFLECT_RESULT_SUCCESS);
-    result = spvReflectCreateShaderModule(fragmentBinary.size() * 4, fragmentBinary.data(), &fragModule);
-    assert(result == SPV_REFLECT_RESULT_SUCCESS);
+    auto [parametersMap, parametersBufferSize] = vertModule.parseMaterialParams();
+    if(parametersBufferSize == 0)
+        std::tie(parametersMap, parametersBufferSize) = fragModule.parseMaterialParams();
 
-    std::span<SpvReflectDescriptorBinding> vertDescriptorBindings{
-        vertModule.descriptor_bindings, vertModule.descriptor_binding_count};
-    std::span<SpvReflectDescriptorBinding> fragDescriptorBindings{
-        fragModule.descriptor_bindings, fragModule.descriptor_binding_count};
+    auto [instanceParametersMap, instanceParametersBufferSize] = vertModule.parseMaterialInstanceParams();
+    if(instanceParametersBufferSize == 0)
+        std::tie(instanceParametersMap, instanceParametersBufferSize) = fragModule.parseMaterialInstanceParams();
 
-    SpvReflectDescriptorBinding* materialParametersBinding = nullptr;
-    SpvReflectDescriptorBinding* materialInstanceParametersBinding = nullptr;
-    // Find (if it exists) the material(-instance) parameter binding
-    for(auto& binding : vertDescriptorBindings)
+    VkPipeline pipeline = VulkanDevice::impl()->createGraphicsPipeline(VulkanDevice::PipelineCreateInfo{
+        .debugName = crInfo.debugName,
+        .vertexSpirv = vertexBinary,
+        .fragmentSpirv = fragmentBinary,
+        .colorFormats = crInfo.colorFormats,
+        .depthFormat = crInfo.depthFormat,
+        .stencilFormat = crInfo.stencilFormat,
+    });
+    Material::ParameterMap parameterMap{.bufferSize = parametersBufferSize, .map = std::move(parametersMap)};
+    Material::InstanceParameterMap instanceParameterMap{
+        .bufferSize = instanceParametersBufferSize, .map = instanceParametersMap};
+    Material::ParameterBuffer paramBuffer{
+        .size = static_cast<uint32_t>(parametersBufferSize),
+        .cpuBuffer = new uint8_t[parametersBufferSize],
+        .deviceBuffer = parametersBufferSize == 0
+                            ? Buffer::Handle::Null()
+                            : createBuffer(Buffer::CreateInfo{
+                                  .debugName = (std::string{crInfo.debugName} + "ParamsGPU"),
+                                  .size = parametersBufferSize,
+                                  .memoryType = Buffer::MemoryType::GPU,
+                                  .allStates = ResourceState::UniformBuffer | ResourceState::TransferDst,
+                                  .initialState = ResourceState::TransferDst,
+                              }),
+    };
+    if(parametersBufferSize > 0)
     {
-        if(strcmp(binding.name, "g_ConstantBuffer_MaterialParameters") == 0)
-            materialParametersBinding = &binding;
-        if(strcmp(binding.name, "g_ConstantBuffer_MaterialInstanceParameters") == 0)
-            materialInstanceParametersBinding = &binding;
-    }
-    for(auto& binding : fragDescriptorBindings)
-    {
-        if(strcmp(binding.name, "g_ConstantBuffer_MaterialParameters") == 0)
-            materialParametersBinding = &binding;
-        if(strcmp(binding.name, "g_ConstantBuffer_MaterialInstanceParameters") == 0)
-            materialInstanceParametersBinding = &binding;
-    }
-
-    StringMap<Material::ParameterInfo> parametersMap;
-    size_t parametersBufferSize = 0;
-    StringMap<Material::ParameterInfo> instanceParametersMap;
-    size_t instanceParametersBufferSize = 0;
-
-    if(materialParametersBinding != nullptr)
-    {
-        parametersBufferSize = materialParametersBinding->block.padded_size;
-
-        std::span<SpvReflectBlockVariable> members{
-            materialParametersBinding->block.members, materialParametersBinding->block.member_count};
-
-        for(auto& member : members)
-        {
-            assert(member.padded_size >= member.size);
-
-            auto insertion = parametersMap.try_emplace(
-                member.name,
-                Material::ParameterInfo{
-                    .byteSize = (uint16_t)member.padded_size,
-                    // not sure what absolute offset is, but .offset seems to work
-                    .byteOffsetInBuffer = (uint16_t)member.offset,
-                });
-            assert(insertion.second); // assertion must have happened, otherwise something is srsly wrong
-        }
-    }
-
-    if(materialInstanceParametersBinding != nullptr)
-    {
-        instanceParametersBufferSize = materialInstanceParametersBinding->block.padded_size;
-
-        std::span<SpvReflectBlockVariable> members{
-            materialInstanceParametersBinding->block.members,
-            materialInstanceParametersBinding->block.member_count};
-
-        for(auto& member : members)
-        {
-            assert(member.padded_size >= member.size);
-
-            auto insertion = instanceParametersMap.try_emplace(
-                member.name,
-                Material::ParameterInfo{
-                    .byteSize = (uint16_t)member.padded_size,
-                    // not sure what absolute offset is, but .offset seems to work
-                    .byteOffsetInBuffer = (uint16_t)member.offset,
-                });
-            assert(insertion.second); // assertion must have happened, otherwise something is srsly wrong
-        }
+        memset(paramBuffer.cpuBuffer, 0, parametersBufferSize);
     }
 
     Material::Handle newMaterialHandle = materialPool.insert(
         std::string{crInfo.debugName},
-        VulkanDevice::impl()->createGraphicsPipeline(VulkanDevice::PipelineCreateInfo{
-            .debugName = crInfo.debugName,
-            .vertexSpirv = vertexBinary,
-            .fragmentSpirv = fragmentBinary,
-            .colorFormats = crInfo.colorFormats,
-            .depthFormat = crInfo.depthFormat,
-            .stencilFormat = crInfo.stencilFormat,
-        }),
-        Material::ParameterMap{
-            .bufferSize = parametersBufferSize,
-            .map = std::move(parametersMap),
-        },
-        Material::InstanceParameterMap{
-            .bufferSize = instanceParametersBufferSize,
-            .map = std::move(instanceParametersMap),
-        },
-        Material::ParameterBuffer{
-            .size = static_cast<uint32_t>(parametersBufferSize),
-            .writeBuffer = new uint8_t[parametersBufferSize],
-            // Dont need to manage names for this, so could create directly through gfx device
-            .deviceBuffer = parametersBufferSize == 0
-                                ? Buffer::Handle::Null()
-                                : createBuffer(Buffer::CreateInfo{
-                                      .debugName = (std::string{crInfo.debugName} + "ParamsGPU"),
-                                      .size = parametersBufferSize,
-                                      .memoryType = Buffer::MemoryType::GPU,
-                                      .allStates = ResourceState::UniformBuffer | ResourceState::TransferDst,
-                                      .initialState = ResourceState::TransferDst,
-                                  })},
+        pipeline,
+        std::move(parameterMap),
+        std::move(instanceParameterMap),
+        std::move(paramBuffer),
         parametersBufferSize > 0 // dirty
     );
-
-    if(parametersBufferSize > 0)
-    {
-        Material::ParameterBuffer& parameters = *get<Material::ParameterBuffer>(newMaterialHandle);
-        memset(parameters.writeBuffer, 0, parameters.size);
-    }
 
     nameToMaterialLUT.insert({std::string{crInfo.debugName}, newMaterialHandle});
 
@@ -447,11 +360,18 @@ void ResourceManager::destroy(Material::Handle handle)
     gfxDevice->destroy(*get<VkPipeline>(handle));
 
     auto* params = get<Material::ParameterBuffer>(handle);
-    delete[] params->writeBuffer;
-    params->writeBuffer = nullptr;
+    delete[] params->cpuBuffer;
+    params->cpuBuffer = nullptr;
     destroy(params->deviceBuffer);
 
     materialPool.remove(handle);
+}
+
+bool ResourceManager::reloadMaterial(Material::Handle handle)
+{
+    // need to (queue) destruction of old members
+
+    return true;
 }
 
 MaterialInstance::Handle ResourceManager::createMaterialInstance(Material::Handle parent)
@@ -464,7 +384,7 @@ MaterialInstance::Handle ResourceManager::createMaterialInstance(Material::Handl
         parent,
         MaterialInstance::ParameterBuffer{
             .size = static_cast<uint32_t>(bufferSize),
-            .writeBuffer = new uint8_t[bufferSize],
+            .cpuBuffer = new uint8_t[bufferSize],
             // Dont need to manage names for this, so could create directly through gfx device
             .deviceBuffer = bufferSize == 0
                                 ? Buffer::Handle::Null()
@@ -482,7 +402,7 @@ MaterialInstance::Handle ResourceManager::createMaterialInstance(Material::Handl
     if(bufferSize > 0)
     {
         MaterialInstance::ParameterBuffer& params = *get<MaterialInstance::ParameterBuffer>(newHandle);
-        memset(params.writeBuffer, 0, params.size);
+        memset(params.cpuBuffer, 0, params.size);
     }
 
     return newHandle;
@@ -497,8 +417,8 @@ void ResourceManager::destroy(MaterialInstance::Handle handle)
 
     MaterialInstance::ParameterBuffer& params = *get<MaterialInstance::ParameterBuffer>(handle);
     // see note in destroy(Material::Handle handle)
-    delete[] params.writeBuffer;
-    params.writeBuffer = nullptr;
+    delete[] params.cpuBuffer;
+    params.cpuBuffer = nullptr;
     destroy(params.deviceBuffer);
 
     materialInstancePool.remove(handle);
@@ -522,16 +442,7 @@ ResourceManager::createComputeShader(Shaders::StageCreateInfo&& createInfo, std:
 
     VulkanDevice& gfxDevice = *VulkanDevice::impl();
 
-    std::vector<uint32_t> shaderBinary;
-
-    if(createInfo.sourceLanguage == Shaders::Language::HLSL)
-    {
-        shaderBinary = compileHLSL(createInfo.sourcePath, Shaders::Stage::Compute);
-    }
-    else
-    {
-        shaderBinary = compileGLSL(createInfo.sourcePath, Shaders::Stage::Compute);
-    }
+    std::vector<uint32_t> shaderBinary = compileHLSL(createInfo.sourcePath, Shaders::Stage::Compute);
 
     // Parse Shader Interface -------------
 

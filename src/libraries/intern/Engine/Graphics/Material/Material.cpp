@@ -15,7 +15,7 @@ namespace Material
         const auto& parameterInfo = iterator->second;
 
         auto* paramBuffer = ResourceManager::impl()->get<Material::ParameterBuffer>(handle);
-        auto* ptr = (uint32_t*)(&paramBuffer->writeBuffer[parameterInfo.byteOffsetInBuffer]);
+        auto* ptr = (uint32_t*)(&paramBuffer->cpuBuffer[parameterInfo.byteOffsetInBuffer]);
         *ptr = index;
         *ResourceManager::impl()->get<bool>(handle) = true;
     }
@@ -38,7 +38,7 @@ namespace MaterialInstance
         const auto& parameterInfo = iterator->second;
 
         auto* paramBuffer = ResourceManager::impl()->get<MaterialInstance::ParameterBuffer>(handle);
-        auto* ptr = (uint32_t*)(&paramBuffer->writeBuffer[parameterInfo.byteOffsetInBuffer]);
+        auto* ptr = (uint32_t*)(&paramBuffer->cpuBuffer[parameterInfo.byteOffsetInBuffer]);
         *ptr = index;
         *ResourceManager::impl()->get<bool>(handle) = true;
     }
@@ -58,7 +58,7 @@ namespace MaterialInstance
         const auto& parameterInfo = iterator->second;
 
         auto* paramBuffer = ResourceManager::impl()->get<MaterialInstance::ParameterBuffer>(handle);
-        auto* ptr = (float*)(&paramBuffer->writeBuffer[parameterInfo.byteOffsetInBuffer]);
+        auto* ptr = (float*)(&paramBuffer->cpuBuffer[parameterInfo.byteOffsetInBuffer]);
         *ptr = value;
         *ResourceManager::impl()->get<bool>(handle) = true;
     }

@@ -880,7 +880,7 @@ VkCommandBuffer Editor::updateDirtyMaterialParameters()
                 },
             });
         auto gpuAlloc = gfxDevice.allocateStagingData(paramBuffer.size);
-        memcpy(gpuAlloc.ptr, paramBuffer.writeBuffer, paramBuffer.size);
+        memcpy(gpuAlloc.ptr, paramBuffer.cpuBuffer, paramBuffer.size);
         gfxDevice.copyBuffer(
             materialUpdateCmds, gpuAlloc.buffer, gpuAlloc.offset, paramBuffer.deviceBuffer, 0, paramBuffer.size);
         *dirtyFlag = false;
@@ -913,7 +913,7 @@ VkCommandBuffer Editor::updateDirtyMaterialParameters()
                 },
             });
         auto gpuAlloc = gfxDevice.allocateStagingData(paramBuffer.size);
-        memcpy(gpuAlloc.ptr, paramBuffer.writeBuffer, paramBuffer.size);
+        memcpy(gpuAlloc.ptr, paramBuffer.cpuBuffer, paramBuffer.size);
         gfxDevice.copyBuffer(
             materialUpdateCmds, gpuAlloc.buffer, gpuAlloc.offset, paramBuffer.deviceBuffer, 0, paramBuffer.size);
         *dirtyFlag = false;

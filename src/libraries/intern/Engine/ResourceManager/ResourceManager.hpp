@@ -89,6 +89,7 @@ class ResourceManager
 
     Material::Handle createMaterial(Material::CreateInfo&& crInfo);
     void destroy(Material::Handle handle);
+    bool reloadMaterial(Material::Handle handle);
     template <typename T>
     T* get(Material::Handle handle)
     {
