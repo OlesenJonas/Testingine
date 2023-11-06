@@ -25,6 +25,7 @@ target_link_libraries(Engine PRIVATE ECS)
 target_link_libraries(Engine PRIVATE daw::daw-json-link)
 target_link_libraries(Engine PRIVATE mikktspace)
 target_link_libraries(Engine PUBLIC DXCLatest)
+target_link_libraries(Engine PRIVATE fasttuple)
 
 IF(VULKAN_ENABLE_VALIDATION)
     message(STATUS "Compiling with vulkan validation enabled")

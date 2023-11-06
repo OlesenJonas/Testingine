@@ -26,24 +26,23 @@ Shaders::Reflection::Module::findDescriptorBinding(const std::string& name) cons
     return nullptr;
 }
 
-std::tuple<StringMap<Material::ParameterInfo>, size_t> Shaders::Reflection::Module::parseMaterialParams() const
+CTuple<StringMap<Material::ParameterInfo>, size_t> Shaders::Reflection::Module::parseMaterialParams() const
 {
     const SpvReflectDescriptorBinding* binding = findDescriptorBinding("g_ConstantBuffer_MaterialParameters");
 
-    std::tuple<StringMap<Material::ParameterInfo>, size_t> ret{{}, 0};
+    CTuple<StringMap<Material::ParameterInfo>, size_t> ret{{}, 0};
 
     if(binding == nullptr || !isBufferBinding(*binding))
         return ret;
 
     return Shaders::Reflection::parseBufferBinding(*binding);
 }
-std::tuple<StringMap<Material::ParameterInfo>, size_t>
-Shaders::Reflection::Module::parseMaterialInstanceParams() const
+CTuple<StringMap<Material::ParameterInfo>, size_t> Shaders::Reflection::Module::parseMaterialInstanceParams() const
 {
     const SpvReflectDescriptorBinding* binding =
         findDescriptorBinding("g_ConstantBuffer_MaterialInstanceParameters");
 
-    std::tuple<StringMap<Material::ParameterInfo>, size_t> ret{{}, 0};
+    CTuple<StringMap<Material::ParameterInfo>, size_t> ret{{}, 0};
 
     if(binding == nullptr || !isBufferBinding(*binding))
         return ret;
@@ -56,12 +55,12 @@ std::span<SpvReflectDescriptorBinding> Shaders::Reflection::Module::getDescripto
     return {spvModule.descriptor_bindings, spvModule.descriptor_binding_count};
 }
 
-std::tuple<StringMap<Material::ParameterInfo>, size_t>
+CTuple<StringMap<Material::ParameterInfo>, size_t>
 Shaders::Reflection::parseBufferBinding(const SpvReflectDescriptorBinding& binding, bool isUniform)
 {
     // TODO: return error code if binding type is nont buffer
 
-    std::tuple<StringMap<Material::ParameterInfo>, size_t> ret;
+    CTuple<StringMap<Material::ParameterInfo>, size_t> ret;
     auto& [memberMap, bufferSize] = ret;
 
     const auto& blockToParse = isUniform ? binding.block : binding.block.members[0];

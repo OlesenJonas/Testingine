@@ -3,9 +3,9 @@
 #include "SPIRV-Reflect/spirv_reflect.h"
 #include <Datastructures/Span.hpp>
 #include <Datastructures/StringMap.hpp>
+#include <fasttuple/fasttuple.hpp>
 #include <span> //for better debug vis //TODO: natvis for custom span
 #include <string_view>
-#include <tuple>
 
 namespace Material
 {
@@ -45,8 +45,8 @@ namespace Shaders
 
             const SpvReflectDescriptorBinding* findDescriptorBinding(const std::string& name) const;
 
-            std::tuple<StringMap<Material::ParameterInfo>, size_t> parseMaterialParams() const;
-            std::tuple<StringMap<Material::ParameterInfo>, size_t> parseMaterialInstanceParams() const;
+            CTuple<StringMap<Material::ParameterInfo>, size_t> parseMaterialParams() const;
+            CTuple<StringMap<Material::ParameterInfo>, size_t> parseMaterialInstanceParams() const;
 
           private:
             std::span<SpvReflectDescriptorBinding> getDescriptorBindings() const;
@@ -55,7 +55,7 @@ namespace Shaders
             SpvReflectShaderModule spvModule;
         };
 
-        std::tuple<StringMap<Material::ParameterInfo>, size_t>
+        CTuple<StringMap<Material::ParameterInfo>, size_t>
         parseBufferBinding(const SpvReflectDescriptorBinding& binding, bool isUniform = true);
 
         bool isBufferBinding(const SpvReflectDescriptorBinding& binding);

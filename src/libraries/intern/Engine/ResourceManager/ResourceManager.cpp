@@ -293,11 +293,11 @@ Material::Handle ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
 
     auto [parametersMap, parametersBufferSize] = vertModule.parseMaterialParams();
     if(parametersBufferSize == 0)
-        std::tie(parametersMap, parametersBufferSize) = fragModule.parseMaterialParams();
+        CTie(parametersMap, parametersBufferSize) = fragModule.parseMaterialParams();
 
     auto [instanceParametersMap, instanceParametersBufferSize] = vertModule.parseMaterialInstanceParams();
     if(instanceParametersBufferSize == 0)
-        std::tie(instanceParametersMap, instanceParametersBufferSize) = fragModule.parseMaterialInstanceParams();
+        CTie(instanceParametersMap, instanceParametersBufferSize) = fragModule.parseMaterialInstanceParams();
 
     VkPipeline pipeline = VulkanDevice::impl()->createGraphicsPipeline(VulkanDevice::PipelineCreateInfo{
         .debugName = crInfo.debugName,
@@ -390,11 +390,11 @@ bool ResourceManager::reloadMaterial(Material::Handle handle)
 
     auto [parametersMap, parametersBufferSize] = vertModule.parseMaterialParams();
     if(parametersBufferSize == 0)
-        std::tie(parametersMap, parametersBufferSize) = fragModule.parseMaterialParams();
+        CTie(parametersMap, parametersBufferSize) = fragModule.parseMaterialParams();
 
     auto [instanceParametersMap, instanceParametersBufferSize] = vertModule.parseMaterialInstanceParams();
     if(instanceParametersBufferSize == 0)
-        std::tie(instanceParametersMap, instanceParametersBufferSize) = fragModule.parseMaterialInstanceParams();
+        CTie(instanceParametersMap, instanceParametersBufferSize) = fragModule.parseMaterialInstanceParams();
 
     auto* oldParameterMap = get<Material::ParameterMap>(handle);
     auto* oldInstanceParameterMap = get<Material::InstanceParameterMap>(handle);
