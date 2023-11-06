@@ -709,6 +709,13 @@ void Editor::update()
     // ANYTHING TOUCHING RENDERING RELATED RESOURCES NEEDS TO HAPPEN AFTER THIS !
     gfxDevice.startNextFrame();
 
+    if(ImGui::IsKeyPressed(ImGuiKey_R, false))
+    {
+        Material::Handle pbrMat = resourceManager.getMaterial("PBRBasic");
+        assert(pbrMat.isValid());
+        resourceManager.reloadMaterial(pbrMat);
+    }
+
     VkCommandBuffer materialParamUpdates = updateDirtyMaterialParameters();
 
     // update renderPassData

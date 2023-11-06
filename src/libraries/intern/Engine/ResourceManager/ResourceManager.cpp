@@ -334,7 +334,14 @@ Material::Handle ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
         std::move(parameterMap),
         std::move(instanceParameterMap),
         std::move(paramBuffer),
-        parametersBufferSize > 0 // dirty
+        parametersBufferSize > 0, // dirty
+        Material::ReloadInfo{
+            .vertexSource{crInfo.vertexShader.sourcePath},
+            .fragmentSource{crInfo.fragmentShader.sourcePath},
+            .colorFormats{crInfo.colorFormats.begin(), crInfo.colorFormats.end()},
+            .depthFormat = crInfo.depthFormat,
+            .stencilFormat = crInfo.stencilFormat,
+        } //
     );
 
     nameToMaterialLUT.insert({std::string{crInfo.debugName}, newMaterialHandle});
@@ -369,7 +376,89 @@ void ResourceManager::destroy(Material::Handle handle)
 
 bool ResourceManager::reloadMaterial(Material::Handle handle)
 {
-    // need to (queue) destruction of old members
+    auto* reloadInfo = get<Material::ReloadInfo>(handle);
+
+    std::vector<uint32_t> vertexBinary = compileHLSL(reloadInfo->vertexSource, Shaders::Stage::Vertex);
+    std::vector<uint32_t> fragmentBinary = compileHLSL(reloadInfo->fragmentSource, Shaders::Stage::Fragment);
+    if(vertexBinary.empty() || fragmentBinary.empty())
+        return false; // TODO: LOG: warn
+
+    Shaders::Reflection::Module vertModule{vertexBinary};
+    Shaders::Reflection::Module fragModule{fragmentBinary};
+    if(!vertModule.isInitialized() || !fragModule.isInitialized())
+        return false;
+
+    auto [parametersMap, parametersBufferSize] = vertModule.parseMaterialParams();
+    if(parametersBufferSize == 0)
+        std::tie(parametersMap, parametersBufferSize) = fragModule.parseMaterialParams();
+
+    auto [instanceParametersMap, instanceParametersBufferSize] = vertModule.parseMaterialInstanceParams();
+    if(instanceParametersBufferSize == 0)
+        std::tie(instanceParametersMap, instanceParametersBufferSize) = fragModule.parseMaterialInstanceParams();
+
+    auto* oldParameterMap = get<Material::ParameterMap>(handle);
+    auto* oldInstanceParameterMap = get<Material::InstanceParameterMap>(handle);
+    if(parametersMap != oldParameterMap->map || instanceParametersMap != oldInstanceParameterMap->map)
+    {
+        BREAKPOINT;
+        // TODO: need to copy over previous values from map
+        //       need to replace "in place" to keep handle (and resource Index!)
+        //                                      switch just vkBuffer part of buffers, need to rebind descriptor!
+        //      Also update all material instance buffers!
+
+        // TODO: dont just
+        return false;
+    }
+
+    auto* name = get<std::string>(handle);
+    VkPipeline newPipeline = VulkanDevice::impl()->createGraphicsPipeline(VulkanDevice::PipelineCreateInfo{
+        .debugName{*name},
+        .vertexSpirv = vertexBinary,
+        .fragmentSpirv = fragmentBinary,
+        .colorFormats = reloadInfo->colorFormats,
+        .depthFormat = reloadInfo->depthFormat,
+        .stencilFormat = reloadInfo->stencilFormat,
+    });
+    // Material::ParameterMap parameterMap{.bufferSize = parametersBufferSize, .map = std::move(parametersMap)};
+    // Material::InstanceParameterMap instanceParameterMap{
+    //     .bufferSize = instanceParametersBufferSize, .map = instanceParametersMap};
+    // Material::ParameterBuffer paramBuffer{
+    //     .size = static_cast<uint32_t>(parametersBufferSize),
+    //     .cpuBuffer = new uint8_t[parametersBufferSize],
+    //     .deviceBuffer = parametersBufferSize == 0
+    //                         ? Buffer::Handle::Null()
+    //                         : createBuffer(Buffer::CreateInfo{
+    //                               .debugName = (std::string{crInfo.debugName} + "ParamsGPU"),
+    //                               .size = parametersBufferSize,
+    //                               .memoryType = Buffer::MemoryType::GPU,
+    //                               .allStates = ResourceState::UniformBuffer | ResourceState::TransferDst,
+    //                               .initialState = ResourceState::TransferDst,
+    //                           }),
+    // };
+    // if(parametersBufferSize > 0)
+    // {
+    //     memset(paramBuffer.cpuBuffer, 0, parametersBufferSize);
+    // }
+
+    // Material::Handle newMaterialHandle = materialPool.insert(
+    //     std::string{crInfo.debugName},
+    //     pipeline,
+    //     std::move(parameterMap),
+    //     std::move(instanceParameterMap),
+    //     std::move(paramBuffer),
+    //     parametersBufferSize > 0, // dirty
+    //     Material::SourcePath{.vertex{crInfo.vertexShader.sourcePath},
+    //     .fragment{crInfo.fragmentShader.sourcePath}}
+    //     //
+    // );
+
+    auto* gfxPipeline = get<VkPipeline>(handle);
+    VkPipeline oldPipeline = *gfxPipeline;
+    *gfxPipeline = newPipeline;
+
+    // (queue) destruction of old members
+    VulkanDevice* gfxDevice = VulkanDevice::impl();
+    gfxDevice->destroy(oldPipeline);
 
     return true;
 }

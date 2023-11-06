@@ -18,7 +18,9 @@ namespace Material
         std::string_view debugName;
         Shaders::StageCreateInfo vertexShader;
         Shaders::StageCreateInfo fragmentShader;
+
         // vertex input
+        // --
 
         // fragment output
         Span<const Texture::Format> colorFormats;
@@ -38,6 +40,7 @@ namespace Material
         // todo: use some bits to store type information etc. so I can do at least *some* tests
         uint16_t byteSize = 0;
         uint16_t byteOffsetInBuffer = 0;
+        bool operator==(const ParameterInfo&) const = default;
     };
 
     // TODO: need to wrap because otherwise TypeIndexInPack cant decide which index to return if pack contains
@@ -54,7 +57,19 @@ namespace Material
         StringMap<ParameterInfo> map;
     };
 
-    using Handle = Handle<std::string, VkPipeline, ParameterMap, InstanceParameterMap, ParameterBuffer, bool>;
+    // like create info but only things relevant for reloading
+    // and it contains owning members instead of span
+    struct ReloadInfo
+    {
+        std::string vertexSource;
+        std::string fragmentSource;
+        std::vector<Texture::Format> colorFormats;
+        Texture::Format depthFormat = Texture::Format::UNDEFINED;
+        Texture::Format stencilFormat = Texture::Format::UNDEFINED;
+    };
+
+    using Handle =
+        Handle<std::string, VkPipeline, ParameterMap, InstanceParameterMap, ParameterBuffer, bool, ReloadInfo>;
 
     void setResource(Handle handle, std::string_view name, ResourceIndex index);
     void setFloat(Handle handle, std::string_view name, float value);
