@@ -56,7 +56,7 @@ namespace Shaders
         };
 
         std::tuple<StringMap<Material::ParameterInfo>, size_t>
-        parseBufferBinding(const SpvReflectDescriptorBinding& binding);
+        parseBufferBinding(const SpvReflectDescriptorBinding& binding, bool isUniform = true);
 
         bool isBufferBinding(const SpvReflectDescriptorBinding& binding);
     } // namespace Reflection

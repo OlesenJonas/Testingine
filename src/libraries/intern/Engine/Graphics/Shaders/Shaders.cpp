@@ -57,16 +57,18 @@ std::span<SpvReflectDescriptorBinding> Shaders::Reflection::Module::getDescripto
 }
 
 std::tuple<StringMap<Material::ParameterInfo>, size_t>
-Shaders::Reflection::parseBufferBinding(const SpvReflectDescriptorBinding& binding)
+Shaders::Reflection::parseBufferBinding(const SpvReflectDescriptorBinding& binding, bool isUniform)
 {
     // TODO: return error code if binding type is nont buffer
 
     std::tuple<StringMap<Material::ParameterInfo>, size_t> ret;
     auto& [memberMap, bufferSize] = ret;
 
-    bufferSize = binding.block.padded_size; //.padded_size or .size ?
+    const auto& blockToParse = isUniform ? binding.block : binding.block.members[0];
 
-    std::span<SpvReflectBlockVariable> members{binding.block.members, binding.block.member_count};
+    bufferSize = blockToParse.padded_size; //.padded_size or .size ?
+
+    std::span<SpvReflectBlockVariable> members{blockToParse.members, blockToParse.member_count};
 
     for(auto& member : members)
     {
