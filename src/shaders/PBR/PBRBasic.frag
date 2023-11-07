@@ -10,6 +10,86 @@
 #include "../includes/MaterialParams.hlsl"
 #include "PBR.hlsl"
 
+// http://www.thetenthplanet.de/archives/1180
+/*
+    N and P need to be in the same space, the resulting matrix
+    then transforms tangent space into that space
+*/
+float3x3 cotangentFrame( float3 N, float3 p, float2 uv )
+{
+    // get edge vectors of the pixel triangle
+    float3 dp1 = ddx_fine( p );
+    float3 dp2 = ddy_fine( p );
+    float2 duv1 = ddx_fine( uv );
+    float2 duv2 = ddy_fine( uv );
+ 
+    // solve the linear system
+    float3 dp2perp = cross( dp2, N );
+    float3 dp1perp = cross( N, dp1 );
+    float3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    float3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+ 
+    // construct a scale-invariant frame 
+    float invmax = rsqrt( max( dot(T,T), dot(B,B) ) );
+    return transpose(float3x3( T * invmax, B * invmax, N ));
+    //TODO: without transpose, initialize in correct order directly
+}
+
+// https://jcgt.org/published/0009/03/04/paper.pdf
+//  Surface Gradient–Based Bump Mapping Framework
+
+//todo: no static, wrap into some struct
+static float3 sigmaX;
+static float3 sigmaY;
+static float3 nrmBaseNormal;
+static float3 dPdx;
+static float3 dPdy;
+static float flip_sign;
+
+
+// Input: vM is tangent space normal in [-1;1].
+// Output: convert vM to a derivative.
+float2 TspaceNormalToDerivative(float3 vM)
+{
+    const float scale = 1.0/128.0;
+    // Ensure vM delivers a positive third component using abs() and
+    // constrain vM.z so the range of the derivative is [-128; 128].
+    const float3 vMa = abs(vM);
+    const float z_ma = max(vMa.z, scale*max(vMa.x, vMa.y));
+    // Set to match positive vertical texture coordinate axis.
+    const bool gFlipVertDeriv = false;
+    const float s = gFlipVertDeriv ? -1.0 : 1.0;
+    return -float2(vM.x, s*vM.y)/z_ma;
+}
+
+
+void GenBasisTB(out float3 vT, out float3 vB, float2 texST)
+{
+    float2 dSTdx = ddx_fine(texST);
+    float2 dSTdy = ddy_fine(texST);
+    float det = dot(dSTdx, float2(dSTdy.y, -dSTdy.x));
+    float sign_det = det < 0.0 ? -1.0 : 1.0;
+    // invC0 represents (dXds, dYds), but we don’t divide
+    // by the determinant. Instead, we scale by the sign.
+    float2 invC0 = sign_det*float2(dSTdy.y, -dSTdx.y);
+    vT = sigmaX*invC0.x + sigmaY*invC0.y;
+    if (abs(det) > 0.0) vT = normalize(vT);
+    vB = (sign_det*flip_sign)*cross(nrmBaseNormal, vT);
+}
+
+float3 SurfgradFromTBN(float2 deriv, float3 vT, float3 vB)
+{
+    return deriv.x*vT + deriv.y*vB;
+}
+
+
+float3 ResolveNormalFromSurfaceGradient(float3 surfGrad)
+{
+    return normalize(nrmBaseNormal - surfGrad);
+}
+
+
+
 MaterialParameters(
     /* TODO: should be part of scene information, not material ? */
     Handle< TextureCube<float4> > irradianceTex;
@@ -50,31 +130,60 @@ float4 main(VSOutput input) : SV_TARGET
     ConstantBuffer<MaterialParameters> params = getMaterialParameters(instanceInfo);
     ConstantBuffer<MaterialInstanceParameters> instanceParams = getMaterialInstanceParameters(instanceInfo);
 
+    ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
+    const float3 cameraPositionWS = renderPassData.cameraPositionWS;
+
     float3 normalWS;
     if(instanceParams.normalTexture.isValid())
     {
         Texture2D normalTexture =  instanceParams.normalTexture.get();
 
         float3 nrmSampleTS = normalTexture.Sample(LinearRepeatSampler, input.vTexCoord).xyz;
-        nrmSampleTS = 2 * nrmSampleTS - 1;
+        nrmSampleTS = (255.0/127.0) * nrmSampleTS - (128.0/127.0);
+        nrmSampleTS = lerp(float3(0,0,1),nrmSampleTS,1.0);
         // normal map is OpenGL style y direction
         //  todo: make parameter? Can be controlled through texture view?
         nrmSampleTS.y *= -1;
 
-        float3 vBitangentWS = input.vTangentWS.w * cross(input.vNormalWS, input.vTangentWS.xyz);
-        normalWS = normalize(
-            nrmSampleTS.x * input.vTangentWS.xyz +
-            nrmSampleTS.y * vBitangentWS   +
-            nrmSampleTS.z * input.vNormalWS
-        );
+        // ---
+
+        // float3 vBitangentWS = input.vTangentWS.w * cross(input.vNormalWS, input.vTangentWS.xyz);
+        // normalWS = normalize(
+        //     nrmSampleTS.x * input.vTangentWS.xyz +
+        //     nrmSampleTS.y * vBitangentWS   +
+        //     nrmSampleTS.z * input.vNormalWS
+        // );
+
+        // ---
+
+        // nrmSampleTS.x *= -1;
+        // float3x3 TBN = cotangentFrame(normalize(input.vNormalWS),cameraPositionWS-input.vPositionWS, input.vTexCoord);
+        // normalWS = mul(TBN, nrmSampleTS);
+
+        // ---
+
+        //TODO: even better, use camera relatie world space for better accuracy!
+        float3 relSurfPos = input.vPositionWS;
+        nrmBaseNormal = normalize(input.vNormalWS);
+        dPdx = ddx_fine(relSurfPos);
+        dPdy = ddy_fine(relSurfPos);
+        sigmaX = dPdx - dot(dPdx, nrmBaseNormal)*nrmBaseNormal;
+        sigmaY = dPdy - dot(dPdy, nrmBaseNormal)*nrmBaseNormal;
+        flip_sign = dot(dPdy, cross(nrmBaseNormal, dPdx)) < 0 ? -1 : 1;
+
+        float2 deriv = TspaceNormalToDerivative(nrmSampleTS);
+        float3 vT;
+        float3 vB;
+        GenBasisTB(vT, vB, input.vTexCoord);
+        float3 surfGrad = SurfgradFromTBN(deriv, vT, vB);
+        normalWS = ResolveNormalFromSurfaceGradient(surfGrad);
     }
     else
     {
         normalWS = normalize(input.vNormalWS);
     }
 
-    ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
-    const float3 cameraPositionWS = renderPassData.cameraPositionWS;
+    normalWS = lerp(normalize(input.vNormalWS), normalWS, 1.0);
 
     Texture2D colorTexture = instanceParams.baseColorTexture.get();
     float3 baseColor = colorTexture.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
@@ -169,6 +278,10 @@ float4 main(VSOutput input) : SV_TARGET
     // ---------------------
 
     float3 color = Lout;
+    
+    //TODO: remove
+    // color = clamp(color,0.0,1.0)*0.0001;
+    // color += normalWS*0.5+0.5;
 
     return float4(color, 1.0);
 }
