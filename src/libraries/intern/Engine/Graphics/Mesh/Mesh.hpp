@@ -31,7 +31,6 @@ struct Mesh
     struct VertexAttributes
     {
         glm::vec3 normal;
-        glm::vec4 tangent{0.f, 0.f, 0.f, 1.0f};
         glm::vec3 color{0.f, 0.f, 0.f};
         TexCoordType uv;
     };
@@ -56,6 +55,7 @@ struct Mesh
 
     // --------------------------------------------------------
 
+    /*
     // for mikktspace
     struct MikkTSpaceUserData
     {
@@ -80,4 +80,5 @@ struct Mesh
         const int iVert);
     static void
     generateTangents(Span<PositionType> positions, Span<VertexAttributes> attributes, Span<IndexType> indices);
+    */
 };

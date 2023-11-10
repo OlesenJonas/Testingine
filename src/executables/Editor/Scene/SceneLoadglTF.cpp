@@ -233,33 +233,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
                     indices[j] = j;
             }
 
-            // read or create tangents
-            {
-                const bool glTFhasTangents = primitive.attributes.tangentAccessor.has_value();
-                if(glTFhasTangents)
-                {
-                    const glTF::Accessor& accessor = gltf.accessors[primitive.attributes.tangentAccessor.value()];
-                    const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
-                    char* startAddress =
-                        &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
-
-                    // tangents must be of type float4
-                    assert(accessor.componentType == glTF::Accessor::f32);
-                    assert(accessor.type == glTF::Accessor::vec4);
-                    auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 4;
-
-                    for(int j = 0; j < vertexCount; j++)
-                    {
-                        vertexAttributes[j].tangent =
-                            *((glm::vec4*)(startAddress + static_cast<size_t>(j * effectiveStride)));
-                        vertexAttributes[j].tangent.w *= -1;
-                    }
-                }
-                else
-                {
-                    Mesh::generateTangents(vertexPositions, vertexAttributes, indices);
-                }
-            }
+            // Tangents are no longer loaded
 
             Mesh::Handle newMesh = rm->createMesh(
                 vertexPositions, vertexAttributes, indices, mesh.name + "_sub" + std::to_string(prim));

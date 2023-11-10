@@ -37,10 +37,9 @@ struct VSOutput
 {
     [[vk::location(0)]]	float3 vPositionWS : POSITIONT;
     [[vk::location(1)]] float3 vNormalWS : NORMAL0;
-    [[vk::location(2)]] float4 vTangentWS : TANGENT0;
-    [[vk::location(3)]] float3 vColor : COLOR0;
-    [[vk::location(4)]] float2 vTexCoord : TEXCOORD0;
-    [[vk::location(5)]] int baseInstance : BASE_INSTANCE;
+    [[vk::location(2)]] float3 vColor : COLOR0;
+    [[vk::location(3)]] float2 vTexCoord : TEXCOORD0;
+    [[vk::location(4)]] int baseInstance : BASE_INSTANCE;
 };
 
 float4 main(VSOutput input) : SV_TARGET
@@ -65,21 +64,6 @@ float4 main(VSOutput input) : SV_TARGET
         // normal map is OpenGL style y direction
         //  todo: make parameter? Can be controlled through texture view?
         nrmSampleTS.y *= -1;
-
-        // ---
-
-        // float3 vBitangentWS = input.vTangentWS.w * cross(input.vNormalWS, input.vTangentWS.xyz);
-        // normalWS = normalize(
-        //     nrmSampleTS.x * input.vTangentWS.xyz +
-        //     nrmSampleTS.y * vBitangentWS   +
-        //     nrmSampleTS.z * input.vNormalWS
-        // );
-
-        // ---
-
-        // nrmSampleTS.x *= -1;
-        // float3x3 TBN = cotangentFrame(normalize(input.vNormalWS),cameraPositionWS-input.vPositionWS, input.vTexCoord);
-        // normalWS = mul(TBN, nrmSampleTS);
 
         // ---
 

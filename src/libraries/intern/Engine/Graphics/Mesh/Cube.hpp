@@ -52,35 +52,35 @@ struct Cube
 
     static inline const std::vector<Mesh::VertexAttributes> attributes = {
         // +Z face
-        {.normal = {0.f, 0.f, 1.f}, .tangent={1.f, 0.f, 0.f, 1.f}, .uv = {0.f, 0.f}},
-        {.normal = {0.f, 0.f, 1.f}, .tangent={1.f, 0.f, 0.f, 1.f}, .uv = {1.f, 0.f}},
-        {.normal = {0.f, 0.f, 1.f}, .tangent={1.f, 0.f, 0.f, 1.f}, .uv = {1.f, 1.f}},
-        {.normal = {0.f, 0.f, 1.f}, .tangent={1.f, 0.f, 0.f, 1.f}, .uv = {0.f, 1.f}},
+        {.normal = {0.f, 0.f, 1.f}, .uv = {0.f, 0.f}},
+        {.normal = {0.f, 0.f, 1.f}, .uv = {1.f, 0.f}},
+        {.normal = {0.f, 0.f, 1.f}, .uv = {1.f, 1.f}},
+        {.normal = {0.f, 0.f, 1.f}, .uv = {0.f, 1.f}},
         // -Z face
-        {.normal = {0.f, 0.f,-1.f}, .tangent={-1.f, 0.f, 0.f, 1.f}, .uv = {0.f, 0.f}},
-        {.normal = {0.f, 0.f,-1.f}, .tangent={-1.f, 0.f, 0.f, 1.f}, .uv = {1.f, 0.f}},
-        {.normal = {0.f, 0.f,-1.f}, .tangent={-1.f, 0.f, 0.f, 1.f}, .uv = {1.f, 1.f}},
-        {.normal = {0.f, 0.f,-1.f}, .tangent={-1.f, 0.f, 0.f, 1.f}, .uv = {0.f, 1.f}},
+        {.normal = {0.f, 0.f,-1.f}, .uv = {0.f, 0.f}},
+        {.normal = {0.f, 0.f,-1.f}, .uv = {1.f, 0.f}},
+        {.normal = {0.f, 0.f,-1.f}, .uv = {1.f, 1.f}},
+        {.normal = {0.f, 0.f,-1.f}, .uv = {0.f, 1.f}},
         // +X face
-        {.normal = {1.f, 0.f,0.f}, .tangent={0.f, 0.f,-1.f,1.f}, .uv = {0.f, 0.f}},
-        {.normal = {1.f, 0.f,0.f}, .tangent={0.f, 0.f,-1.f,1.f}, .uv = {1.f, 0.f}},
-        {.normal = {1.f, 0.f,0.f}, .tangent={0.f, 0.f,-1.f,1.f}, .uv = {1.f, 1.f}},
-        {.normal = {1.f, 0.f,0.f}, .tangent={0.f, 0.f,-1.f,1.f}, .uv = {0.f, 1.f}},
+        {.normal = {1.f, 0.f,0.f}, .uv = {0.f, 0.f}},
+        {.normal = {1.f, 0.f,0.f}, .uv = {1.f, 0.f}},
+        {.normal = {1.f, 0.f,0.f}, .uv = {1.f, 1.f}},
+        {.normal = {1.f, 0.f,0.f}, .uv = {0.f, 1.f}},
         // -X face
-        {.normal = {-1.f, 0.f,0.f}, .tangent={0.f, 0.f,1.f,1.f}, .uv = {0.f, 0.f}},
-        {.normal = {-1.f, 0.f,0.f}, .tangent={0.f, 0.f,1.f,1.f}, .uv = {1.f, 0.f}},
-        {.normal = {-1.f, 0.f,0.f}, .tangent={0.f, 0.f,1.f,1.f}, .uv = {1.f, 1.f}},
-        {.normal = {-1.f, 0.f,0.f}, .tangent={0.f, 0.f,1.f,1.f}, .uv = {0.f, 1.f}},
+        {.normal = {-1.f, 0.f,0.f}, .uv = {0.f, 0.f}},
+        {.normal = {-1.f, 0.f,0.f}, .uv = {1.f, 0.f}},
+        {.normal = {-1.f, 0.f,0.f}, .uv = {1.f, 1.f}},
+        {.normal = {-1.f, 0.f,0.f}, .uv = {0.f, 1.f}},
         // +Y face
-        {.normal = {0.f, 1.f,0.f}, .tangent={1.f, 0.f,0.f,1.f}, .uv = {0.f, 0.f}},
-        {.normal = {0.f, 1.f,0.f}, .tangent={1.f, 0.f,0.f,1.f}, .uv = {1.f, 0.f}},
-        {.normal = {0.f, 1.f,0.f}, .tangent={1.f, 0.f,0.f,1.f}, .uv = {1.f, 1.f}},
-        {.normal = {0.f, 1.f,0.f}, .tangent={1.f, 0.f,0.f,1.f}, .uv = {0.f, 1.f}},
+        {.normal = {0.f, 1.f,0.f}, .uv = {0.f, 0.f}},
+        {.normal = {0.f, 1.f,0.f}, .uv = {1.f, 0.f}},
+        {.normal = {0.f, 1.f,0.f}, .uv = {1.f, 1.f}},
+        {.normal = {0.f, 1.f,0.f}, .uv = {0.f, 1.f}},
         // +Y face
-        {.normal = {0.f,-1.f,0.f}, .tangent={1.f, 0.f,0.f,1.f}, .uv = {0.f, 0.f}},
-        {.normal = {0.f,-1.f,0.f}, .tangent={1.f, 0.f,0.f,1.f}, .uv = {1.f, 0.f}},
-        {.normal = {0.f,-1.f,0.f}, .tangent={1.f, 0.f,0.f,1.f}, .uv = {1.f, 1.f}},
-        {.normal = {0.f,-1.f,0.f}, .tangent={1.f, 0.f,0.f,1.f}, .uv = {0.f, 1.f}},
+        {.normal = {0.f,-1.f,0.f}, .uv = {0.f, 0.f}},
+        {.normal = {0.f,-1.f,0.f}, .uv = {1.f, 0.f}},
+        {.normal = {0.f,-1.f,0.f}, .uv = {1.f, 1.f}},
+        {.normal = {0.f,-1.f,0.f}, .uv = {0.f, 1.f}},
     };
     
     static inline const std::vector<Mesh::IndexType> indices = {

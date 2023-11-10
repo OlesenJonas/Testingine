@@ -36,34 +36,28 @@ VertexInputDescription VertexInputDescription::getDefault()
         .offset = offsetof(Mesh::VertexAttributes, normal),
     };
 
-    // Tangents will be stored at location 2
-    constexpr VkVertexInputAttributeDescription tangentAttribute = {
-        .location = 2,
-        .binding = 1,
-        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-        .offset = offsetof(Mesh::VertexAttributes, tangent),
-    };
-
-    // Color will be stored at location 3
+    // Color will be stored at location 2
     VkVertexInputAttributeDescription colorAttribute = {
-        .location = 3,
+        .location = 2,
         .binding = 1,
         .format = VK_FORMAT_R32G32B32_SFLOAT,
         .offset = offsetof(Mesh::VertexAttributes, color),
     };
 
-    // UVs will be stored at location 4
+    // UVs will be stored at location 3
     VkVertexInputAttributeDescription uvAttribute = {
-        .location = 4,
+        .location = 3,
         .binding = 1,
         .format = VK_FORMAT_R32G32_SFLOAT,
         .offset = offsetof(Mesh::VertexAttributes, uv),
     };
 
-    description.attributes = {positionAttribute, normalAttribute, tangentAttribute, colorAttribute, uvAttribute};
+    description.attributes = {positionAttribute, normalAttribute, colorAttribute, uvAttribute};
 
     return description;
 }
+
+/*
 
 // for mikktspace
 
@@ -144,3 +138,4 @@ void Mesh::generateTangents(
     auto res = genTangSpaceDefault(&mktContext);
     assert(res);
 }
+*/
