@@ -15,10 +15,10 @@ struct FullscreenTri
         {3, -1, 0},
     };
 
-    static inline const std::vector<Mesh::VertexAttributes> attributes = {
-        {.normal = {0.f, 0.f, 1.f}, .uv = {0.f, 0.f}},
-        {.normal = {0.f, 0.f, 1.f}, .uv = {0.f, 2.f}},
-        {.normal = {0.f, 0.f, 1.f}, .uv = {2.f, 0.f}},
+    static inline const std::vector<Mesh::BasicVertexAttributes<0>> attributes = {
+        {.normal = {0.f, 0.f, 1.f}, .uvs = {{0.f, 0.f}}},
+        {.normal = {0.f, 0.f, 1.f}, .uvs = {{0.f, 2.f}}},
+        {.normal = {0.f, 0.f, 1.f}, .uvs = {{2.f, 0.f}}},
     };
 
     static inline const std::vector<Mesh::IndexType> indices = {

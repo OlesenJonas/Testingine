@@ -50,37 +50,37 @@ struct Cube
         {-radius, -radius, radius},
     };
 
-    static inline const std::vector<Mesh::VertexAttributes> attributes = {
+    static inline const std::vector<Mesh::BasicVertexAttributes<0>> attributes = {
         // +Z face
-        {.normal = {0.f, 0.f, 1.f}, .uv = {0.f, 0.f}},
-        {.normal = {0.f, 0.f, 1.f}, .uv = {1.f, 0.f}},
-        {.normal = {0.f, 0.f, 1.f}, .uv = {1.f, 1.f}},
-        {.normal = {0.f, 0.f, 1.f}, .uv = {0.f, 1.f}},
+        {.normal = {0.f, 0.f, 1.f}, .uvs = {{0.f, 0.f}}},
+        {.normal = {0.f, 0.f, 1.f}, .uvs = {{1.f, 0.f}}},
+        {.normal = {0.f, 0.f, 1.f}, .uvs = {{1.f, 1.f}}},
+        {.normal = {0.f, 0.f, 1.f}, .uvs = {{0.f, 1.f}}},
         // -Z face
-        {.normal = {0.f, 0.f,-1.f}, .uv = {0.f, 0.f}},
-        {.normal = {0.f, 0.f,-1.f}, .uv = {1.f, 0.f}},
-        {.normal = {0.f, 0.f,-1.f}, .uv = {1.f, 1.f}},
-        {.normal = {0.f, 0.f,-1.f}, .uv = {0.f, 1.f}},
+        {.normal = {0.f, 0.f,-1.f}, .uvs = {{0.f, 0.f}}},
+        {.normal = {0.f, 0.f,-1.f}, .uvs = {{1.f, 0.f}}},
+        {.normal = {0.f, 0.f,-1.f}, .uvs = {{1.f, 1.f}}},
+        {.normal = {0.f, 0.f,-1.f}, .uvs = {{0.f, 1.f}}},
         // +X face
-        {.normal = {1.f, 0.f,0.f}, .uv = {0.f, 0.f}},
-        {.normal = {1.f, 0.f,0.f}, .uv = {1.f, 0.f}},
-        {.normal = {1.f, 0.f,0.f}, .uv = {1.f, 1.f}},
-        {.normal = {1.f, 0.f,0.f}, .uv = {0.f, 1.f}},
+        {.normal = {1.f, 0.f,0.f}, .uvs = {{0.f, 0.f}}},
+        {.normal = {1.f, 0.f,0.f}, .uvs = {{1.f, 0.f}}},
+        {.normal = {1.f, 0.f,0.f}, .uvs = {{1.f, 1.f}}},
+        {.normal = {1.f, 0.f,0.f}, .uvs = {{0.f, 1.f}}},
         // -X face
-        {.normal = {-1.f, 0.f,0.f}, .uv = {0.f, 0.f}},
-        {.normal = {-1.f, 0.f,0.f}, .uv = {1.f, 0.f}},
-        {.normal = {-1.f, 0.f,0.f}, .uv = {1.f, 1.f}},
-        {.normal = {-1.f, 0.f,0.f}, .uv = {0.f, 1.f}},
+        {.normal = {-1.f, 0.f,0.f}, .uvs = {{0.f, 0.f}}},
+        {.normal = {-1.f, 0.f,0.f}, .uvs = {{1.f, 0.f}}},
+        {.normal = {-1.f, 0.f,0.f}, .uvs = {{1.f, 1.f}}},
+        {.normal = {-1.f, 0.f,0.f}, .uvs = {{0.f, 1.f}}},
         // +Y face
-        {.normal = {0.f, 1.f,0.f}, .uv = {0.f, 0.f}},
-        {.normal = {0.f, 1.f,0.f}, .uv = {1.f, 0.f}},
-        {.normal = {0.f, 1.f,0.f}, .uv = {1.f, 1.f}},
-        {.normal = {0.f, 1.f,0.f}, .uv = {0.f, 1.f}},
+        {.normal = {0.f, 1.f,0.f}, .uvs = {{0.f, 0.f}}},
+        {.normal = {0.f, 1.f,0.f}, .uvs = {{1.f, 0.f}}},
+        {.normal = {0.f, 1.f,0.f}, .uvs = {{1.f, 1.f}}},
+        {.normal = {0.f, 1.f,0.f}, .uvs = {{0.f, 1.f}}},
         // +Y face
-        {.normal = {0.f,-1.f,0.f}, .uv = {0.f, 0.f}},
-        {.normal = {0.f,-1.f,0.f}, .uv = {1.f, 0.f}},
-        {.normal = {0.f,-1.f,0.f}, .uv = {1.f, 1.f}},
-        {.normal = {0.f,-1.f,0.f}, .uv = {0.f, 1.f}},
+        {.normal = {0.f,-1.f,0.f}, .uvs = {{0.f, 0.f}}},
+        {.normal = {0.f,-1.f,0.f}, .uvs = {{1.f, 0.f}}},
+        {.normal = {0.f,-1.f,0.f}, .uvs = {{1.f, 1.f}}},
+        {.normal = {0.f,-1.f,0.f}, .uvs = {{0.f, 1.f}}},
     };
     
     static inline const std::vector<Mesh::IndexType> indices = {

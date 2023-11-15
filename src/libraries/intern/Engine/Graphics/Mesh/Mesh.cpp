@@ -4,6 +4,7 @@
 #include <glm/gtc/epsilon.hpp>
 #include <iostream>
 
+/*
 VertexInputDescription VertexInputDescription::getDefault()
 {
     VertexInputDescription description;
@@ -55,6 +56,21 @@ VertexInputDescription VertexInputDescription::getDefault()
     description.attributes = {positionAttribute, normalAttribute, colorAttribute, uvAttribute};
 
     return description;
+}
+*/
+
+size_t Mesh::VertexAttributeFormat::normalSize() const { return sizeof(glm::vec3); }
+size_t Mesh::VertexAttributeFormat::normalOffset() const { return 0; }
+size_t Mesh::VertexAttributeFormat::colorSize() const { return sizeof(glm::vec3); }
+size_t Mesh::VertexAttributeFormat::colorOffset() const { return normalSize(); }
+size_t Mesh::VertexAttributeFormat::uvSize() const { return sizeof(glm::vec2); }
+size_t Mesh::VertexAttributeFormat::uvOffset(uint32_t i) const
+{
+    return colorOffset() + colorSize() + i * uvSize();
+}
+size_t Mesh::VertexAttributeFormat::combinedSize() const
+{
+    return normalSize() + colorSize() + (1 + additionalUVCount) * uvSize();
 }
 
 /*

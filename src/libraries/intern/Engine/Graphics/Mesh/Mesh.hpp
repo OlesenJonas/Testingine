@@ -12,14 +12,14 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-// todo: just contain two/three Buffer::Handle for index + position/(position+attributes) !!
-
+/*
 struct VertexInputDescription
 {
     std::vector<VkVertexInputBindingDescription> bindings;
     std::vector<VkVertexInputAttributeDescription> attributes;
     static VertexInputDescription getDefault();
 };
+*/
 
 struct Mesh
 {
@@ -28,18 +28,39 @@ struct Mesh
     using PositionType = glm::vec3;
     using TexCoordType = glm::vec2;
 
-    struct VertexAttributes
+    /*
+        Vertex Attributes have to be layed out as:
+            float3 normal
+            float3 color (float4 ?)
+            float2[] uvs
+        Passed as byte array to functions together with this format struct
+    */
+    struct VertexAttributeFormat
+    {
+        uint32_t additionalUVCount = 0;
+        size_t normalSize() const;
+        size_t normalOffset() const;
+        size_t colorSize() const;
+        size_t colorOffset() const;
+        size_t uvSize() const;
+        size_t uvOffset(uint32_t i) const;
+        size_t combinedSize() const;
+    };
+    template <uint32_t numExtraUVs>
+    struct BasicVertexAttributes
     {
         glm::vec3 normal;
-        glm::vec3 color{0.f, 0.f, 0.f};
-        TexCoordType uv;
+        glm::vec3 color;
+        glm::vec2 uvs[1 + numExtraUVs];
     };
 
     static constexpr auto MAX_SUBMESHES = 6;
 
     struct RenderData
     {
+        // This does not define GPU representation, change GPUMeshData instead!
         uint32_t indexCount = 0;
+        uint32_t additionalUVCount = 0;
         Buffer::Handle indexBuffer = Buffer::Handle::Invalid();
         Buffer::Handle positionBuffer = Buffer::Handle::Invalid();
         Buffer::Handle attributeBuffer = Buffer::Handle::Invalid();

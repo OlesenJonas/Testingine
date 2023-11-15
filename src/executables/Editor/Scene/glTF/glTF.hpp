@@ -55,7 +55,9 @@ struct glTF::PrimitiveAttributes
     int normalAccessor;
     int positionAccessor;
     int uv0Accessor;
-    std::optional<int> tangentAccessor;
+    std::optional<int> uv1Accessor;
+    std::optional<int> uv2Accessor;
+    // std::optional<int> tangentAccessor;
 };
 
 struct glTF::Primitive

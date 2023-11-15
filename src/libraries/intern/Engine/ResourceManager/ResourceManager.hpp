@@ -50,7 +50,8 @@ class ResourceManager
     // indices can be {}, but then a trivial index list will still be used!
     Mesh::Handle createMesh(
         Span<const Mesh::PositionType> vertexPositions,
-        Span<const Mesh::VertexAttributes> vertexAttributes,
+        Span<std::byte> vertexAttributes,
+        Mesh::VertexAttributeFormat vertexAttributesFormat,
         Span<const uint32_t> indices,
         std::string name);
     void destroy(Mesh::Handle handle);

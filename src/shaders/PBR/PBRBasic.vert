@@ -20,7 +20,8 @@ VSOutput main(VSInput input)
 
     const StructuredBuffer<uint> indexBuffer = meshData.indexBuffer.get();
     const StructuredBuffer<float3> vertexPositions = meshData.positionBuffer.get();
-    const StructuredBuffer<VertexAttributes> vertexAttributes = meshData.attributesBuffer.get();
+
+    const ByteAddressBuffer vertexAttributes = meshData.attributesBuffer.get();
 
     // ConstantBuffer<RenderPassData> renderPassData = shaderInputs.renderPassData.get();
     // ConstantBuffer<RenderPassData> renderPassData = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle];
@@ -40,11 +41,12 @@ VSOutput main(VSInput input)
     vsOut.vPositionWS = worldPos.xyz;
     vsOut.posOut = mul(projViewMatrix, worldPos);
 
-    vsOut.vColor = vertexAttributes[vertexIndex].color;
-    vsOut.vTexCoord = vertexAttributes[vertexIndex].uv;
+    vsOut.vColor = vertexAttributes.Load<float3>(vertexIndex * meshData.attribStride() + meshData.colorOffset());
+    vsOut.vTexCoord = vertexAttributes.Load<float2>(vertexIndex * meshData.attribStride() + meshData.uvOffset(0));
 
     const float3x3 invTranspModelMatrix3 = (float3x3)(instanceInfo.invTranspTransform);
-    vsOut.vNormalWS = normalize(mul(invTranspModelMatrix3, vertexAttributes[vertexIndex].normal));
+    const float3 vNormal = vertexAttributes.Load<float3>(vertexIndex * meshData.attribStride());
+    vsOut.vNormalWS = normalize(mul(invTranspModelMatrix3, vNormal));
 
     return vsOut;
 }

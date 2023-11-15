@@ -85,7 +85,7 @@ Mesh::Handle ResourceManager::createMesh(const char* file, std::string name)
     }
 
     std::vector<glm::vec3> vertexPositions;
-    std::vector<Mesh::VertexAttributes> vertexAttributes;
+    std::vector<Mesh::BasicVertexAttributes<0>> vertexAttributes;
 
     // TODO: **VERY** unoptimized, barebones
     for(size_t s = 0; s < shapes.size(); s++)
@@ -114,27 +114,33 @@ Mesh::Handle ResourceManager::createMesh(const char* file, std::string name)
                 tinyobj::real_t uvy = attrib.texcoords[2 * idx.texcoord_index + 1];
 
                 vertexPositions.emplace_back(vx, vy, vz);
-                vertexAttributes.emplace_back(Mesh::VertexAttributes{
+                vertexAttributes.emplace_back(Mesh::BasicVertexAttributes<0>{
                     .normal = {nx, ny, nz},
                     .color = {nx, ny, nz},
-                    .uv = {uvx, 1.0 - uvy},
+                    .uvs = {{glm::vec2{uvx, 1.0 - uvy}}},
                 });
             }
             indexOffset += fv;
         }
     }
 
-    return createMesh(vertexPositions, vertexAttributes, {}, std::move(meshName));
+    Span<std::byte> vertexAttributesByteArr{
+        (std::byte*)vertexAttributes.data(), vertexAttributes.size() * sizeof(vertexAttributes[0])};
+    return createMesh(
+        vertexPositions,
+        vertexAttributesByteArr,
+        Mesh::VertexAttributeFormat{.additionalUVCount = 0},
+        {},
+        std::move(meshName));
 }
 
 Mesh::Handle ResourceManager::createMesh(
     Span<const Mesh::PositionType> vertexPositions,
-    Span<const Mesh::VertexAttributes> vertexAttributes,
+    Span<std::byte> vertexAttributes,
+    Mesh::VertexAttributeFormat vertexAttributesFormat,
     Span<const uint32_t> indices,
     std::string name)
 {
-    assert(vertexAttributes.size() == vertexPositions.size());
-
     // todo: handle naming collisions
     auto iterator = nameToMeshLUT.find(name);
     assert(iterator == nameToMeshLUT.end());
@@ -142,7 +148,7 @@ Mesh::Handle ResourceManager::createMesh(
     std::vector<uint32_t> trivialIndices{};
     if(indices.empty())
     {
-        trivialIndices.resize(vertexAttributes.size());
+        trivialIndices.resize(vertexPositions.size());
         // dont want to pull <algorithm> for iota here
         for(int i = 0; i < trivialIndices.size(); i++)
         {
@@ -162,11 +168,11 @@ Mesh::Handle ResourceManager::createMesh(
 
     Buffer::Handle attributesBufferHandle = createBuffer(Buffer::CreateInfo{
         .debugName = (name + "_attributesBuffer"),
-        .size = vertexAttributes.size() * sizeof(vertexAttributes[0]),
+        .size = vertexAttributes.size(),
         .memoryType = Buffer::MemoryType::GPU,
         .allStates = ResourceState::VertexBuffer | ResourceState::Storage | ResourceState::TransferDst,
         .initialState = ResourceState::VertexBuffer,
-        .initialData = {(uint8_t*)vertexAttributes.data(), vertexAttributes.size() * sizeof(vertexAttributes[0])},
+        .initialData = {(uint8_t*)vertexAttributes.data(), vertexAttributes.size()},
     });
 
     Buffer::Handle indexBufferHandle = createBuffer(Buffer::CreateInfo{
@@ -182,6 +188,7 @@ Mesh::Handle ResourceManager::createMesh(
         name,
         Mesh::RenderData{
             .indexCount = uint32_t(indices.size()),
+            .additionalUVCount = vertexAttributesFormat.additionalUVCount,
             .indexBuffer = indexBufferHandle,
             .positionBuffer = positionBufferHandle,
             .attributeBuffer = attributesBufferHandle,

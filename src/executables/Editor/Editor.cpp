@@ -94,7 +94,14 @@ Editor::Editor()
     });
     assert(resourceManager.get<std::string>(resourceManager.getMaterial("PBRBasic")) != nullptr);
 
-    resourceManager.createMesh(Cube::positions, Cube::attributes, Cube::indices, "DefaultCube");
+    Span<std::byte> cubeAttributes{
+        (std::byte*)Cube::attributes.data(), Cube::attributes.size() * sizeof(Cube::attributes[0])};
+    resourceManager.createMesh(
+        Cube::positions,
+        cubeAttributes,
+        Mesh::VertexAttributeFormat{.additionalUVCount = 0},
+        Cube::indices,
+        "DefaultCube");
     assert(resourceManager.get<std::string>(resourceManager.getMesh("DefaultCube")) != nullptr);
 
     mainCamera =
@@ -187,7 +194,7 @@ Editor::Editor()
     Mesh::Handle triangleMesh;
     {
         std::vector<glm::vec3> triangleVertexPositions;
-        std::vector<Mesh::VertexAttributes> triangleVertexAttributes;
+        std::vector<Mesh::BasicVertexAttributes<0>> triangleVertexAttributes;
         triangleVertexPositions.resize(3);
         triangleVertexAttributes.resize(3);
 
@@ -195,12 +202,19 @@ Editor::Editor()
         triangleVertexPositions[1] = {-1.f, 1.f, 0.0f};
         triangleVertexPositions[2] = {0.f, -1.f, 0.0f};
 
-        triangleVertexAttributes[0].uv = {1.0f, 0.0f};
-        triangleVertexAttributes[1].uv = {0.0f, 0.0f};
-        triangleVertexAttributes[2].uv = {0.5f, 1.0f};
+        triangleVertexAttributes[0].uvs[0] = {1.0f, 0.0f};
+        triangleVertexAttributes[1].uvs[0] = {0.0f, 0.0f};
+        triangleVertexAttributes[2].uvs[0] = {0.5f, 1.0f};
 
-        triangleMesh =
-            resourceManager.createMesh(triangleVertexPositions, triangleVertexAttributes, {}, "triangle");
+        Span<std::byte> attribsAsBytes{
+            (std::byte*)triangleVertexAttributes.data(),
+            triangleVertexAttributes.size() * sizeof(triangleVertexAttributes[0])};
+        triangleMesh = resourceManager.createMesh(
+            triangleVertexPositions,
+            attribsAsBytes,
+            Mesh::VertexAttributeFormat{.additionalUVCount = 0},
+            {},
+            "triangle");
     }
 
     auto triangleObject = scene.createEntity();
@@ -250,8 +264,9 @@ Editor::Editor()
         assert(renderData.gpuIndex == 0xFFFFFFFF);
         renderData.gpuIndex = freeIndex;
         gpuPtr[freeIndex] = GPUMeshData{
-            .indexBuffer = *rm.get<ResourceIndex>(renderData.indexBuffer),
             .indexCount = renderData.indexCount,
+            .additionalUVCount = renderData.additionalUVCount,
+            .indexBuffer = *rm.get<ResourceIndex>(renderData.indexBuffer),
             .positionBuffer = *rm.get<ResourceIndex>(renderData.positionBuffer),
             .attributeBuffer = *rm.get<ResourceIndex>(renderData.attributeBuffer),
         };

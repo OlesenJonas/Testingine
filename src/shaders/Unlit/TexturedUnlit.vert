@@ -23,7 +23,7 @@ VSOutput main(VSInput input)
 
     const StructuredBuffer<uint> indexBuffer = meshData.indexBuffer.get();
     const StructuredBuffer<float3> vertexPositions = meshData.positionBuffer.get();
-    const StructuredBuffer<VertexAttributes> vertexAttributes = meshData.attributesBuffer.get();
+    const ByteAddressBuffer vertexAttributes = meshData.attributesBuffer.get();
     
     uint vertexIndex = indexBuffer[input.vertexID];
 
@@ -38,7 +38,7 @@ VSOutput main(VSInput input)
     const float3 vertPos = vertexPositions[vertexIndex];
     float4 worldPos = mul(instanceInfo.transform, float4(vertPos,1.0));
     vsOut.posOut = mul(projViewMatrix, worldPos);    
-    vsOut.vTexCoord = vertexAttributes[vertexIndex].uv;
+    vsOut.vTexCoord = vertexAttributes.Load<float2>(vertexIndex * meshData.attribStride() + meshData.uvOffset(0));
 
     return vsOut;
 }

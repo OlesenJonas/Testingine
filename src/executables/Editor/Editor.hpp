@@ -76,8 +76,9 @@ class Editor final : public Application
     // TODO: keep shader and c++ versions of structs synced
     struct GPUMeshData
     {
-        ResourceIndex indexBuffer;
         uint32_t indexCount;
+        uint32_t additionalUVCount;
+        ResourceIndex indexBuffer;
         ResourceIndex positionBuffer;
         ResourceIndex attributeBuffer;
     };

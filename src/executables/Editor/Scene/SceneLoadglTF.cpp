@@ -125,11 +125,31 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             const uint32_t vertexCount = positionAccessor.count;
             assert(normalAccessor.count == vertexCount);
             assert(uv0Accessor.count == vertexCount);
+            Mesh::VertexAttributeFormat attribFormat{.additionalUVCount = 0};
+            const glTF::Accessor* uv1Accessor = nullptr;
+            const glTF::Accessor* uv2Accessor = nullptr;
+            if(primitive.attributes.uv1Accessor.has_value())
+            {
+                attribFormat.additionalUVCount++;
+                uv1Accessor = &gltf.accessors[primitive.attributes.uv1Accessor.value()];
+            }
+            if(primitive.attributes.uv2Accessor.has_value())
+            {
+                attribFormat.additionalUVCount++;
+                uv2Accessor = &gltf.accessors[primitive.attributes.uv2Accessor.value()];
+            }
 
             std::vector<Mesh::PositionType> vertexPositions;
             vertexPositions.resize(vertexCount);
-            std::vector<Mesh::VertexAttributes> vertexAttributes;
-            vertexAttributes.resize(vertexCount);
+            std::vector<std::byte> vertexAttributes;
+            size_t vertexAttributeSize = attribFormat.combinedSize();
+            vertexAttributes.resize(vertexCount * vertexAttributeSize);
+            const size_t attribStride = vertexAttributeSize;
+            const size_t normalOffset = attribFormat.normalOffset();
+            const size_t colorOffset = attribFormat.colorOffset();
+            const size_t uv0Offset = attribFormat.uvOffset(0);
+            const size_t uv1Offset = attribFormat.uvOffset(1);
+            const size_t uv2Offset = attribFormat.uvOffset(2);
 
             // read positions
             {
@@ -162,12 +182,13 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
 
                 for(int j = 0; j < vertexCount; j++)
                 {
-                    vertexAttributes[j].normal =
-                        *((glm::vec3*)(startAddress + static_cast<size_t>(j * effectiveStride)));
+                    auto* targetAddr = (glm::vec3*)(&(vertexAttributes[j * attribStride + normalOffset]));
+                    *targetAddr = *((glm::vec3*)(startAddress + static_cast<size_t>(j * effectiveStride)));
                 }
             }
 
             // read uvs
+            // 0
             {
                 const glTF::Accessor& accessor = uv0Accessor;
                 const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
@@ -181,8 +202,46 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
 
                 for(int j = 0; j < vertexCount; j++)
                 {
-                    vertexAttributes[j].uv =
-                        *((glm::vec2*)(startAddress + static_cast<size_t>(j * effectiveStride)));
+                    auto* targetAddr = (glm::vec2*)(&(vertexAttributes[j * attribStride + uv0Offset]));
+                    *targetAddr = *((glm::vec2*)(startAddress + static_cast<size_t>(j * effectiveStride)));
+                }
+            }
+            // 1
+            if(uv1Accessor != nullptr)
+            {
+                const glTF::Accessor& accessor = *uv1Accessor;
+                const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
+                char* startAddress =
+                    &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
+
+                // uvs must be of type float2
+                assert(accessor.componentType == glTF::Accessor::f32);
+                assert(accessor.type == glTF::Accessor::vec2);
+                auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 2;
+
+                for(int j = 0; j < vertexCount; j++)
+                {
+                    auto* targetAddr = (glm::vec2*)(&(vertexAttributes[j * attribStride + uv1Offset]));
+                    *targetAddr = *((glm::vec2*)(startAddress + static_cast<size_t>(j * effectiveStride)));
+                }
+            }
+            // 2
+            if(uv2Accessor != nullptr)
+            {
+                const glTF::Accessor& accessor = *uv2Accessor;
+                const glTF::BufferView& bufferView = gltf.bufferViews[accessor.bufferViewIndex];
+                char* startAddress =
+                    &(buffers[bufferView.bufferIndex][bufferView.byteOffset + accessor.byteOffset]);
+
+                // uvs must be of type float2
+                assert(accessor.componentType == glTF::Accessor::f32);
+                assert(accessor.type == glTF::Accessor::vec2);
+                auto effectiveStride = bufferView.byteStride != 0 ? bufferView.byteStride : sizeof(float) * 2;
+
+                for(int j = 0; j < vertexCount; j++)
+                {
+                    auto* targetAddr = (glm::vec2*)(&(vertexAttributes[j * attribStride + uv2Offset]));
+                    *targetAddr = *((glm::vec2*)(startAddress + static_cast<size_t>(j * effectiveStride)));
                 }
             }
 
@@ -234,9 +293,14 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             }
 
             // Tangents are no longer loaded
+            // ...
 
             Mesh::Handle newMesh = rm->createMesh(
-                vertexPositions, vertexAttributes, indices, mesh.name + "_sub" + std::to_string(prim));
+                vertexPositions,
+                vertexAttributes,
+                attribFormat,
+                indices,
+                mesh.name + "_sub" + std::to_string(prim));
             meshes[i][prim] = newMesh;
         }
     }

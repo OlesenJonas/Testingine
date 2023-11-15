@@ -15,7 +15,7 @@ VSOutput main(VSInput input)
 
     const StructuredBuffer<uint> indexBuffer = meshData.indexBuffer.get();
     const StructuredBuffer<float3> vertexPositions = meshData.positionBuffer.get();
-    const StructuredBuffer<VertexAttributes> vertexAttributes = meshData.attributesBuffer.get();
+    const ByteAddressBuffer vertexAttributes = meshData.attributesBuffer.get();
     
     uint vertexIndex = indexBuffer[input.vertexID];
 

@@ -73,11 +73,13 @@ JSONType(glTF::Node)
 
 JSONType(glTF::PrimitiveAttributes)
 {
-    using type = json_member_list<                      //
-        json_number<"NORMAL", int>,                     //
-        json_number<"POSITION", int>,                   //
-        json_number<"TEXCOORD_0", int>,                 //
-        json_number_null<"TANGENT", std::optional<int>> //
+    using type = json_member_list<                          //
+        json_number<"NORMAL", int>,                         //
+        json_number<"POSITION", int>,                       //
+        json_number<"TEXCOORD_0", int>,                     //
+        json_number_null<"TEXCOORD_1", std::optional<int>>, //
+        json_number_null<"TEXCOORD_2", std::optional<int>>  //
+        // json_number_null<"TANGENT", std::optional<int>> //
         >;
 };
 
