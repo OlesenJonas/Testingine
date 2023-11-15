@@ -99,11 +99,17 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
         L"-fspv-target-env=vulkan1.3",
         L"-fvk-use-scalar-layout",
         L"-fvk-allow-rwstructuredbuffer-arrays",
-    // L"-fspv-reflect",
-
-#ifndef NDEBUG
-    // L"-fspv-debug=vulkan-with-source", // CURRENTLY BROKEN :/
-#endif
+        // SHADER DEBUGGING NOT USABLE ATM
+        //      could be https://github.com/microsoft/DirectXShaderCompiler/issues/5080
+        // Additional compile option instead of always enabling this in debug mode?
+        //      since Zi has compilation performance penalty and Od runtmie penalty
+        // #ifndef NDEBUG
+        //         // L"-fspv-reflect", // Needs VK_GOOGLE_hlsl_functionality1 support
+        //         L"-Zi",
+        //         L"-Od",
+        //         L"-fspv-extension=SPV_KHR_non_semantic_info",
+        //         L"-fspv-debug=vulkan-with-source", // CURRENTLY BROKEN :/
+        // #endif
     };
 
     // Load the HLSL text shader from disk
