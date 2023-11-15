@@ -83,4 +83,5 @@ namespace MaterialInstance
 
     void setResource(Handle handle, std::string_view name, ResourceIndex index);
     void setFloat(Handle handle, std::string_view name, float value);
+    void setUint(Handle handle, std::string_view name, uint32_t value);
 }; // namespace MaterialInstance

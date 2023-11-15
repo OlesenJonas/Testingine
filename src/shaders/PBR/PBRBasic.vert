@@ -9,8 +9,10 @@ struct VSOutput
     [[vk::location(0)]]	float3 vPositionWS : POSITIONT;
     [[vk::location(1)]] float3 vNormalWS : NORMAL0;
     [[vk::location(2)]] float3 vColor : COLOR0;  
-    [[vk::location(3)]] float2 vTexCoord : TEXCOORD0;
-    [[vk::location(4)]] int baseInstance : BASE_INSTANCE;
+    [[vk::location(3)]] float2 vTexCoord0 : TEXCOORD0;
+    [[vk::location(4)]] float2 vTexCoord1 : TEXCOORD1;
+    [[vk::location(5)]] float2 vTexCoord2 : TEXCOORD2;
+    [[vk::location(6)]] int baseInstance : BASE_INSTANCE;
 };
 
 VSOutput main(VSInput input)
@@ -42,7 +44,9 @@ VSOutput main(VSInput input)
     vsOut.posOut = mul(projViewMatrix, worldPos);
 
     vsOut.vColor = vertexAttributes.Load<float3>(vertexIndex * meshData.attribStride() + meshData.colorOffset());
-    vsOut.vTexCoord = vertexAttributes.Load<float2>(vertexIndex * meshData.attribStride() + meshData.uvOffset(0));
+    vsOut.vTexCoord0 = vertexAttributes.Load<float2>(vertexIndex * meshData.attribStride() + meshData.uvOffset(0));
+    vsOut.vTexCoord1 = vertexAttributes.Load<float2>(vertexIndex * meshData.attribStride() + meshData.uvOffset(1));
+    vsOut.vTexCoord2 = vertexAttributes.Load<float2>(vertexIndex * meshData.attribStride() + meshData.uvOffset(2));
 
     const float3x3 invTranspModelMatrix3 = (float3x3)(instanceInfo.invTranspTransform);
     const float3 vNormal = vertexAttributes.Load<float3>(vertexIndex * meshData.attribStride());

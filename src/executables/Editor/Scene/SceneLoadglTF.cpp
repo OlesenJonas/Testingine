@@ -322,6 +322,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         Sampler* baseColorSampler = rm->get(baseColorSamplerHandle);
         MaterialInstance::setResource(
             matInst, "baseColorTexture", *rm->get<ResourceIndex>(baseColorTextureHandle));
+        MaterialInstance::setUint(matInst, "baseColorUVSet", material.pbrMetallicRoughness.baseColorTexture.uvSet);
         // MaterialInstance::setResource(matInst, "baseColorSampler", baseColorSampler->sampler.resourceIndex);
 
         if(material.normalTexture.has_value())
@@ -332,6 +333,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             Sampler* normalSampler = rm->get(normalSamplerHandle);
             MaterialInstance::setResource(matInst, "normalTexture", *rm->get<ResourceIndex>(normalTextureHandle));
             // MaterialInstance::setResource(matInst, "normalSampler", normalSampler->sampler.resourceIndex);
+            MaterialInstance::setUint(matInst, "normalUVSet", material.normalTexture.value().uvSet);
         }
         else
         {
@@ -353,6 +355,8 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
                 matInst, "metalRoughTexture", *rm->get<ResourceIndex>(metalRoughTextureHandle));
             // MaterialInstance::setResource(matInst, "metalRoughSampler",
             // metalRoughSampler->sampler.resourceIndex);
+            MaterialInstance::setUint(
+                matInst, "metalRoughUVSet", material.pbrMetallicRoughness.metallicRoughnessTexture.value().uvSet);
         }
         else
         {
@@ -369,6 +373,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             MaterialInstance::setResource(
                 matInst, "occlusionTexture", *rm->get<ResourceIndex>(occlusionTextureHandle));
             // MaterialInstance::setResource(matInst, "occlusionSampler", occlusionSampler->sampler.resourceIndex);
+            MaterialInstance::setUint(matInst, "occlusionUVSet", material.occlusionTexture.value().uvSet);
         }
         else
         {

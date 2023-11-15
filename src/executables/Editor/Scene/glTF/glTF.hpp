@@ -116,6 +116,7 @@ struct glTF::TextureParams
 {
     // todo: additional parameters, like UV-set, UV-scale, tint etc, etc...
     uint32_t index;
+    uint32_t uvSet;
 };
 
 struct glTF::PBRMetalRoughParams

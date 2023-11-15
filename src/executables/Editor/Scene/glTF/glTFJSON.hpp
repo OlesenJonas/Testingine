@@ -113,8 +113,9 @@ JSONType(glTF::Accessor)
 
 JSONType(glTF::TextureParams)
 {
-    using type = json_member_list<     //
-        json_number<"index", uint32_t> //
+    using type = json_member_list<                          //
+        json_number<"index", uint32_t>,                     //
+        json_number_or_default_int<"texCoord", uint32_t, 0> //
         >;
 };
 

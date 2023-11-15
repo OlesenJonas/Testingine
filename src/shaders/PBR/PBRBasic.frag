@@ -22,15 +22,18 @@ MaterialParameters(
 MaterialInstanceParameters(
     //TODO: check again, but im pretty sure these are all float4 textures
     Handle< Texture2D<float4> > normalTexture;
+    uint normalUVSet;
 
     Handle< Texture2D<float4> > baseColorTexture;
+    uint baseColorUVSet;
 
     Handle< Texture2D<float4> > metalRoughTexture;
-
-    Handle< Texture2D<float4> > occlusionTexture;
-
+    uint metalRoughUVSet;
     float metallicFactor;
     float roughnessFactor;
+
+    Handle< Texture2D<float4> > occlusionTexture;
+    uint occlusionUVSet;
 );
 
 struct VSOutput
@@ -38,8 +41,10 @@ struct VSOutput
     [[vk::location(0)]]	float3 vPositionWS : POSITIONT;
     [[vk::location(1)]] float3 vNormalWS : NORMAL0;
     [[vk::location(2)]] float3 vColor : COLOR0;
-    [[vk::location(3)]] float2 vTexCoord : TEXCOORD0;
-    [[vk::location(4)]] int baseInstance : BASE_INSTANCE;
+    [[vk::location(3)]] float2 vTexCoord0 : TEXCOORD0;
+    [[vk::location(4)]] float2 vTexCoord1 : TEXCOORD1;
+    [[vk::location(5)]] float2 vTexCoord2 : TEXCOORD2;
+    [[vk::location(6)]] int baseInstance : BASE_INSTANCE;
 };
 
 float4 main(VSOutput input) : SV_TARGET
@@ -53,12 +58,15 @@ float4 main(VSOutput input) : SV_TARGET
     ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
     const float3 cameraPositionWS = renderPassData.cameraPositionWS;
 
+    //Dont like this, optimally would have different shader variants were correct uvs are selected at compile time
+    float2 uvs[3] = {input.vTexCoord0,input.vTexCoord1,input.vTexCoord2};
+
     float3 normalWS;
     if(instanceParams.normalTexture.isValid())
     {
         Texture2D normalTexture =  instanceParams.normalTexture.get();
 
-        float3 nrmSampleTS = normalTexture.Sample(LinearRepeatSampler, input.vTexCoord).xyz;
+        float3 nrmSampleTS = normalTexture.Sample(LinearRepeatSampler, uvs[instanceParams.normalUVSet]).xyz;
         nrmSampleTS = (255.0/127.0) * nrmSampleTS - (128.0/127.0);
         nrmSampleTS = lerp(float3(0,0,1),nrmSampleTS,1.0);
         // normal map is OpenGL style y direction
@@ -72,7 +80,7 @@ float4 main(VSOutput input) : SV_TARGET
 
         float3 vT;
         float3 vB;
-        SurfGrad::genBasis(input.vTexCoord, vT, vB);
+        SurfGrad::genBasis(uvs[instanceParams.normalUVSet], vT, vB);
 
         float3 surfGrad = SurfGrad::fromTangentNormal(nrmSampleTS, vT, vB);
         normalWS = SurfGrad::resolveToNormal(1*surfGrad);
@@ -85,14 +93,14 @@ float4 main(VSOutput input) : SV_TARGET
     normalWS = lerp(normalize(input.vNormalWS), normalWS, 1.0);
 
     Texture2D colorTexture = instanceParams.baseColorTexture.get();
-    float3 baseColor = colorTexture.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
+    float3 baseColor = colorTexture.Sample(LinearRepeatSampler, uvs[instanceParams.baseColorUVSet]).rgb;
 
     float metal = instanceParams.metallicFactor;
     float roughness = instanceParams.roughnessFactor;
     if(instanceParams.metalRoughTexture.isValid())
     {
         Texture2D mrTexture = instanceParams.metalRoughTexture.get();
-        float3 metalRough = mrTexture.Sample(LinearRepeatSampler, input.vTexCoord).rgb;
+        float3 metalRough = mrTexture.Sample(LinearRepeatSampler, uvs[instanceParams.metalRoughUVSet]).rgb;
         metal *= metalRough.z;
         roughness *= metalRough.y;
     }
@@ -101,7 +109,7 @@ float4 main(VSOutput input) : SV_TARGET
     if(instanceParams.occlusionTexture.isValid())
     {   
         Texture2D occlusionTexture = instanceParams.occlusionTexture.get();
-        occlusion = occlusionTexture.Sample(LinearRepeatSampler, input.vTexCoord).x;
+        occlusion = occlusionTexture.Sample(LinearRepeatSampler, uvs[instanceParams.occlusionUVSet]).x;
     }
 
     // float3 color = 0.5+0.5*vNormalWS;
