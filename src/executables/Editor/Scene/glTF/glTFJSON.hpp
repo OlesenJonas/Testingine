@@ -52,6 +52,8 @@ namespace daw::json
     template <>                                                                                                   \
     struct daw::json::json_data_contract<T>
 
+JSONType(glm::vec2) { using type = json_ordered_member_list<float, float>; };
+
 JSONType(glm::vec3) { using type = json_ordered_member_list<float, float, float>; };
 
 JSONType(glm::vec4) { using type = json_ordered_member_list<float, float, float, float>; };
@@ -111,11 +113,27 @@ JSONType(glTF::Accessor)
         >;
 };
 
+JSONType(glTF::TextureTransform)
+{
+    using type = json_member_list<       //
+        json_class<"offset", glm::vec2>, //
+        json_class<"scale", glm::vec2>   //
+        >;
+};
+
+JSONType(glTF::TextureExtensions)
+{
+    using type = json_member_list<                                                      //
+        json_class_null<"KHR_texture_transform", std::optional<glTF::TextureTransform>> //
+        >;
+};
+
 JSONType(glTF::TextureParams)
 {
-    using type = json_member_list<                          //
-        json_number<"index", uint32_t>,                     //
-        json_number_or_default_int<"texCoord", uint32_t, 0> //
+    using type = json_member_list<                                            //
+        json_number<"index", uint32_t>,                                       //
+        json_number_or_default_int<"texCoord", uint32_t, 0>,                  //
+        json_class_null<"extensions", std::optional<glTF::TextureExtensions>> //
         >;
 };
 

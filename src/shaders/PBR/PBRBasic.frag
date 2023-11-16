@@ -27,13 +27,20 @@ MaterialInstanceParameters(
     Handle< Texture2D<float4> > baseColorTexture;
     uint baseColorUVSet;
 
+    float4 normalTexOffsetScale;
+    float4 baseColorTexOffsetScale;
+
     Handle< Texture2D<float4> > metalRoughTexture;
     uint metalRoughUVSet;
     float metallicFactor;
     float roughnessFactor;
 
+    float4 metalRoughTexOffsetScale;
+
     Handle< Texture2D<float4> > occlusionTexture;
     uint occlusionUVSet;
+    uint2 pad; //TODO
+    float4 occlusionTexOffsetScale;
 );
 
 struct VSOutput
@@ -64,9 +71,12 @@ float4 main(VSOutput input) : SV_TARGET
     float3 normalWS;
     if(instanceParams.normalTexture.isValid())
     {
+        float2 nrmUVs = uvs[instanceParams.normalUVSet];
+        nrmUVs = instanceParams.normalTexOffsetScale.xy + (nrmUVs * instanceParams.normalTexOffsetScale.zw);
+
         Texture2D normalTexture =  instanceParams.normalTexture.get();
 
-        float3 nrmSampleTS = normalTexture.Sample(LinearRepeatSampler, uvs[instanceParams.normalUVSet]).xyz;
+        float3 nrmSampleTS = normalTexture.Sample(LinearRepeatSampler, nrmUVs).xyz;
         nrmSampleTS = (255.0/127.0) * nrmSampleTS - (128.0/127.0);
         nrmSampleTS = lerp(float3(0,0,1),nrmSampleTS,1.0);
         // normal map is OpenGL style y direction
@@ -80,7 +90,7 @@ float4 main(VSOutput input) : SV_TARGET
 
         float3 vT;
         float3 vB;
-        SurfGrad::genBasis(uvs[instanceParams.normalUVSet], vT, vB);
+        SurfGrad::genBasis(nrmUVs, vT, vB);
 
         float3 surfGrad = SurfGrad::fromTangentNormal(nrmSampleTS, vT, vB);
         normalWS = SurfGrad::resolveToNormal(1*surfGrad);
@@ -92,15 +102,20 @@ float4 main(VSOutput input) : SV_TARGET
 
     normalWS = lerp(normalize(input.vNormalWS), normalWS, 1.0);
 
+    
+    float2 colorUVs = uvs[instanceParams.baseColorUVSet];
+    colorUVs = instanceParams.baseColorTexOffsetScale.xy + (colorUVs * instanceParams.baseColorTexOffsetScale.zw);
     Texture2D colorTexture = instanceParams.baseColorTexture.get();
-    float3 baseColor = colorTexture.Sample(LinearRepeatSampler, uvs[instanceParams.baseColorUVSet]).rgb;
+    float3 baseColor = colorTexture.Sample(LinearRepeatSampler, colorUVs).rgb;
 
     float metal = instanceParams.metallicFactor;
     float roughness = instanceParams.roughnessFactor;
     if(instanceParams.metalRoughTexture.isValid())
     {
+        float2 mrUVs = uvs[instanceParams.metalRoughUVSet];
+        mrUVs = instanceParams.metalRoughTexOffsetScale.xy + (mrUVs * instanceParams.metalRoughTexOffsetScale.zw);
         Texture2D mrTexture = instanceParams.metalRoughTexture.get();
-        float3 metalRough = mrTexture.Sample(LinearRepeatSampler, uvs[instanceParams.metalRoughUVSet]).rgb;
+        float3 metalRough = mrTexture.Sample(LinearRepeatSampler, mrUVs).rgb;
         metal *= metalRough.z;
         roughness *= metalRough.y;
     }
@@ -108,8 +123,10 @@ float4 main(VSOutput input) : SV_TARGET
     float occlusion = 1.0;
     if(instanceParams.occlusionTexture.isValid())
     {   
+        float2 aoUVs = uvs[instanceParams.occlusionUVSet];
+        aoUVs = instanceParams.occlusionTexOffsetScale.xy + (aoUVs * instanceParams.occlusionTexOffsetScale.zw);
         Texture2D occlusionTexture = instanceParams.occlusionTexture.get();
-        occlusion = occlusionTexture.Sample(LinearRepeatSampler, uvs[instanceParams.occlusionUVSet]).x;
+        occlusion = occlusionTexture.Sample(LinearRepeatSampler, aoUVs).x;
     }
 
     // float3 color = 0.5+0.5*vNormalWS;

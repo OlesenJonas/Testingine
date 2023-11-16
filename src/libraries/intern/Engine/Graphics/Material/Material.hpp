@@ -7,6 +7,7 @@
 #include <Datastructures/Pool/PoolHelpers.hpp>
 #include <Datastructures/StringMap.hpp>
 #include <Engine/Graphics/Shaders/Shaders.hpp>
+#include <glm/glm.hpp>
 
 // TODO: find abstraction for VkPipeline and remove include
 #include <vulkan/vulkan_core.h>
@@ -83,5 +84,6 @@ namespace MaterialInstance
 
     void setResource(Handle handle, std::string_view name, ResourceIndex index);
     void setFloat(Handle handle, std::string_view name, float value);
+    void setFloat4(Handle handle, std::string_view name, glm::vec4 value);
     void setUint(Handle handle, std::string_view name, uint32_t value);
 }; // namespace MaterialInstance

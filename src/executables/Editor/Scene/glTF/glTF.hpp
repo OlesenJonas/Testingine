@@ -18,6 +18,8 @@ namespace glTF
     struct PrimitiveAttributes;
     struct Primitive;
     struct Accessor;
+    struct TextureTransform;
+    struct TextureExtensions;
     struct TextureParams;
     struct PBRMetalRoughParams;
     struct Material;
@@ -112,11 +114,23 @@ struct glTF::Accessor
     }
 };
 
+struct glTF::TextureTransform
+{
+    glm::vec2 offset;
+    glm::vec2 scale;
+};
+
+struct glTF::TextureExtensions
+{
+    std::optional<TextureTransform> transform;
+};
+
 struct glTF::TextureParams
 {
     // todo: additional parameters, like UV-set, UV-scale, tint etc, etc...
     uint32_t index;
     uint32_t uvSet;
+    std::optional<TextureExtensions> extensions;
 };
 
 struct glTF::PBRMetalRoughParams

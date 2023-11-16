@@ -315,6 +315,18 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         const glTF::Material& material = gltf.materials[i];
         auto matInst = rm->createMaterialInstance(basicPBRMaterial);
 
+        const auto loadTextureOffsetScale =
+            [](const glTF::TextureParams& texParams) -> CTuple<glm::vec2, glm::vec2>
+        {
+            if(!texParams.extensions.has_value())
+                return {{0.f, 0.f}, {1.f, 1.f}};
+            const auto& extensions = texParams.extensions.value();
+            if(!extensions.transform.has_value())
+                return {{0.f, 0.f}, {1.f, 1.f}};
+            const auto& transform = extensions.transform.value();
+            return {transform.offset, transform.scale};
+        };
+
         const glTF::Texture& baseColorTextureGLTF =
             gltf.textures[material.pbrMetallicRoughness.baseColorTexture.index];
         const Texture::Handle baseColorTextureHandle = textures[baseColorTextureGLTF.sourceIndex];
@@ -324,6 +336,8 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             matInst, "baseColorTexture", *rm->get<ResourceIndex>(baseColorTextureHandle));
         MaterialInstance::setUint(matInst, "baseColorUVSet", material.pbrMetallicRoughness.baseColorTexture.uvSet);
         // MaterialInstance::setResource(matInst, "baseColorSampler", baseColorSampler->sampler.resourceIndex);
+        auto [bcOffset, bcScale] = loadTextureOffsetScale(material.pbrMetallicRoughness.baseColorTexture);
+        MaterialInstance::setFloat4(matInst, "baseColorTexOffsetScale", {bcOffset, bcScale});
 
         if(material.normalTexture.has_value())
         {
@@ -334,6 +348,8 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             MaterialInstance::setResource(matInst, "normalTexture", *rm->get<ResourceIndex>(normalTextureHandle));
             // MaterialInstance::setResource(matInst, "normalSampler", normalSampler->sampler.resourceIndex);
             MaterialInstance::setUint(matInst, "normalUVSet", material.normalTexture.value().uvSet);
+            auto [nrmOffset, nrmScale] = loadTextureOffsetScale(material.normalTexture.value());
+            MaterialInstance::setFloat4(matInst, "normalTexOffsetScale", {nrmOffset, nrmScale});
         }
         else
         {
@@ -357,6 +373,9 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             // metalRoughSampler->sampler.resourceIndex);
             MaterialInstance::setUint(
                 matInst, "metalRoughUVSet", material.pbrMetallicRoughness.metallicRoughnessTexture.value().uvSet);
+            auto [mrOffset, mrScale] =
+                loadTextureOffsetScale(material.pbrMetallicRoughness.metallicRoughnessTexture.value());
+            MaterialInstance::setFloat4(matInst, "metalRoughTexOffsetScale", {mrOffset, mrScale});
         }
         else
         {
@@ -374,6 +393,8 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
                 matInst, "occlusionTexture", *rm->get<ResourceIndex>(occlusionTextureHandle));
             // MaterialInstance::setResource(matInst, "occlusionSampler", occlusionSampler->sampler.resourceIndex);
             MaterialInstance::setUint(matInst, "occlusionUVSet", material.occlusionTexture.value().uvSet);
+            auto [aoOffset, aoScale] = loadTextureOffsetScale(material.occlusionTexture.value());
+            MaterialInstance::setFloat4(matInst, "occlusionTexOffsetScale", {aoOffset, aoScale});
         }
         else
         {
