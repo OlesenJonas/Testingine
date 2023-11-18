@@ -83,7 +83,6 @@ namespace MaterialInstance
     using Handle = Handle<std::string, Material::Handle, ParameterBuffer, bool>;
 
     void setResource(Handle handle, std::string_view name, ResourceIndex index);
-    void setFloat(Handle handle, std::string_view name, float value);
-    void setFloat4(Handle handle, std::string_view name, glm::vec4 value);
-    void setUint(Handle handle, std::string_view name, uint32_t value);
+    template <typename T>
+    void setValue(Handle handle, std::string_view name, T value);
 }; // namespace MaterialInstance

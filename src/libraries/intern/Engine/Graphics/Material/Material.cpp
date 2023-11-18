@@ -44,7 +44,8 @@ namespace MaterialInstance
         *ResourceManager::impl()->get<bool>(handle) = true;
     }
 
-    void setFloat(Handle handle, std::string_view name, float value)
+    template <typename T>
+    void setValue(Handle handle, std::string_view name, T value)
     {
         Material::Handle parent = *ResourceManager::impl()->get<Material::Handle>(handle);
 
@@ -59,48 +60,14 @@ namespace MaterialInstance
         const auto& parameterInfo = iterator->second;
 
         auto* paramBuffer = ResourceManager::impl()->get<MaterialInstance::ParameterBuffer>(handle);
-        auto* ptr = (float*)(&paramBuffer->cpuBuffer[parameterInfo.byteOffsetInBuffer]);
+        auto* ptr = (T*)(&paramBuffer->cpuBuffer[parameterInfo.byteOffsetInBuffer]);
         *ptr = value;
         *ResourceManager::impl()->get<bool>(handle) = true;
     }
 
-    void setFloat4(Handle handle, std::string_view name, glm::vec4 value)
-    {
-        Material::Handle parent = *ResourceManager::impl()->get<Material::Handle>(handle);
+    template void setValue<uint32_t>(Handle, std::string_view, uint32_t);
+    template void setValue<float>(Handle, std::string_view, float);
+    template void setValue<glm::vec2>(Handle, std::string_view, glm::vec2);
+    template void setValue<glm::vec4>(Handle, std::string_view, glm::vec4);
 
-        const auto& parameterLUT = ResourceManager::impl()->get<Material::InstanceParameterMap>(parent)->map;
-        const auto& iterator = parameterLUT.find(name);
-        if(iterator == parameterLUT.end())
-        {
-            // todo: emit some warning
-            BREAKPOINT;
-            return;
-        }
-        const auto& parameterInfo = iterator->second;
-
-        auto* paramBuffer = ResourceManager::impl()->get<MaterialInstance::ParameterBuffer>(handle);
-        auto* ptr = (glm::vec4*)(&paramBuffer->cpuBuffer[parameterInfo.byteOffsetInBuffer]);
-        *ptr = value;
-        *ResourceManager::impl()->get<bool>(handle) = true;
-    }
-
-    void setUint(Handle handle, std::string_view name, uint32_t value)
-    {
-        Material::Handle parent = *ResourceManager::impl()->get<Material::Handle>(handle);
-
-        const auto& parameterLUT = ResourceManager::impl()->get<Material::InstanceParameterMap>(parent)->map;
-        const auto& iterator = parameterLUT.find(name);
-        if(iterator == parameterLUT.end())
-        {
-            // todo: emit some warning
-            BREAKPOINT;
-            return;
-        }
-        const auto& parameterInfo = iterator->second;
-
-        auto* paramBuffer = ResourceManager::impl()->get<MaterialInstance::ParameterBuffer>(handle);
-        auto* ptr = (uint32_t*)(&paramBuffer->cpuBuffer[parameterInfo.byteOffsetInBuffer]);
-        *ptr = value;
-        *ResourceManager::impl()->get<bool>(handle) = true;
-    }
 } // namespace MaterialInstance

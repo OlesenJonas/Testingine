@@ -334,10 +334,11 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         Sampler* baseColorSampler = rm->get(baseColorSamplerHandle);
         MaterialInstance::setResource(
             matInst, "baseColorTexture", *rm->get<ResourceIndex>(baseColorTextureHandle));
-        MaterialInstance::setUint(matInst, "baseColorUVSet", material.pbrMetallicRoughness.baseColorTexture.uvSet);
+        MaterialInstance::setValue<uint32_t>(
+            matInst, "baseColorUVSet", material.pbrMetallicRoughness.baseColorTexture.uvSet);
         // MaterialInstance::setResource(matInst, "baseColorSampler", baseColorSampler->sampler.resourceIndex);
         auto [bcOffset, bcScale] = loadTextureOffsetScale(material.pbrMetallicRoughness.baseColorTexture);
-        MaterialInstance::setFloat4(matInst, "baseColorTexOffsetScale", {bcOffset, bcScale});
+        MaterialInstance::setValue<glm::vec4>(matInst, "baseColorTexOffsetScale", {bcOffset, bcScale});
 
         if(material.normalTexture.has_value())
         {
@@ -347,9 +348,9 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             Sampler* normalSampler = rm->get(normalSamplerHandle);
             MaterialInstance::setResource(matInst, "normalTexture", *rm->get<ResourceIndex>(normalTextureHandle));
             // MaterialInstance::setResource(matInst, "normalSampler", normalSampler->sampler.resourceIndex);
-            MaterialInstance::setUint(matInst, "normalUVSet", material.normalTexture.value().uvSet);
+            MaterialInstance::setValue<uint32_t>(matInst, "normalUVSet", material.normalTexture.value().uvSet);
             auto [nrmOffset, nrmScale] = loadTextureOffsetScale(material.normalTexture.value());
-            MaterialInstance::setFloat4(matInst, "normalTexOffsetScale", {nrmOffset, nrmScale});
+            MaterialInstance::setValue<glm::vec4>(matInst, "normalTexOffsetScale", {nrmOffset, nrmScale});
         }
         else
         {
@@ -357,8 +358,9 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             // MaterialInstance::setResource(matInst, "normalSampler", 0xFFFFFFFF);
         }
 
-        MaterialInstance::setFloat(matInst, "metallicFactor", material.pbrMetallicRoughness.metallicFactor);
-        MaterialInstance::setFloat(matInst, "roughnessFactor", material.pbrMetallicRoughness.roughnessFactor);
+        MaterialInstance::setValue<float>(matInst, "metallicFactor", material.pbrMetallicRoughness.metallicFactor);
+        MaterialInstance::setValue<float>(
+            matInst, "roughnessFactor", material.pbrMetallicRoughness.roughnessFactor);
 
         if(material.pbrMetallicRoughness.metallicRoughnessTexture.has_value())
         {
@@ -371,11 +373,11 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
                 matInst, "metalRoughTexture", *rm->get<ResourceIndex>(metalRoughTextureHandle));
             // MaterialInstance::setResource(matInst, "metalRoughSampler",
             // metalRoughSampler->sampler.resourceIndex);
-            MaterialInstance::setUint(
+            MaterialInstance::setValue<uint32_t>(
                 matInst, "metalRoughUVSet", material.pbrMetallicRoughness.metallicRoughnessTexture.value().uvSet);
             auto [mrOffset, mrScale] =
                 loadTextureOffsetScale(material.pbrMetallicRoughness.metallicRoughnessTexture.value());
-            MaterialInstance::setFloat4(matInst, "metalRoughTexOffsetScale", {mrOffset, mrScale});
+            MaterialInstance::setValue<glm::vec4>(matInst, "metalRoughTexOffsetScale", {mrOffset, mrScale});
         }
         else
         {
@@ -392,9 +394,10 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             MaterialInstance::setResource(
                 matInst, "occlusionTexture", *rm->get<ResourceIndex>(occlusionTextureHandle));
             // MaterialInstance::setResource(matInst, "occlusionSampler", occlusionSampler->sampler.resourceIndex);
-            MaterialInstance::setUint(matInst, "occlusionUVSet", material.occlusionTexture.value().uvSet);
+            MaterialInstance::setValue<uint32_t>(
+                matInst, "occlusionUVSet", material.occlusionTexture.value().uvSet);
             auto [aoOffset, aoScale] = loadTextureOffsetScale(material.occlusionTexture.value());
-            MaterialInstance::setFloat4(matInst, "occlusionTexOffsetScale", {aoOffset, aoScale});
+            MaterialInstance::setValue<glm::vec4>(matInst, "occlusionTexOffsetScale", {aoOffset, aoScale});
         }
         else
         {
