@@ -14,7 +14,7 @@ add_compile_definitions(EXECUTABLE_NAME="${FOLDER_VAR}")
 # Define the executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-target_link_libraries(${PROJECT_NAME} Engine)
+target_link_libraries(${PROJECT_NAME} PUBLIC Engine)
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>

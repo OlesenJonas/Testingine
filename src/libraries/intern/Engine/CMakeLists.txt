@@ -27,6 +27,9 @@ target_link_libraries(Engine PRIVATE mikktspace)
 target_link_libraries(Engine PUBLIC DXCLatest)
 target_link_libraries(Engine PRIVATE fasttuple)
 
+target_link_libraries(Engine PUBLIC TracyClient)
+target_compile_definitions(Engine PUBLIC TRACY_ENABLE)
+
 IF(VULKAN_ENABLE_VALIDATION)
     message(STATUS "Compiling with vulkan validation enabled")
     target_compile_definitions(Engine PUBLIC ENABLE_VULKAN_VALIDATION)

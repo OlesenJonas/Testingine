@@ -13,6 +13,8 @@
 #include <fstream>
 #include <future>
 
+#include <tracy/Tracy.hpp>
+
 Editor::Editor()
     : Application(Application::CreateInfo{
           .name = "Testingine Editor",
@@ -697,6 +699,7 @@ void Editor::run()
 
 void Editor::update()
 {
+    ZoneScoped;
     _isRunning &= !glfwWindowShouldClose(mainWindow.glfwWindow);
     if(!_isRunning)
         return;
@@ -755,10 +758,12 @@ void Editor::update()
     gfxDevice.presentSwapchain();
 
     // ------------------------------
+    FrameMark;
 }
 
 VkCommandBuffer Editor::drawScene(int threadIndex)
 {
+    ZoneScoped;
     VkCommandBuffer offscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
 
     gfxDevice.insertBarriers(
@@ -838,6 +843,7 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
 
 VkCommandBuffer Editor::drawUI(int threadIndex)
 {
+    ZoneScoped;
     VkCommandBuffer onscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
 
     gfxDevice.insertBarriers(

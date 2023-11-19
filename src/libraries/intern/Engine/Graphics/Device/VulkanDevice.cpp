@@ -18,6 +18,8 @@
 #include <stdexcept>
 #include <thread>
 
+#include <tracy/Tracy.hpp>
+
 PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
 PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
 
