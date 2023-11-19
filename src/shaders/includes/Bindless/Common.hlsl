@@ -25,7 +25,7 @@ struct Handle
         return (T)0;
     }
 
-    bool isValid() 
+    bool isNonNull() 
     {
         return resourceHandle != 0xFFFFFFFF;
     }

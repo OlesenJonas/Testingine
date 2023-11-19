@@ -616,7 +616,7 @@ Handle<Sampler> VulkanDevice::createSampler(const Sampler::Info& info)
     // in the future
 
     Handle<Sampler> newHandle = samplerPool.find([&](Sampler* sampler) { return sampler->info == info; });
-    if(newHandle.isValid())
+    if(newHandle.isNonNull())
         return newHandle;
 
     // Otherwise create a new sampler
@@ -1559,7 +1559,7 @@ void VulkanDevice::beginRendering(
         });
     }
 
-    bool hasDepthAttachment = depthTarget.texture.isValid();
+    bool hasDepthAttachment = depthTarget.texture.isNonNull();
     VkRenderingAttachmentInfo depthAttachmentInfo;
     if(hasDepthAttachment)
         depthAttachmentInfo = {

@@ -62,10 +62,10 @@ int main()
     {
         MultiPoolLimited<2, float> pool1{2u};
         auto fstHandle = pool1.insert(3.0);
-        assert(fstHandle.isValid());
+        assert(fstHandle.isNonNull());
         pool1.insert(2.0);
         auto handle = pool1.insert(1.0);
-        assert(!handle.isValid());
+        assert(!handle.isNonNull());
     }
     assert(count == 3);
 

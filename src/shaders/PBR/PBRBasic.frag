@@ -69,7 +69,7 @@ float4 main(VSOutput input) : SV_TARGET
     float2 uvs[3] = {input.vTexCoord0,input.vTexCoord1,input.vTexCoord2};
 
     float3 normalWS;
-    if(instanceParams.normalTexture.isValid())
+    if(instanceParams.normalTexture.isNonNull())
     {
         float2 nrmUVs = uvs[instanceParams.normalUVSet];
         nrmUVs = instanceParams.normalTexOffsetScale.xy + (nrmUVs * instanceParams.normalTexOffsetScale.zw);
@@ -110,7 +110,7 @@ float4 main(VSOutput input) : SV_TARGET
 
     float metal = instanceParams.metallicFactor;
     float roughness = instanceParams.roughnessFactor;
-    if(instanceParams.metalRoughTexture.isValid())
+    if(instanceParams.metalRoughTexture.isNonNull())
     {
         float2 mrUVs = uvs[instanceParams.metalRoughUVSet];
         mrUVs = instanceParams.metalRoughTexOffsetScale.xy + (mrUVs * instanceParams.metalRoughTexOffsetScale.zw);
@@ -121,7 +121,7 @@ float4 main(VSOutput input) : SV_TARGET
     }
 
     float occlusion = 1.0;
-    if(instanceParams.occlusionTexture.isValid())
+    if(instanceParams.occlusionTexture.isNonNull())
     {   
         float2 aoUVs = uvs[instanceParams.occlusionUVSet];
         aoUVs = instanceParams.occlusionTexOffsetScale.xy + (aoUVs * instanceParams.occlusionTexOffsetScale.zw);

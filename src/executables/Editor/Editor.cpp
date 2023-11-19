@@ -186,7 +186,7 @@ Editor::Editor()
     {
         auto* meshRenderer = skybox.addComponent<MeshRenderer>();
         meshRenderer->subMeshes[0] = resourceManager.getMesh("DefaultCube");
-        assert(!meshRenderer->subMeshes[1].isValid());
+        assert(!meshRenderer->subMeshes[1].isNonNull());
         // renderInfo->materialInstance = equiSkyboxMatInst;
         meshRenderer->materialInstances[0] = cubeSkyboxMatInst;
     }
@@ -228,8 +228,8 @@ Editor::Editor()
         // dont like having to call this manually
         transform->localToWorld = transform->localTransform;
 
-        assert(meshRenderer->subMeshes[0].isValid());
-        assert(meshRenderer->materialInstances[0].isValid());
+        assert(meshRenderer->subMeshes[0].isNonNull());
+        assert(meshRenderer->materialInstances[0].isNonNull());
     }
 
     // ------------------------ Build MeshData & InstanceInfo buffer ------------------------------------------
@@ -255,7 +255,7 @@ Editor::Editor()
         // TODO: const correctness
         Mesh::RenderData& renderData = *resourceManager.get<Mesh::RenderData>(mesh);
 
-        if(renderData.indexCount == 0 || !renderData.positionBuffer.isValid())
+        if(renderData.indexCount == 0 || !renderData.positionBuffer.isNonNull())
         {
             break;
         }
@@ -292,7 +292,7 @@ Editor::Editor()
                 assert(meshRenderer->instanceBufferIndices[i] == 0xFFFFFFFF);
 
                 const Mesh::Handle mesh = meshRenderer->subMeshes[i];
-                if(!mesh.isValid())
+                if(!mesh.isNonNull())
                 {
                     break;
                 }
@@ -305,10 +305,10 @@ Editor::Editor()
                 auto freeIndex = gpuInstanceInfoBuffer.freeIndex++;
                 const MaterialInstance::Handle matInst = meshRenderer->materialInstances[i];
                 const Buffer::Handle matInstParamBuffer = rm.get<Material::ParameterBuffer>(matInst)->deviceBuffer;
-                bool hasMatInstParameters = matInstParamBuffer.isValid();
+                bool hasMatInstParameters = matInstParamBuffer.isNonNull();
                 const Material::Handle mat = *rm.get<Material::Handle>(matInst);
                 const Buffer::Handle matParamBuffer = rm.get<Material::ParameterBuffer>(mat)->deviceBuffer;
-                bool hasMatParameters = matParamBuffer.isValid();
+                bool hasMatParameters = matParamBuffer.isNonNull();
 
                 gpuInstancePtr[freeIndex] = InstanceInfo{
                     .transform = transform->localToWorld,
@@ -727,7 +727,7 @@ void Editor::update()
     if(ImGui::IsKeyPressed(ImGuiKey_R, false))
     {
         Material::Handle pbrMat = resourceManager.getMaterial("PBRBasic");
-        assert(pbrMat.isValid());
+        assert(pbrMat.isNonNull());
         resourceManager.reloadMaterial(pbrMat);
     }
 
@@ -801,7 +801,7 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
             for(int i = 0; i < Mesh::MAX_SUBMESHES; i++)
             {
                 Mesh::Handle objectMesh = meshRenderer->subMeshes[i];
-                if(!objectMesh.isValid())
+                if(!objectMesh.isNonNull())
                 {
                     break;
                 }
