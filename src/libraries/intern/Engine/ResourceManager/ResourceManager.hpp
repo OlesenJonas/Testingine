@@ -72,6 +72,7 @@ class ResourceManager
 
     Texture::Handle createTexture(Texture::CreateInfo&& createInfo);
     Texture::Handle createTexture(Texture::LoadInfo&& loadInfo);
+    std::vector<Texture::Handle> createTextures(const Span<Texture::LoadInfo> loadInfos);
     void destroy(Texture::Handle handle);
     template <typename T>
     T* get(Texture::Handle handle)

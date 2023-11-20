@@ -52,7 +52,7 @@ struct Texture
 
     struct LoadInfo
     {
-        std::string_view path;
+        std::string path;
         std::string_view debugName;
         bool fileDataIsLinear = false;
         int32_t mipLevels = 1;
@@ -106,8 +106,8 @@ struct Texture
         }
     };
 
-    static LoadResult loadHDR(Texture::LoadInfo&& loadInfo);
-    static LoadResult loadDefault(Texture::LoadInfo&& loadInfo);
+    static LoadResult loadHDR(const Texture::LoadInfo& loadInfo);
+    static LoadResult loadDefault(const Texture::LoadInfo& loadInfo);
 
     // -----------------------------------------------------
 

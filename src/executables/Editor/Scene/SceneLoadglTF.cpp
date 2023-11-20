@@ -7,14 +7,16 @@
 #include <Engine/Application/Application.hpp>
 #include <Engine/ResourceManager/ResourceManager.hpp>
 #include <cstddef>
+#include <daw/json/daw_json_exception.h>
 #include <filesystem>
 #include <fstream>
+#include <tracy/Tracy.hpp>
+#include <tracy/TracyC.h>
 #include <vulkan/vulkan_core.h>
-
-#include <daw/json/daw_json_exception.h>
 
 void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
 {
+    ZoneScopedN("Scene Load");
     /*
         todo:
             confirm its actually a gltf file
@@ -45,6 +47,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
 
     // Load & create textures ("images" in glTF)
     // first find out which textures arent linear (all those that are used as basecolor textures)
+    TracyCZoneN(zoneTextures, "Loading textures", true);
     std::vector<bool> textureIsLinear;
     textureIsLinear.resize(gltf.images.size());
     for(int i = 0; i < textureIsLinear.size(); i++)
@@ -58,23 +61,25 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             gltf.textures[material.pbrMetallicRoughness.baseColorTexture.index];
         textureIsLinear[baseColorTextureGLTF.sourceIndex] = false;
     }
-
     std::vector<Texture::Handle> textures;
+    std::vector<Texture::LoadInfo> loadInfos;
     textures.resize(gltf.images.size());
+    loadInfos.resize(gltf.images.size());
     for(int i = 0; i < gltf.images.size(); i++)
     {
-        // todo: mark textures used for baseColor in an earlier step, then load only those as non-linear
-        std::filesystem::path imagePath = basePath / gltf.images[i].uri;
-        textures[i] = rm->createTexture(Texture::LoadInfo{
-            .path = imagePath.generic_string(),
+        loadInfos[i] = Texture::LoadInfo{
+            .path = (basePath / gltf.images[i].uri).generic_string(),
             .fileDataIsLinear = textureIsLinear[i],
             .mipLevels = Texture::MipLevels::All,
             .fillMipLevels = true,
             .allStates = ResourceState::SampleSource,
             .initialState = ResourceState::SampleSource,
-        });
+        };
     }
+    textures = rm->createTextures(loadInfos);
+    TracyCZoneEnd(zoneTextures);
 
+    TracyCZoneN(zoneBuffers, "Loading Buffers", true);
     // Load buffers (CPU)
     std::vector<std::vector<char>> buffers;
     buffers.resize(gltf.buffers.size());
@@ -97,8 +102,10 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
         file.close();
         file.seekg(0);
     }
+    TracyCZoneEnd(zoneBuffers);
 
     // Load/create Meshes
+    TracyCZoneN(zoneMeshes, "Creating Meshes", true);
     std::vector<std::array<Mesh::Handle, Mesh::MAX_SUBMESHES>> meshes;
     meshes.resize(gltf.meshes.size(), FilledArray<Mesh::Handle, Mesh::MAX_SUBMESHES>(Mesh::Handle::Invalid()));
     for(int i = 0; i < gltf.meshes.size(); i++)
@@ -304,6 +311,7 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
             meshes[i][prim] = newMesh;
         }
     }
+    TracyCZoneEnd(zoneMeshes);
 
     // Create material instances (materials in glTF)
     std::vector<MaterialInstance::Handle> materialInstances;

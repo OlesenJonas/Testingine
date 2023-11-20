@@ -8,6 +8,7 @@
 #include <Engine/Misc/PathHelpers.hpp>
 #include <TinyOBJ/tiny_obj_loader.h>
 #include <span>
+#include <tracy/TracyC.h>
 #include <vulkan/vulkan_core.h>
 
 /*
@@ -230,6 +231,7 @@ Texture::Handle ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
         loadInfo.debugName.empty() ? PathHelpers::fileName(loadInfo.path) : loadInfo.debugName;
     loadInfo.debugName = texName;
 
+    TracyCZoneN(zoneLoad, "Loading Data", true);
     Texture::CreateInfo createInfo;
     std::function<void()> cleanupFunc;
     if(extension == ".hdr")
@@ -240,12 +242,68 @@ Texture::Handle ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
     {
         std::tie(createInfo, cleanupFunc) = Texture::loadDefault(std::move(loadInfo));
     }
+    TracyCZoneEnd(zoneLoad);
 
+    TracyCZoneN(zoneGPU, "Create GPU Texture", true);
     Texture::Handle newTextureHandle = createTexture(std::move(createInfo));
+    TracyCZoneEnd(zoneGPU);
 
     cleanupFunc();
 
     return newTextureHandle;
+}
+// TODO: move to top
+#include <execution>
+#include <ranges>
+
+std::vector<Texture::Handle> ResourceManager::createTextures(const Span<Texture::LoadInfo> loadInfos)
+{
+    std::vector<Texture::CreateInfo> createInfos;
+    createInfos.resize(loadInfos.size());
+    std::vector<std::function<void()>> cleanupFuncs;
+    cleanupFuncs.resize(loadInfos.size());
+
+    std::ranges::iota_view indices((size_t)0, createInfos.size());
+    std::for_each(
+        std::execution::par_unseq,
+        indices.begin(),
+        indices.end(),
+        [&createInfos, &loadInfos, &cleanupFuncs](size_t i)
+        {
+            TracyCZoneN(zoneLoad, "Loading Data", true);
+            const auto& loadInfo = loadInfos[i];
+            std::string extension{PathHelpers::extension(loadInfo.path)};
+            std::string_view debugName =
+                loadInfo.debugName.empty() ? PathHelpers::fileName(loadInfo.path) : loadInfo.debugName;
+            assert(!debugName.empty());
+
+            auto& createInfo = createInfos[i];
+            if(extension == ".hdr")
+            {
+                std::tie(createInfo, cleanupFuncs[i]) = Texture::loadHDR(loadInfo);
+            }
+            else
+            {
+                std::tie(createInfo, cleanupFuncs[i]) = Texture::loadDefault(loadInfo);
+            }
+            createInfo.debugName = debugName;
+            TracyCZoneEnd(zoneLoad);
+        });
+
+    std::vector<Texture::Handle> ret;
+    ret.resize(loadInfos.size());
+
+    TracyCZoneN(zoneGPU, "Create GPU Textures", true);
+    for(int i = 0; i < createInfos.size(); i++)
+    {
+        // CANT DO THIS IN PARALLEL, ACCESSES NAME->TEX LUT!
+        // TODO: why move here?
+        ret[i] = createTexture(std::move(createInfos[i]));
+        cleanupFuncs[i]();
+    }
+    TracyCZoneEnd(zoneGPU);
+
+    return ret;
 }
 
 Texture::Handle ResourceManager::createTexture(Texture::CreateInfo&& createInfo)

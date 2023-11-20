@@ -3,9 +3,8 @@
 
 #include <iostream>
 
-Texture::LoadResult Texture::loadHDR(Texture::LoadInfo&& loadInfo)
+Texture::LoadResult Texture::loadHDR(const Texture::LoadInfo& loadInfo)
 {
-    assert(!loadInfo.debugName.empty());
     int texWidth = 0;
     int texHeight = 0;
     int texChannels = 0;
@@ -26,25 +25,25 @@ Texture::LoadResult Texture::loadHDR(Texture::LoadInfo&& loadInfo)
 
     uint32_t maxDimension = std::max(texWidth, texHeight);
     int32_t possibleMipLevels = int32_t(floor(log2(maxDimension))) + 1;
+    int32_t mipLevels = -1;
     if(loadInfo.mipLevels == Texture::MipLevels::All)
     {
-        loadInfo.mipLevels = possibleMipLevels;
+        mipLevels = possibleMipLevels;
     }
     else if(loadInfo.mipLevels > possibleMipLevels)
     {
         // TODO: LOG: Warn: more requested than possible
-        loadInfo.mipLevels = possibleMipLevels;
+        mipLevels = possibleMipLevels;
     }
 
     return {
         Texture::CreateInfo{
             // specifying non-default values only
-            .debugName = std::string{loadInfo.debugName},
             .format = imageFormat,
             .allStates = loadInfo.allStates,
             .initialState = loadInfo.initialState,
             .size = imageExtent,
-            .mipLevels = loadInfo.mipLevels,
+            .mipLevels = mipLevels,
             .initialData = {(uint8_t*)pixels, pixelCount * sizeof(float)},
         },
         [pixels]()

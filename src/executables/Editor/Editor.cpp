@@ -14,6 +14,7 @@
 #include <future>
 
 #include <tracy/Tracy.hpp>
+#include <tracy/TracyC.h>
 
 Editor::Editor()
     : Application(Application::CreateInfo{
@@ -21,6 +22,7 @@ Editor::Editor()
           .windowHints = {{GLFW_MAXIMIZED, GLFW_TRUE}},
       })
 {
+    ZoneScopedN("Editor Init");
     gfxDevice.startInitializationWork();
 
     inputManager.init(mainWindow.glfwWindow);
@@ -35,7 +37,6 @@ Editor::Editor()
     threadPool.start(4);
 
     // rendering internals --------------------------------------------
-
     // create this first, need to ensure resourceIndex is 0 (since thats currently hardcoded in the shaders)
     //  TODO: switch to spec constant?
     gpuMeshDataBuffer.buffer = resourceManager.createBuffer(Buffer::CreateInfo{
