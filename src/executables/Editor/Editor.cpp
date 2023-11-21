@@ -401,20 +401,19 @@ void Editor::createDefaultMaterialAndInstances()
 void Editor::createDefaultComputeShaders()
 {
     ZoneScopedN("Compile compute shaders");
-    equiToCubeShader = resourceManager.createComputeShader(
-        {.sourcePath = SHADERS_PATH "/Skybox/equiToCube.hlsl"}, "equiToCubeCompute");
 
-    irradianceCalcShader = resourceManager.createComputeShader(
-        {.sourcePath = SHADERS_PATH "/Skybox/generateIrradiance.comp"}, "generateIrradiance");
-
-    debugMipFillShader = resourceManager.createComputeShader(
-        {.sourcePath = SHADERS_PATH "/Misc/debugMipFill.comp"}, "debugMipFill");
-
-    prefilterEnvShader = resourceManager.createComputeShader(
-        {.sourcePath = SHADERS_PATH "/Skybox/prefilter.comp"}, "prefilterEnvComp");
-
-    integrateBrdfShader = resourceManager.createComputeShader(
-        {.sourcePath = SHADERS_PATH "/PBR/integrateBRDF.comp"}, "integrateBRDFComp");
+    std::vector<Handle<ComputeShader>> shaders = resourceManager.createComputeShaders({
+        {.sourcePath = SHADERS_PATH "/Skybox/equiToCube.hlsl", .debugName = "equiToCubeCompute"},
+        {.sourcePath = SHADERS_PATH "/Skybox/generateIrradiance.comp", .debugName = "generateIrradiance"},
+        {.sourcePath = SHADERS_PATH "/Misc/debugMipFill.comp", .debugName = "debugMipFill"},
+        {.sourcePath = SHADERS_PATH "/Skybox/prefilter.comp", .debugName = "prefilterEnvComp"},
+        {.sourcePath = SHADERS_PATH "/PBR/integrateBRDF.comp", .debugName = "integrateBRDFComp"} //
+    });
+    equiToCubeShader = shaders[0];
+    irradianceCalcShader = shaders[1];
+    debugMipFillShader = shaders[2];
+    prefilterEnvShader = shaders[3];
+    integrateBrdfShader = shaders[4];
 }
 
 void Editor::createDefaultTextures(VkCommandBuffer cmd)

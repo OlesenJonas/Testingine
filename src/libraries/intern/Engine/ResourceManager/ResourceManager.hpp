@@ -112,6 +112,8 @@ class ResourceManager
     // --------- Compute Shader -----------------------------------
 
     Handle<ComputeShader> createComputeShader(Shaders::StageCreateInfo&& createInfo, std::string_view debugName);
+    std::vector<Handle<ComputeShader>>
+    createComputeShaders(const Span<const Shaders::ComputeCreateInfo> createInfos);
     void destroy(Handle<ComputeShader> handle);
     inline ComputeShader* get(Handle<ComputeShader> handle) { return computeShaderPool.get(handle); };
 

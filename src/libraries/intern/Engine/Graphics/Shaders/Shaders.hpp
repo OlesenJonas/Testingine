@@ -33,6 +33,12 @@ namespace Shaders
         Language sourceLanguage = Language::HLSL;
     };
 
+    struct ComputeCreateInfo
+    {
+        std::string_view sourcePath;
+        std::string_view debugName; // TODO: string instead?
+    };
+
     namespace Reflection
     {
         class Module

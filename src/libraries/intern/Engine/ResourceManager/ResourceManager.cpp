@@ -621,6 +621,64 @@ ResourceManager::createComputeShader(Shaders::StageCreateInfo&& createInfo, std:
     return newComputeShaderHandle;
 }
 
+std::vector<Handle<ComputeShader>>
+ResourceManager::createComputeShaders(const Span<const Shaders::ComputeCreateInfo> createInfos)
+{
+    std::vector<Handle<ComputeShader>> ret;
+    ret.resize(createInfos.size());
+    for(int i = 0; i < createInfos.size(); i++)
+    {
+        // creating handles isnt thread safe so needs to happen first
+        ret[i] = computeShaderPool.insert();
+    }
+
+    std::ranges::iota_view indices((size_t)0, createInfos.size());
+    std::for_each(
+        std::execution::par,
+        indices.begin(),
+        indices.end(),
+        [&createInfos, &ret, this](size_t i)
+        {
+            const auto& createInfo = createInfos[i];
+            std::string_view fileView{createInfo.sourcePath};
+            std::string_view debugName = createInfo.debugName;
+            if(debugName.empty())
+            {
+                debugName = PathHelpers::fileName(fileView);
+            }
+
+            Handle<ComputeShader>& newComputeShaderHandle = ret[i];
+
+            ComputeShader* computeShader = get(newComputeShaderHandle);
+            VulkanDevice& gfxDevice = *VulkanDevice::impl();
+
+            TracyCZoneN(zoneCompileHLSL, "Compile HLSL", true);
+            std::vector<uint32_t> shaderBinary = compileHLSL(createInfo.sourcePath, Shaders::Stage::Compute);
+            TracyCZoneEnd(zoneCompileHLSL);
+
+            // Parse Shader Interface -------------
+
+            // todo: wrap into function taking shader byte code(s) (span)? could be moved into Shaders.cpp
+            //      was used only in fragment and vertex shader compilation, but its used here now aswell
+            //      so maybe its time to factor out
+
+            SpvReflectShaderModule reflModule;
+            SpvReflectResult result;
+            result = spvReflectCreateShaderModule(shaderBinary.size() * 4, shaderBinary.data(), &reflModule);
+            assert(result == SPV_REFLECT_RESULT_SUCCESS);
+
+            std::span<SpvReflectDescriptorBinding> vertDescriptorBindings{
+                reflModule.descriptor_bindings, reflModule.descriptor_binding_count};
+
+            computeShader->pipeline = gfxDevice.createComputePipeline(shaderBinary, debugName);
+
+            // TODO: if compilation wasnt succesful, need to free pre-emptively created(inserted) handle and set
+            //       vector element to null-handle
+        });
+
+    return ret;
+}
+
 void ResourceManager::destroy(Handle<ComputeShader> handle)
 {
     ComputeShader* compShader = computeShaderPool.get(handle);
