@@ -50,7 +50,7 @@ struct Cube
         {-radius, -radius, radius},
     };
 
-    static inline const std::vector<Mesh::BasicVertexAttributes<0>> attributes = {
+    static inline const std::vector<Mesh::BasicVertexAttributes<0>> attributes_typed = {
         // +Z face
         {.normal = {0.f, 0.f, 1.f}, .uvs = {{0.f, 0.f}}},
         {.normal = {0.f, 0.f, 1.f}, .uvs = {{1.f, 0.f}}},
@@ -82,6 +82,9 @@ struct Cube
         {.normal = {0.f,-1.f,0.f}, .uvs = {{1.f, 1.f}}},
         {.normal = {0.f,-1.f,0.f}, .uvs = {{0.f, 1.f}}},
     };
+
+    static inline const Span<std::byte> attributes(){return {
+        (std::byte*)attributes_typed.data(), attributes_typed.size() * sizeof(attributes_typed[0])};}
     
     static inline const std::vector<Mesh::IndexType> indices = {
         // +Z face

@@ -596,7 +596,9 @@ ResourceManager::createComputeShader(Shaders::StageCreateInfo&& createInfo, std:
 
     VulkanDevice& gfxDevice = *VulkanDevice::impl();
 
+    TracyCZoneN(zoneCompileHLSL, "Compile HLSL", true);
     std::vector<uint32_t> shaderBinary = compileHLSL(createInfo.sourcePath, Shaders::Stage::Compute);
+    TracyCZoneEnd(zoneCompileHLSL);
 
     // Parse Shader Interface -------------
 

@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <tracy/TracyC.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 

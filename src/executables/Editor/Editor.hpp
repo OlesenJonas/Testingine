@@ -38,12 +38,26 @@ class Editor final : public Application
     Texture::Handle offscreenTexture;
     Material::Handle writeToSwapchainMat;
 
+    void createDefaultAssets(VkCommandBuffer cmd);
     void createDefaultSamplers();
-
+    void createDefaultMeshes();
+    void createDefaultMaterialAndInstances();
+    void createDefaultComputeShaders();
     void createDefaultTextures(VkCommandBuffer cmd);
+
+    Handle<ComputeShader> debugMipFillShader;
+    Handle<ComputeShader> prefilterEnvShader;
+    Handle<ComputeShader> integrateBrdfShader;
+
     Texture::Handle mipDebugTex;
     Texture::Handle defaultHDRI;
     Texture::Handle brdfIntegralTex;
+
+    MaterialInstance::Handle unlitMatInst;
+    MaterialInstance::Handle equiSkyboxMatInst;
+    MaterialInstance::Handle cubeSkyboxMatInst;
+
+    Mesh::Handle triangleMesh;
 
     Handle<ComputeShader> equiToCubeShader;
     Handle<ComputeShader> irradianceCalcShader;

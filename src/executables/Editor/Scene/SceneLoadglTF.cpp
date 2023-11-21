@@ -27,8 +27,10 @@ void Scene::load(std::string path, ECS* ecs, ECS::Entity parent)
     std::filesystem::path basePath{path};
     basePath = basePath.parent_path();
 
+    TracyCZoneN(zoneParse, "Parsing glTF", true);
     const glTF::Main gltf = glTF::Main::load(path);
     assert(gltf.asset.version == "2.0");
+    TracyCZoneEnd(zoneParse);
 
     // create samplers
     std::vector<Handle<Sampler>> samplers;
