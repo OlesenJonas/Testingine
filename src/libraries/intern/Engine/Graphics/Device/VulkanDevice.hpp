@@ -108,6 +108,12 @@ class VulkanDevice
     VkCommandBuffer beginCommandBuffer(uint32_t threadIndex = 0);
     void endCommandBuffer(VkCommandBuffer cmd);
 
+    /*
+        TODO:
+            Does not synchronize anything
+            basically just a vkQueueSubmit wrapper
+    */
+    void simpleSubmit(VkCommandBuffer cmdBuf);
     // TODO: this currently functions as the sole submit for a whole frame
     //       but thats too conservative, not all command buffers may need to wait for
     //       the swapchain image to be available or even be submitted at the same time in the first place

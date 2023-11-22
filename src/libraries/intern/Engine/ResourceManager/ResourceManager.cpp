@@ -244,6 +244,7 @@ Texture::Handle ResourceManager::createTexture(Texture::LoadInfo&& loadInfo)
         std::tie(createInfo, cleanupFunc) = Texture::loadDefault(std::move(loadInfo));
     }
     TracyCZoneEnd(zoneLoad);
+    createInfo.cmdBuf = loadInfo.cmdBuf;
 
     TracyCZoneN(zoneGPU, "Create GPU Texture", true);
     Texture::Handle newTextureHandle = createTexture(std::move(createInfo));

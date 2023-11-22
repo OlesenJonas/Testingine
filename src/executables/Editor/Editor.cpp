@@ -39,9 +39,7 @@ Editor::Editor()
     mainCamera =
         Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
 
-    VkCommandBuffer mainCmdBuffer = gfxDevice.beginCommandBuffer();
-
-    createDefaultAssets(mainCmdBuffer);
+    createDefaultAssets();
 
     // Disable validation error breakpoints during init, synch errors arent correct
     gfxDevice.disableValidationErrorBreakpoint();
@@ -52,6 +50,7 @@ Editor::Editor()
 
     // ------------------------ Build MeshData & InstanceInfo buffer ------------------------------------------
     TracyCZoneN(zoneGPUScene, "Build GPU Scene", true);
+    VkCommandBuffer mainCmdBuffer = gfxDevice.beginCommandBuffer();
 
     auto& rm = resourceManager;
 
@@ -168,7 +167,7 @@ Editor::Editor()
     inputManager.resetTime();
 }
 
-void Editor::createDefaultAssets(VkCommandBuffer cmd)
+void Editor::createDefaultAssets()
 {
     // create this first, need to ensure resourceIndex is 0 (since thats currently hardcoded in the shaders)
     //  TODO: switch to spec constant?
@@ -203,17 +202,17 @@ void Editor::createDefaultAssets(VkCommandBuffer cmd)
 
     createDefaultSamplers();
 
-    createDefaultMaterialAndInstances();
-
     createDefaultComputeShaders();
+
+    createDefaultTextures();
+
+    SkyboxTextures skyboxTextures = generateSkyboxTextures(512, 32, 128);
 
     createDefaultMeshes();
 
-    TracyCZoneN(zoneDefTex, "Create Default Tex", true);
-    createDefaultTextures(cmd);
-    TracyCZoneEnd(zoneDefTex);
+    createRendertargets();
 
-    SkyboxTextures skyboxTextures = generateSkyboxTextures(cmd, defaultHDRI, 512, 32, 128);
+    createDefaultMaterialAndInstances();
 
     Material::Handle pbrMat = resourceManager.getMaterial("PBRBasic");
     Material::setResource(
@@ -420,7 +419,7 @@ void Editor::createDefaultComputeShaders()
     integrateBrdfShader = shaders[4];
 }
 
-void Editor::createDefaultTextures(VkCommandBuffer cmd)
+void Editor::createRendertargets()
 {
     depthTexture = resourceManager.createTexture(Texture::CreateInfo{
         .debugName = "Depth Texture",
@@ -437,6 +436,14 @@ void Editor::createDefaultTextures(VkCommandBuffer cmd)
         .initialState = ResourceState::Rendertarget,
         .size = {gfxDevice.getSwapchainWidth(), gfxDevice.getSwapchainHeight()},
     });
+}
+
+void Editor::createDefaultTextures()
+{
+    ZoneScopedN("Create default textures");
+
+    auto& gfxDevice = *VulkanDevice::impl();
+    VkCommandBuffer cmd = gfxDevice.beginCommandBuffer();
 
     mipDebugTex = resourceManager.createTexture({
         .debugName = "mipTest",
@@ -446,6 +453,7 @@ void Editor::createDefaultTextures(VkCommandBuffer cmd)
         .initialState = ResourceState::StorageCompute,
         .size = {128, 128},
         .mipLevels = Texture::MipLevels::All,
+        .cmdBuf = cmd,
     });
     ComputeShader* debugMipFillShader = resourceManager.get(this->debugMipFillShader);
     {
@@ -499,15 +507,6 @@ void Editor::createDefaultTextures(VkCommandBuffer cmd)
         gfxDevice.endDebugRegion(cmd);
     }
 
-    TracyCZoneN(zoneSkyHDRI, "Load Sky HDRI", true);
-    defaultHDRI = resourceManager.createTexture(Texture::LoadInfo{
-        .path = ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr",
-        .fileDataIsLinear = true,
-        .allStates = ResourceState::SampleSource,
-        .initialState = ResourceState::SampleSource,
-    });
-    TracyCZoneEnd(zoneSkyHDRI);
-
     ComputeShader* integrateBRDFShader = resourceManager.get(this->integrateBrdfShader);
     uint32_t brdfIntegralSize = 512;
     brdfIntegralTex = resourceManager.createTexture({
@@ -518,6 +517,7 @@ void Editor::createDefaultTextures(VkCommandBuffer cmd)
         .initialState = ResourceState::StorageCompute,
         .size = {brdfIntegralSize, brdfIntegralSize},
         .mipLevels = 1,
+        .cmdBuf = cmd,
     });
     {
         gfxDevice.setComputePipelineState(cmd, integrateBRDFShader->pipeline);
@@ -544,26 +544,39 @@ void Editor::createDefaultTextures(VkCommandBuffer cmd)
                 },
             });
     }
+
+    gfxDevice.endCommandBuffer(cmd);
+    gfxDevice.simpleSubmit(cmd);
 }
 
-Editor::SkyboxTextures Editor::generateSkyboxTextures(
-    VkCommandBuffer cmd,
-    Texture::Handle equiSource,
-    uint32_t hdriCubeRes,
-    uint32_t irradianceRes,
-    uint32_t prefilteredEnvMapBaseSize)
+Editor::SkyboxTextures
+Editor::generateSkyboxTextures(uint32_t hdriCubeRes, uint32_t irradianceRes, uint32_t prefilteredEnvMapBaseSize)
 {
-    std::string baseName = *resourceManager.get<std::string>(equiSource);
+    auto& gfxDevice = *VulkanDevice::impl();
+    VkCommandBuffer cmd = gfxDevice.beginCommandBuffer();
+
+    TracyCZoneN(zoneSkyHDRI, "Load Sky HDRI", true);
+    defaultHDRI = resourceManager.createTexture(Texture::LoadInfo{
+        .path = ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr",
+        .fileDataIsLinear = true,
+        .allStates = ResourceState::SampleSource,
+        .initialState = ResourceState::SampleSource,
+        .cmdBuf = cmd,
+    });
+    TracyCZoneEnd(zoneSkyHDRI);
+
+    std::string baseName = *resourceManager.get<std::string>(defaultHDRI);
 
     auto hdriCube = resourceManager.createTexture(Texture::CreateInfo{
         // specifying non-default values only
         .debugName = baseName + "Cubemap",
         .type = Texture::Type::tCube,
-        .format = resourceManager.get<Texture::Descriptor>(equiSource)->format,
+        .format = resourceManager.get<Texture::Descriptor>(defaultHDRI)->format,
         .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
         .initialState = ResourceState::StorageCompute,
         .size = {.width = hdriCubeRes, .height = hdriCubeRes},
         .mipLevels = Texture::MipLevels::All,
+        .cmdBuf = cmd,
     });
     {
         ComputeShader* conversionShader = resourceManager.get(equiToCubeShader);
@@ -575,7 +588,7 @@ Editor::SkyboxTextures Editor::generateSkyboxTextures(
             uint32_t sourceIndex;
             uint32_t targetIndex;
         } constants = {
-            .sourceIndex = *resourceManager.get<ResourceIndex>(equiSource),
+            .sourceIndex = *resourceManager.get<ResourceIndex>(defaultHDRI),
             // TODO: Not sure if writing into image view with all levels correctly writes into 0th level
             .targetIndex = *resourceManager.get<ResourceIndex>(hdriCube),
         };
@@ -603,6 +616,7 @@ Editor::SkyboxTextures Editor::generateSkyboxTextures(
         .allStates = ResourceState::SampleSource | ResourceState::StorageCompute,
         .initialState = ResourceState::StorageCompute,
         .size = {irradianceRes, irradianceRes, 1},
+        .cmdBuf = cmd,
     });
     {
         ComputeShader* calcIrradianceShader = resourceManager.get(irradianceCalcShader);
@@ -644,6 +658,7 @@ Editor::SkyboxTextures Editor::generateSkyboxTextures(
         .initialState = ResourceState::StorageCompute,
         .size = {prefilteredEnvMapBaseSize, prefilteredEnvMapBaseSize},
         .mipLevels = 5,
+        .cmdBuf = cmd,
     });
     {
         gfxDevice.setComputePipelineState(cmd, prefilterEnvShader->pipeline);
@@ -696,6 +711,9 @@ Editor::SkyboxTextures Editor::generateSkyboxTextures(
                 },
             });
     }
+
+    gfxDevice.endCommandBuffer(cmd);
+    gfxDevice.simpleSubmit(cmd);
 
     return SkyboxTextures{
         .cubeMap = hdriCube,

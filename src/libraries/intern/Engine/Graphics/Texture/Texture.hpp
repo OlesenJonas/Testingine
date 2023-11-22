@@ -59,6 +59,8 @@ struct Texture
         bool fillMipLevels = true;
         ResourceStateMulti allStates = ResourceState::None;
         ResourceState initialState = ResourceState::Undefined;
+
+        VkCommandBuffer cmdBuf = VK_NULL_HANDLE;
     };
 
     struct CreateInfo
@@ -76,6 +78,8 @@ struct Texture
 
         Span<uint8_t> initialData;
         bool fillMipLevels = true;
+
+        VkCommandBuffer cmdBuf = VK_NULL_HANDLE;
     };
 
     /*

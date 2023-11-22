@@ -727,6 +727,9 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
     VkResult res = vmaCreateImage(allocator, &imageCrInfo, &imgAllocInfo, &image, &allocation, nullptr);
     assert(res == VK_SUCCESS);
 
+    VkCommandBuffer cmd =
+        createInfo.cmdBuf == VK_NULL_HANDLE ? getCurrentFrameData().uploadCommandBuffer : createInfo.cmdBuf;
+
     if(!createInfo.initialData.empty())
     {
         auto stagingAlloc = allocateStagingData(createInfo.initialData.size());
@@ -744,7 +747,7 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &imgBarrier,
         };
-        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
 
         VkBufferImageCopy copyRegion{
             .bufferOffset = stagingAlloc.offset,
@@ -761,12 +764,7 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
         };
 
         vkCmdCopyBufferToImage(
-            getCurrentFrameData().uploadCommandBuffer,
-            *get<VkBuffer>(stagingAlloc.buffer),
-            image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1,
-            &copyRegion);
+            cmd, *get<VkBuffer>(stagingAlloc.buffer), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
         imgBarrier = toVkImageMemoryBarrier(VulkanImageBarrier{
             .texture = image,
@@ -780,15 +778,11 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &imgBarrier,
         };
-        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
 
         if(createInfo.fillMipLevels && createInfo.mipLevels > 1)
         {
-            fillMipLevels(
-                getCurrentFrameData().uploadCommandBuffer,
-                image,
-                Texture::Descriptor::fromCreateInfo(createInfo),
-                createInfo.initialState);
+            fillMipLevels(cmd, image, Texture::Descriptor::fromCreateInfo(createInfo), createInfo.initialState);
         }
     }
     else if(createInfo.initialState != ResourceState::Undefined)
@@ -806,7 +800,7 @@ Texture::Handle VulkanDevice::createTexture(Texture::CreateInfo&& createInfo)
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &imgBarrier,
         };
-        vkCmdPipelineBarrier2(getCurrentFrameData().uploadCommandBuffer, &dependencyInfo);
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
     setDebugName(image, (createInfo.debugName + "_image").c_str());
 
@@ -1422,6 +1416,27 @@ VkCommandBuffer VulkanDevice::beginCommandBuffer(uint32_t threadIndex)
     return cmdBuffer;
 }
 void VulkanDevice::endCommandBuffer(VkCommandBuffer cmd) { vkEndCommandBuffer(cmd); }
+
+void VulkanDevice::simpleSubmit(VkCommandBuffer cmd)
+{
+    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submitInfo{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = nullptr,
+
+        .waitSemaphoreCount = 0,
+        .pWaitSemaphores = nullptr,
+        .pWaitDstStageMask = 0,
+
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+
+        .signalSemaphoreCount = 0,
+        .pSignalSemaphores = nullptr,
+    };
+
+    assertVkResult(vkQueueSubmit(graphicsAndComputeQueue, 1, &submitInfo, VK_NULL_HANDLE));
+}
 
 void VulkanDevice::submitCommandBuffers(Span<const VkCommandBuffer> cmdBuffers)
 {

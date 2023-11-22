@@ -38,12 +38,13 @@ class Editor final : public Application
     Texture::Handle offscreenTexture;
     Material::Handle writeToSwapchainMat;
 
-    void createDefaultAssets(VkCommandBuffer cmd);
+    void createDefaultAssets();
     void createDefaultSamplers();
     void createDefaultMeshes();
     void createDefaultMaterialAndInstances();
     void createDefaultComputeShaders();
-    void createDefaultTextures(VkCommandBuffer cmd);
+    void createRendertargets();
+    void createDefaultTextures();
 
     Handle<ComputeShader> debugMipFillShader;
     Handle<ComputeShader> prefilterEnvShader;
@@ -67,12 +68,8 @@ class Editor final : public Application
         Texture::Handle irradianceMap;
         Texture::Handle prefilteredMap;
     };
-    SkyboxTextures generateSkyboxTextures(
-        VkCommandBuffer cmd,
-        Texture::Handle equiSource,
-        uint32_t hdriCubeRes,
-        uint32_t irradianceRes,
-        uint32_t prefilteredEnvMapBaseSize);
+    SkyboxTextures
+    generateSkyboxTextures(uint32_t hdriCubeRes, uint32_t irradianceRes, uint32_t prefilteredEnvMapBaseSize);
 
     VkCommandBuffer drawScene(int threadIndex);
     VkCommandBuffer drawUI(int threadIndex);
