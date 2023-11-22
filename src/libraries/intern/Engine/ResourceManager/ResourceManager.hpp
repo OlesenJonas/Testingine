@@ -90,6 +90,7 @@ class ResourceManager
     // --------- Material -----------------------------------
 
     Material::Handle createMaterial(Material::CreateInfo&& crInfo);
+    std::vector<Material::Handle> createMaterials(Span<const Material::CreateInfo> createInfos);
     void destroy(Material::Handle handle);
     bool reloadMaterial(Material::Handle handle);
     template <typename T>

@@ -13,12 +13,14 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <tracy/Tracy.hpp>
 #include <tracy/TracyC.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
 std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
 {
+    ZoneScopedN("Compile HLSL");
     std::wstring filename{path.begin(), path.end()};
 
     /*

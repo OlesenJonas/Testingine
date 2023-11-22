@@ -82,7 +82,7 @@ class VulkanDevice
         Texture::Format depthFormat = Texture::Format::UNDEFINED;
         Texture::Format stencilFormat = Texture::Format::UNDEFINED;
     };
-    VkPipeline createGraphicsPipeline(PipelineCreateInfo&& createInfo);
+    VkPipeline createGraphicsPipeline(const PipelineCreateInfo& createInfo);
     VkPipeline createComputePipeline(Span<uint32_t> spirv, std::string_view debugName);
     void destroy(VkPipeline pipeline);
 

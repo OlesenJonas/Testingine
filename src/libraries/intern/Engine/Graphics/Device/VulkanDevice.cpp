@@ -993,7 +993,7 @@ void VulkanDevice::destroy(Handle<TextureView> handle)
     textureViewPool.remove(handle);
 }
 
-VkPipeline VulkanDevice::createGraphicsPipeline(PipelineCreateInfo&& createInfo)
+VkPipeline VulkanDevice::createGraphicsPipeline(const PipelineCreateInfo& createInfo)
 {
     // (temp) Shader Modules ----------------
     VkShaderModule vertSM;

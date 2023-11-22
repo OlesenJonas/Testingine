@@ -24,6 +24,8 @@ namespace Material
         // --
 
         // fragment output
+        // When not creating this struct "inside a parameter" (which guarantees lifetime until function exits)
+        // the data this Span points to needs to be declared outside of this struct to ensure its lifetime!!
         Span<const Texture::Format> colorFormats;
         Texture::Format depthFormat = Texture::Format::UNDEFINED;
         Texture::Format stencilFormat = Texture::Format::UNDEFINED;

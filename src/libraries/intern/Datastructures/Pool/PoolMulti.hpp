@@ -88,7 +88,10 @@ class MultiPoolImpl
 
     template <class... ArgTypes>
     Handle<Ts...> insert(ArgTypes&&... args)
-        requires(std::is_constructible_v<Ts, ArgTypes> && ...)
+        requires(
+            (sizeof...(ArgTypes) == 0 && (std::is_default_constructible_v<Ts> && ...)) ||
+            (sizeof...(ArgTypes) > 0 && (std::is_constructible_v<Ts, ArgTypes> && ...)) //
+        )
     {
         if(!inUseMask.anyBitClear())
         {
@@ -102,16 +105,32 @@ class MultiPoolImpl
 
         uint32_t index = inUseMask.getFirstBitClear();
 
-        int i = 0;
-        (
-            [&]()
-            {
-                Ts* t_storage = static_cast<Ts*>(storage[i]);
-                Ts* newT = new(&t_storage[index]) Ts(std::forward<ArgTypes>(args)); // placement new
-                i++;
-            }(),
-            ... //
-        );
+        if constexpr(sizeof...(ArgTypes) == 0)
+        {
+            int i = 0;
+            (
+                [&]()
+                {
+                    Ts* t_storage = static_cast<Ts*>(storage[i]);
+                    Ts* newT = new(&t_storage[index]) Ts; // placement new
+                    i++;
+                }(),
+                ... //
+            );
+        }
+        else
+        {
+            int i = 0;
+            (
+                [&]()
+                {
+                    Ts* t_storage = static_cast<Ts*>(storage[i]);
+                    Ts* newT = new(&t_storage[index]) Ts(std::forward<ArgTypes>(args)); // placement new
+                    i++;
+                }(),
+                ... //
+            );
+        }
 
         inUseMask.setBit(index);
 

@@ -7,6 +7,7 @@
 #include <Engine/Graphics/Material/Material.hpp>
 #include <Engine/Misc/PathHelpers.hpp>
 #include <TinyOBJ/tiny_obj_loader.h>
+#include <future>
 #include <span>
 #include <tracy/TracyC.h>
 #include <vulkan/vulkan_core.h>
@@ -414,6 +415,121 @@ Material::Handle ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
     return newMaterialHandle;
 }
 
+std::vector<Material::Handle> ResourceManager::createMaterials(Span<const Material::CreateInfo> createInfos)
+{
+    std::vector<Material::Handle> ret;
+    ret.resize(createInfos.size());
+    for(int i = 0; i < createInfos.size(); i++)
+    {
+        // creating handles isnt thread safe so needs to happen first
+        ret[i] = materialPool.insert();
+    }
+    std::vector<std::string> debugNames;
+    debugNames.resize(createInfos.size());
+
+    std::ranges::iota_view indices((size_t)0, createInfos.size());
+    std::for_each(
+        std::execution::par,
+        indices.begin(),
+        indices.end(),
+        [&createInfos, &ret, &debugNames, this](size_t i)
+        {
+            const auto& createInfo = createInfos[i];
+            std::string_view fileView{createInfo.fragmentShader.sourcePath};
+            if(createInfo.debugName.empty())
+            {
+                debugNames[i] = PathHelpers::fileName(fileView);
+            }
+            else
+            {
+                debugNames[i] = createInfo.debugName;
+            }
+
+            // todo: handle naming collisions
+            auto iterator = nameToMaterialLUT.find(createInfo.debugName);
+            assert(iterator == nameToMaterialLUT.end());
+
+            std::future<std::vector<uint32_t>> vertexBinaryFuture = std::async( //
+                [&createInfo]()
+                {
+                    return compileHLSL(createInfo.vertexShader.sourcePath, Shaders::Stage::Vertex);
+                } //
+            );
+            std::vector<uint32_t> fragmentBinary =
+                compileHLSL(createInfo.fragmentShader.sourcePath, Shaders::Stage::Fragment);
+            std::vector<uint32_t> vertexBinary = vertexBinaryFuture.get();
+
+            // Parse Shader Interface -------------
+
+            Shaders::Reflection::Module vertModule{vertexBinary};
+            Shaders::Reflection::Module fragModule{fragmentBinary};
+
+            auto [parametersMap, parametersBufferSize] = vertModule.parseMaterialParams();
+            if(parametersBufferSize == 0)
+                CTie(parametersMap, parametersBufferSize) = fragModule.parseMaterialParams();
+
+            auto [instanceParametersMap, instanceParametersBufferSize] = vertModule.parseMaterialInstanceParams();
+            if(instanceParametersBufferSize == 0)
+                CTie(instanceParametersMap, instanceParametersBufferSize) =
+                    fragModule.parseMaterialInstanceParams();
+
+            VkPipeline pipeline = VulkanDevice::impl()->createGraphicsPipeline(VulkanDevice::PipelineCreateInfo{
+                .debugName = createInfo.debugName,
+                .vertexSpirv = vertexBinary,
+                .fragmentSpirv = fragmentBinary,
+                .colorFormats = createInfo.colorFormats,
+                .depthFormat = createInfo.depthFormat,
+                .stencilFormat = createInfo.stencilFormat,
+            });
+            Material::ParameterMap parameterMap{
+                .bufferSize = parametersBufferSize, .map = std::move(parametersMap)};
+            Material::InstanceParameterMap instanceParameterMap{
+                .bufferSize = instanceParametersBufferSize, .map = instanceParametersMap};
+            Material::ParameterBuffer paramBuffer{
+                .size = static_cast<uint32_t>(parametersBufferSize),
+                .cpuBuffer = new uint8_t[parametersBufferSize],
+                .deviceBuffer = parametersBufferSize == 0
+                                    ? Buffer::Handle::Null()
+                                    : createBuffer(Buffer::CreateInfo{
+                                          .debugName = (std::string{createInfo.debugName} + "ParamsGPU"),
+                                          .size = parametersBufferSize,
+                                          .memoryType = Buffer::MemoryType::GPU,
+                                          .allStates = ResourceState::UniformBuffer | ResourceState::TransferDst,
+                                          .initialState = ResourceState::TransferDst,
+                                      }),
+            };
+            if(parametersBufferSize > 0)
+            {
+                memset(paramBuffer.cpuBuffer, 0, parametersBufferSize);
+            }
+
+            *get<std::string>(ret[i]) = debugNames[i];
+            *get<VkPipeline>(ret[i]) = pipeline;
+            *get<Material::ParameterMap>(ret[i]) = std::move(parameterMap);
+            *get<Material::InstanceParameterMap>(ret[i]) = std::move(instanceParameterMap);
+            *get<Material::ParameterBuffer>(ret[i]) = std::move(paramBuffer);
+            *get<bool>(ret[i]) = parametersBufferSize > 0; // dirty
+            *get<Material::ReloadInfo>(ret[i]) = Material::ReloadInfo{
+                .vertexSource{createInfo.vertexShader.sourcePath},
+                .fragmentSource{createInfo.fragmentShader.sourcePath},
+                .colorFormats{createInfo.colorFormats.begin(), createInfo.colorFormats.end()},
+                .depthFormat = createInfo.depthFormat,
+                .stencilFormat = createInfo.stencilFormat,
+            };
+            // TODO: if compilation wasnt succesful, need to free pre-emptively created(inserted) handle and set
+            //       vector element to null-handle
+        });
+
+    for(int i = 0; i < ret.size(); i++)
+    {
+        if(ret[i].isNonNull())
+            // inserting into map isnt thread safe so needs to happen sequentially
+            nameToMaterialLUT.insert({debugNames[i], ret[i]});
+    }
+
+    return ret;
+}
+
 void ResourceManager::destroy(Material::Handle handle)
 {
     if(!materialPool.isHandleValid(handle))
@@ -596,9 +712,7 @@ ResourceManager::createComputeShader(Shaders::StageCreateInfo&& createInfo, std:
 
     VulkanDevice& gfxDevice = *VulkanDevice::impl();
 
-    TracyCZoneN(zoneCompileHLSL, "Compile HLSL", true);
     std::vector<uint32_t> shaderBinary = compileHLSL(createInfo.sourcePath, Shaders::Stage::Compute);
-    TracyCZoneEnd(zoneCompileHLSL);
 
     // Parse Shader Interface -------------
 
@@ -652,9 +766,7 @@ ResourceManager::createComputeShaders(const Span<const Shaders::ComputeCreateInf
             ComputeShader* computeShader = get(newComputeShaderHandle);
             VulkanDevice& gfxDevice = *VulkanDevice::impl();
 
-            TracyCZoneN(zoneCompileHLSL, "Compile HLSL", true);
             std::vector<uint32_t> shaderBinary = compileHLSL(createInfo.sourcePath, Shaders::Stage::Compute);
-            TracyCZoneEnd(zoneCompileHLSL);
 
             // Parse Shader Interface -------------
 

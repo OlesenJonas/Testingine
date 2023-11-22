@@ -1,5 +1,6 @@
 #pragma once
 
+// #include "ArrayHelpers.hpp"
 #include <array>
 #include <cassert>
 #include <cstdint>
@@ -49,6 +50,9 @@ class Span
     template <std::size_t N>
     Span(std::array<T, N>& vec) : _data(vec.data()), _length(vec.size()){};
 
+    template <std::size_t N>
+    Span(T (&cArray)[N]) : _data(&cArray[0]), _length(N){};
+
     // Member functions ----------------------------
 
     // inline?
@@ -64,47 +68,20 @@ class Span
         return _data[index]; // NOLINT
     }
 
-    [[nodiscard]] size_t size() const
-    {
-        return _length;
-    }
+    [[nodiscard]] size_t size() const { return _length; }
 
-    [[nodiscard]] bool empty() const
-    {
-        return _length == 0;
-    }
+    [[nodiscard]] bool empty() const { return _length == 0; }
 
-    T* data()
-    {
-        return _data;
-    }
+    T* data() { return _data; }
 
-    T* data() const
-    {
-        return _data;
-    }
+    T* data() const { return _data; }
 
-    bool operator==(const Span& rhs)
-    {
-        return _data == rhs._data && _length == rhs._length;
-    }
+    bool operator==(const Span& rhs) { return _data == rhs._data && _length == rhs._length; }
 
-    T* begin()
-    {
-        return &_data[0];
-    }
-    const T* begin() const
-    {
-        return &_data[0];
-    }
-    T* end()
-    {
-        return &_data[_length];
-    }
-    const T* end() const
-    {
-        return &_data[_length];
-    }
+    T* begin() { return &_data[0]; }
+    const T* begin() const { return &_data[0]; }
+    T* end() { return &_data[_length]; }
+    const T* end() const { return &_data[_length]; }
 
   private:
     T* _data = nullptr;

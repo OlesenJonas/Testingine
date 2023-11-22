@@ -354,48 +354,52 @@ void Editor::createDefaultMeshes()
 void Editor::createDefaultMaterialAndInstances()
 {
     ZoneScopedN("Create Materials and Instances");
-    writeToSwapchainMat = resourceManager.createMaterial({
-        .debugName = "writeToSwapchain",
-        .vertexShader = {.sourcePath = SHADERS_PATH "/WriteToSwapchain/WriteToSwapchain.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/WriteToSwapchain/WriteToSwapchain.frag"},
-        .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
-    });
 
-    auto equiSkyboxMat = resourceManager.createMaterial({
-        .debugName = "equiSkyboxMat",
-        .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
-        .colorFormats = {offscreenRTFormat},
-        .depthFormat = depthFormat,
+    std::vector<Material::Handle> materials = resourceManager.createMaterials({
+        {
+            .debugName = "writeToSwapchain",
+            .vertexShader = {.sourcePath = SHADERS_PATH "/WriteToSwapchain/WriteToSwapchain.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/WriteToSwapchain/WriteToSwapchain.frag"},
+            .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
+        },
+        {
+            .debugName = "equiSkyboxMat",
+            .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
+            .colorFormats = {offscreenRTFormat},
+            .depthFormat = depthFormat,
+        },
+        {
+            .debugName = "cubeSkyboxMat",
+            .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
+            .colorFormats = {offscreenRTFormat},
+            .depthFormat = depthFormat,
+        },
+        {
+            .debugName = "PBRBasic",
+            .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
+            .colorFormats = {offscreenRTFormat},
+            .depthFormat = depthFormat,
+        },
+        {
+            .debugName = "texturedUnlit",
+            .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
+            .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
+            .colorFormats = {offscreenRTFormat},
+            .depthFormat = depthFormat,
+        },
     });
+    writeToSwapchainMat = materials[0];
+    Material::Handle equiSkyboxMat = materials[1];
+    Material::Handle cubeSkyboxMat = materials[2];
+    Material::Handle pbrBasicMat = materials[3];
+    Material::Handle unlitTexturedMat = materials[4];
+
     equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
-
-    auto cubeSkyboxMat = resourceManager.createMaterial({
-        .debugName = "cubeSkyboxMat",
-        .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
-        .colorFormats = {offscreenRTFormat},
-        .depthFormat = depthFormat,
-    });
     cubeSkyboxMatInst = resourceManager.createMaterialInstance(cubeSkyboxMat);
-
-    resourceManager.createMaterial({
-        .debugName = "PBRBasic",
-        .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
-        .colorFormats = {offscreenRTFormat},
-        .depthFormat = depthFormat,
-    });
-    assert(resourceManager.get<std::string>(resourceManager.getMaterial("PBRBasic")) != nullptr);
-
-    auto unlitTexturedMaterial = resourceManager.createMaterial({
-        .debugName = "texturedUnlit",
-        .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
-        .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
-        .colorFormats = {offscreenRTFormat},
-        .depthFormat = depthFormat,
-    });
-    unlitMatInst = resourceManager.createMaterialInstance(unlitTexturedMaterial);
+    unlitMatInst = resourceManager.createMaterialInstance(unlitTexturedMat);
 }
 
 void Editor::createDefaultComputeShaders()
