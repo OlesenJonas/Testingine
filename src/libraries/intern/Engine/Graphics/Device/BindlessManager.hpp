@@ -47,10 +47,10 @@ class BindlessManager
 
     // todo: check against limit from physicalDeviceProperties.limits
     static constexpr uint32_t samplerLimit = 32;
-    static constexpr uint32_t sampledImagesLimit = 128;
-    static constexpr uint32_t storageImagesLimit = 128;
-    static constexpr uint32_t uniformBuffersLimit = 128;
-    static constexpr uint32_t storageBuffersLimit = 1024;
+    static constexpr uint32_t sampledImagesLimit = 1024;
+    static constexpr uint32_t storageImagesLimit = 1024;
+    static constexpr uint32_t uniformBuffersLimit = 1024;
+    static constexpr uint32_t storageBuffersLimit = 4096;
 
   private:
     struct BindlessSet

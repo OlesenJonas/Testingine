@@ -197,11 +197,13 @@ float4 main(VSOutput input) : SV_TARGET
 
     float3 ambient = (kD * diffuse + specular) * occlusion;
 
-    Lout += ambient;
+    Lout += 0.5* ambient;
 
     // ---------------------
 
     float3 color = Lout;
+    // float3 color = 0.0001*clamp(Lout,0,1);
+    // color += metal;
     
     return float4(color, 1.0);
 }

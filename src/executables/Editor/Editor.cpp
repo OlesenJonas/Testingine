@@ -46,7 +46,7 @@ Editor::Editor()
 
     // TODO: execute this while GPU is already doing work, instead of waiting for this *then* starting GPU
     // https://developer.nvidia.com/ue4-sun-temple (exported from blender as gltf)
-    Scene::load("C:/Users/jonas/Documents/Models/SunTemple_custom/Processed/SunTemple.gltf", &ecs, scene.root);
+    Scene::load("C:/Users/jonas/Documents/Models/Sponza/out/Sponza.gltf", &ecs, scene.root);
 
     // ------------------------ Build MeshData & InstanceInfo buffer ------------------------------------------
     TracyCZoneN(zoneGPUScene, "Build GPU Scene", true);
@@ -557,7 +557,8 @@ Editor::generateSkyboxTextures(uint32_t hdriCubeRes, uint32_t irradianceRes, uin
 
     TracyCZoneN(zoneSkyHDRI, "Load Sky HDRI", true);
     defaultHDRI = resourceManager.createTexture(Texture::LoadInfo{
-        .path = ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr",
+        // .path = ASSETS_PATH "/HDRIs/kloppenheim_04_2k.hdr",
+        .path = "C:/Users/jonas/Documents/Models/Bistro/san_giuseppe_bridge_4k.hdr",
         .fileDataIsLinear = true,
         .allStates = ResourceState::SampleSource,
         .initialState = ResourceState::SampleSource,
