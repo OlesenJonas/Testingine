@@ -1,0 +1,81 @@
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
+/*
+    Not sure if semantic names are needed when compiling only to spirv
+*/
+struct VertexOut
+{
+    float4 posOut : SV_POSITION;
+    [[vk::location(0)]]	float3 vPositionWS : POSITIONT;
+    [[vk::location(1)]] float3 vNormalWS : NORMAL0;
+    [[vk::location(2)]] float3 vColor : COLOR0;  
+    [[vk::location(3)]] float2 vTexCoord0 : TEXCOORD0;
+    [[vk::location(4)]] float2 vTexCoord1 : TEXCOORD1;
+    [[vk::location(5)]] float2 vTexCoord2 : TEXCOORD2;
+    [[vk::location(6)]] int instanceIndex : BASE_INSTANCE;
+};
+
+[NumThreads(128, 1, 1)]
+[OutputTopology("triangle")]
+void main(
+    uint threadID : SV_GroupThreadID,
+    uint groupID : SV_GroupID,
+    out indices uint3 tris[124],
+    out vertices VertexOut verts[64]
+    // out primitives PrimitiveAttributes prims[MAX_OUTPUT_PRIMITIVES]
+)
+{
+    const InstanceInfo instanceInfo = getInstanceInfo(pushConstants.indexInInstanceBuffer);
+    const MeshData meshData = getMeshData(instanceInfo);
+
+    #define vertexPositions StrucBuffFromHandle(float3, meshData.positionBuffer)
+    const float3 vertPos = vertexPositions[0];
+    #define vertexAttributes ByteBuffFromHandle(meshData.attributesBuffer)
+
+    MeshletDescriptor m = StrucBuffFromHandle(MeshletDescriptor, meshData.meshletDescriptors)[groupID];
+    #define meshletVertexIndices StrucBuffFromHandle(uint, meshData.meshletVertexIndices)
+    #define meshletPrimitiveIndices StrucBuffFromHandle(uint, meshData.meshletPrimitiveIndices)
+
+    SetMeshOutputCounts(m.vertexCount, m.primCount);
+
+    if (threadID < m.primCount)
+    {
+        uint3 primIndices = 0;
+        primIndices[0] = meshletPrimitiveIndices[m.primBegin + threadID*3 + 0];
+        primIndices[1] = meshletPrimitiveIndices[m.primBegin + threadID*3 + 1];
+        primIndices[2] = meshletPrimitiveIndices[m.primBegin + threadID*3 + 2];
+        tris[threadID] = primIndices;
+    }
+
+    ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
+
+    if (threadID < m.vertexCount)
+    {
+        uint vertexIndex = meshletVertexIndices[m.vertexBegin + threadID];
+
+        const float4x4 projViewMatrix = renderPassData.projView;
+        // const float4x4 projViewMatrix = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle].projView;
+        //todo: test mul-ing here already, like in GLSL version
+        // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
+
+        VertexOut vsOut = (VertexOut)0;
+        vsOut.instanceIndex = pushConstants.indexInInstanceBuffer;
+
+        const float3 vertPos = vertexPositions[vertexIndex];
+        float4 worldPos = mul(instanceInfo.transform, float4(vertPos,1.0));
+
+        vsOut.vPositionWS = worldPos.xyz;
+        vsOut.posOut = mul(projViewMatrix, worldPos);
+
+        vsOut.vColor = vertexAttributes.Load<float3>(vertexIndex * meshData.attribStride() + meshData.colorOffset());
+        vsOut.vTexCoord0 = vertexAttributes.Load<float2>(vertexIndex * meshData.attribStride() + meshData.uvOffset(0));
+        vsOut.vTexCoord1 = vertexAttributes.Load<float2>(vertexIndex * meshData.attribStride() + meshData.uvOffset(1));
+        vsOut.vTexCoord2 = vertexAttributes.Load<float2>(vertexIndex * meshData.attribStride() + meshData.uvOffset(2));
+
+        const float3x3 invTranspModelMatrix3 = (float3x3)(instanceInfo.invTranspTransform);
+        const float3 vNormal = vertexAttributes.Load<float3>(vertexIndex * meshData.attribStride());
+        vsOut.vNormalWS = normalize(mul(invTranspModelMatrix3, vNormal));
+
+        verts[threadID] = vsOut;
+    }
+}
