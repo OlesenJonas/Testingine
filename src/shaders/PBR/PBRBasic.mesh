@@ -12,7 +12,7 @@ struct VertexOut
     [[vk::location(3)]] float2 vTexCoord0 : TEXCOORD0;
     [[vk::location(4)]] float2 vTexCoord1 : TEXCOORD1;
     [[vk::location(5)]] float2 vTexCoord2 : TEXCOORD2;
-    [[vk::location(6)]] int instanceIndex : BASE_INSTANCE;
+    [[vk::location(6)]] int2 instanceAndMeshletIndex : BASE_INSTANCE;
 };
 
 [NumThreads(128, 1, 1)]
@@ -59,7 +59,8 @@ void main(
         // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
 
         VertexOut vsOut = (VertexOut)0;
-        vsOut.instanceIndex = pushConstants.indexInInstanceBuffer;
+        vsOut.instanceAndMeshletIndex.x = pushConstants.indexInInstanceBuffer;
+        vsOut.instanceAndMeshletIndex.y = groupID;
 
         const float3 vertPos = vertexPositions[vertexIndex];
         float4 worldPos = mul(instanceInfo.transform, float4(vertPos,1.0));

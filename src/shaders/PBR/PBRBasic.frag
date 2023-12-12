@@ -51,12 +51,12 @@ struct VSOutput
     [[vk::location(3)]] float2 vTexCoord0 : TEXCOORD0;
     [[vk::location(4)]] float2 vTexCoord1 : TEXCOORD1;
     [[vk::location(5)]] float2 vTexCoord2 : TEXCOORD2;
-    [[vk::location(6)]] int baseInstance : BASE_INSTANCE;
+    [[vk::location(6)]] int2 instanceAndMeshletIndex : BASE_INSTANCE;
 };
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    const InstanceInfo instanceInfo = getInstanceInfo(input.baseInstance);
+    const InstanceInfo instanceInfo = getInstanceInfo(input.instanceAndMeshletIndex.x);
     const MeshData meshData = getMeshDataBuffer()[instanceInfo.meshDataIndex];
 
     ConstantBuffer<MaterialParameters> params = getMaterialParameters(instanceInfo);
@@ -203,7 +203,11 @@ float4 main(VSOutput input) : SV_TARGET
 
     float3 color = Lout;
     // float3 color = 0.0001*clamp(Lout,0,1);
-    // color += metal;
+    // color += float3(
+    //     (input.instanceAndMeshletIndex.y%13u +1)/13.0,
+    //     (input.instanceAndMeshletIndex.y%29u +1)/29.0,
+    //     (input.instanceAndMeshletIndex.y%43u +1)/43.0
+    // );
     
     return float4(color, 1.0);
 }
