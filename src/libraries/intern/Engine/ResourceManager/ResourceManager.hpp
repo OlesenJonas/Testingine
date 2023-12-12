@@ -46,6 +46,9 @@ class ResourceManager
 
     // --------- Mesh -----------------------------------
 
+    /*
+        TODO: Parameter to toggle running mesh optimizer
+    */
     Mesh::Handle createMesh(const char* file, std::string name = "");
     // indices can be {}, but then a trivial index list will still be used!
     Mesh::Handle createMesh(

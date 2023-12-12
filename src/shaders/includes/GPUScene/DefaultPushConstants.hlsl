@@ -11,6 +11,8 @@ struct DefaultPushConstants
     Handle< ConstantBuffer<RenderPassData> > renderPassData;
     // Buffer with information about all instances that are being rendered
     Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
+
+    uint indexInInstanceBuffer;
 };
 
 [[vk::push_constant]]

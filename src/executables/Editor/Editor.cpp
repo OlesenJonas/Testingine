@@ -45,8 +45,7 @@ Editor::Editor()
     gfxDevice.disableValidationErrorBreakpoint();
 
     // TODO: execute this while GPU is already doing work, instead of waiting for this *then* starting GPU
-    // https://developer.nvidia.com/ue4-sun-temple (exported from blender as gltf)
-    Scene::load("C:/Users/jonas/Documents/Models/Sponza/out/Sponza.gltf", &ecs, scene.root);
+    // Scene::load("C:/Users/jonas/Documents/Models/Sponza/out/Sponza.gltf", &ecs, scene.root);
 
     // ------------------------ Build MeshData & InstanceInfo buffer ------------------------------------------
     TracyCZoneN(zoneGPUScene, "Build GPU Scene", true);
@@ -71,9 +70,9 @@ Editor::Editor()
         Mesh::Handle mesh = *iter;
 
         // TODO: const correctness
-        Mesh::RenderData& renderData = *resourceManager.get<Mesh::RenderData>(mesh);
+        Mesh::RenderDataCPU& renderData = *resourceManager.get<Mesh::RenderDataCPU>(mesh);
 
-        if(renderData.indexCount == 0 || !renderData.positionBuffer.isNonNull())
+        if(renderData.meshletCount == 0 || !renderData.positionBuffer.isNonNull())
         {
             break;
         }
@@ -82,13 +81,17 @@ Editor::Editor()
         assert(renderData.gpuIndex == 0xFFFFFFFF);
         renderData.gpuIndex = freeIndex;
         gpuPtr[freeIndex] = GPUMeshData{
-            .indexCount = renderData.indexCount,
+            // .indexCount = renderData.indexCount,
+            .meshletCount = renderData.meshletCount,
             .additionalUVCount = renderData.additionalUVCount,
-            .indexBuffer = *rm.get<ResourceIndex>(renderData.indexBuffer),
+            // .indexBuffer = *rm.get<ResourceIndex>(renderData.indexBuffer),
             .positionBuffer = *rm.get<ResourceIndex>(renderData.positionBuffer),
             .attributeBuffer = *rm.get<ResourceIndex>(renderData.attributeBuffer),
+            .meshletVertexIndices = *rm.get<ResourceIndex>(renderData.meshletVertices),
+            .meshletPrimitiveIndices = *rm.get<ResourceIndex>(renderData.meshletPrimitiveIndices),
+            .meshletDescriptors = *rm.get<ResourceIndex>(renderData.meshletDescriptors),
         };
-        assert(resourceManager.get<Mesh::RenderData>(mesh)->gpuIndex != 0xFFFFFFFF);
+        assert(resourceManager.get<Mesh::RenderDataCPU>(mesh)->gpuIndex != 0xFFFFFFFF);
     }
     gfxDevice.copyBuffer(mainCmdBuffer, meshDataAllocBuffer, gpuMeshDataBuffer.buffer);
     gfxDevice.destroy(meshDataAllocBuffer);
@@ -238,20 +241,21 @@ void Editor::createDefaultAssets()
         meshRenderer->materialInstances[0] = cubeSkyboxMatInst;
     }
 
-    auto triangleObject = scene.createEntity();
-    {
-        auto* meshRenderer = triangleObject.addComponent<MeshRenderer>();
-        meshRenderer->subMeshes[0] = triangleMesh;
-        meshRenderer->materialInstances[0] = unlitMatInst;
-        auto* transform = triangleObject.getComponent<Transform>();
-        transform->position = glm::vec3{3.0f, 0.0f, 0.0f};
-        transform->calculateLocalTransformMatrix();
-        // dont like having to call this manually
-        transform->localToWorld = transform->localTransform;
+    // TODO: re-enable
+    //  auto triangleObject = scene.createEntity();
+    //  {
+    //      auto* meshRenderer = triangleObject.addComponent<MeshRenderer>();
+    //      meshRenderer->subMeshes[0] = triangleMesh;
+    //      meshRenderer->materialInstances[0] = unlitMatInst;
+    //      auto* transform = triangleObject.getComponent<Transform>();
+    //      transform->position = glm::vec3{3.0f, 0.0f, 0.0f};
+    //      transform->calculateLocalTransformMatrix();
+    //      // dont like having to call this manually
+    //      transform->localToWorld = transform->localTransform;
 
-        assert(meshRenderer->subMeshes[0].isNonNull());
-        assert(meshRenderer->materialInstances[0].isNonNull());
-    }
+    //     assert(meshRenderer->subMeshes[0].isNonNull());
+    //     assert(meshRenderer->materialInstances[0].isNonNull());
+    // }
 }
 
 void Editor::createDefaultSamplers()
@@ -361,44 +365,49 @@ void Editor::createDefaultMaterialAndInstances()
             .fragmentShader = {.sourcePath = SHADERS_PATH "/WriteToSwapchain/WriteToSwapchain.frag"},
             .colorFormats = {Texture::Format::B8_G8_R8_A8_SRGB},
         },
-        {
-            .debugName = "equiSkyboxMat",
-            .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
-            .colorFormats = {offscreenRTFormat},
-            .depthFormat = depthFormat,
-        },
+        // {
+        //     // TODO: change back to mesh!
+        //     .debugName = "equiSkyboxMat",
+        //     .meshShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.mesh"},
+        //     .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyEqui.frag"},
+        //     .colorFormats = {offscreenRTFormat},
+        //     .depthFormat = depthFormat,
+        // },
         {
             .debugName = "cubeSkyboxMat",
-            .vertexShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.vert"},
+            .meshShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSky.mesh"},
             .fragmentShader = {.sourcePath = SHADERS_PATH "/Skybox/hdrSkyCube.frag"},
             .colorFormats = {offscreenRTFormat},
             .depthFormat = depthFormat,
         },
-        {
-            .debugName = "PBRBasic",
-            .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
-            .colorFormats = {offscreenRTFormat},
-            .depthFormat = depthFormat,
-        },
-        {
-            .debugName = "texturedUnlit",
-            .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
-            .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
-            .colorFormats = {offscreenRTFormat},
-            .depthFormat = depthFormat,
-        },
+        // TODO: re-enable!
+        //  {
+        //      .debugName = "PBRBasic",
+        //      .vertexShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.vert"},
+        //      .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
+        //      .colorFormats = {offscreenRTFormat},
+        //      .depthFormat = depthFormat,
+        //  },
+        // {
+        //     .debugName = "texturedUnlit",
+        //     .vertexShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.vert"},
+        //     .fragmentShader = {.sourcePath = SHADERS_PATH "/Unlit/TexturedUnlit.frag"},
+        //     .colorFormats = {offscreenRTFormat},
+        //     .depthFormat = depthFormat,
+        // },
     });
+    Material::Handle cubeSkyboxMat = materials[1];
     writeToSwapchainMat = materials[0];
-    Material::Handle equiSkyboxMat = materials[1];
-    Material::Handle cubeSkyboxMat = materials[2];
-    Material::Handle pbrBasicMat = materials[3];
-    Material::Handle unlitTexturedMat = materials[4];
+    // TODO: re-enable!
+    // Material::Handle equiSkyboxMat = materials[1];
+    // Material::Handle cubeSkyboxMat = materials[2];
+    // Material::Handle pbrBasicMat = materials[3];
+    // Material::Handle unlitTexturedMat = materials[4];
 
-    equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
+    // equiSkyboxMatInst = resourceManager.createMaterialInstance(equiSkyboxMat);
     cubeSkyboxMatInst = resourceManager.createMaterialInstance(cubeSkyboxMat);
-    unlitMatInst = resourceManager.createMaterialInstance(unlitTexturedMat);
+    // TODO: re-enable
+    //  unlitMatInst = resourceManager.createMaterialInstance(unlitTexturedMat);
 }
 
 void Editor::createDefaultComputeShaders()
@@ -843,20 +852,20 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
     Mesh::Handle lastMesh = Mesh::Handle::Invalid();
     Material::Handle lastMaterial = Material::Handle::Invalid();
     MaterialInstance::Handle lastMaterialInstance = MaterialInstance::Handle::Invalid();
-    uint32_t indexCount = 0;
+    uint32_t meshletCount = 0;
 
     ecs.forEach<MeshRenderer>(
         [&](MeshRenderer* meshRenderer)
         {
-            for(int i = 0; i < Mesh::MAX_SUBMESHES; i++)
+            for(int subMeshIndx = 0; subMeshIndx < Mesh::MAX_SUBMESHES; subMeshIndx++)
             {
-                Mesh::Handle objectMesh = meshRenderer->subMeshes[i];
+                Mesh::Handle objectMesh = meshRenderer->subMeshes[subMeshIndx];
                 if(!objectMesh.isNonNull())
                 {
                     break;
                 }
 
-                MaterialInstance::Handle objectMaterialInstance = meshRenderer->materialInstances[i];
+                MaterialInstance::Handle objectMaterialInstance = meshRenderer->materialInstances[subMeshIndx];
 
                 if(objectMaterialInstance != lastMaterialInstance)
                 {
@@ -871,12 +880,16 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
 
                 if(objectMesh != lastMesh)
                 {
-                    const Mesh::RenderData& meshData = *resourceManager.get<Mesh::RenderData>(objectMesh);
-                    indexCount = meshData.indexCount;
+                    const Mesh::RenderDataCPU& meshData = *resourceManager.get<Mesh::RenderDataCPU>(objectMesh);
+                    meshletCount = meshData.meshletCount;
                     lastMesh = objectMesh;
                 }
 
-                gfxDevice.draw(offscreenCmdBuffer, indexCount, 1, 0, meshRenderer->instanceBufferIndices[i]);
+                // gfxDevice.draw(offscreenCmdBuffer, indexCount, 1, 0,
+                // meshRenderer->instanceBufferIndices[subMeshIndx]);
+                pushConstants.indexInInstanceBuffer = meshRenderer->instanceBufferIndices[subMeshIndx];
+                gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(GraphicsPushConstants), &pushConstants);
+                gfxDevice.drawMeshlets(offscreenCmdBuffer, meshletCount);
             }
         });
 

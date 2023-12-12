@@ -4,34 +4,74 @@
 #include "Structs.hlsl"
 #include "BindlessDeclarations.hlsl"
 
-// currently 0th buffer is hardcoded (c++ side) to be the render item buffer
-StructuredBuffer<MeshData> getMeshDataBuffer()
-{
-    return g_StructuredBuffer_MeshData[0];
-}
 
-MeshData getMeshData(InstanceInfo instanceInfo)
-{
-    return getMeshDataBuffer()[instanceInfo.meshDataIndex];
-}
+#if __SHADER_TARGET_STAGE != __SHADER_STAGE_MESH && !defined EditorLinter
 
-#ifndef NO_DEFAULT_PUSH_CONSTANTS
+    // currently 0th buffer is hardcoded (c++ side) to be the render item buffer
+    StructuredBuffer<MeshData> getMeshDataBuffer()
+    {
+        return g_StructuredBuffer_MeshData[0];
+    }
 
-#include "DefaultPushConstants.hlsl"
-StructuredBuffer<InstanceInfo> getInstanceBuffer()
-{
-    return pushConstants.instanceBuffer.get();
-}
+    MeshData getMeshData(InstanceInfo instanceInfo)
+    {
+        return getMeshDataBuffer()[instanceInfo.meshDataIndex];
+    }
 
-InstanceInfo getInstanceInfo(int instanceIndex)
-{
-    return getInstanceBuffer()[instanceIndex];
-}
+    #ifndef NO_DEFAULT_PUSH_CONSTANTS
 
-ConstantBuffer<RenderPassData> getRenderPassData()
-{
-    return pushConstants.renderPassData.get();
-}
+    #include "DefaultPushConstants.hlsl"
+    StructuredBuffer<InstanceInfo> getInstanceBuffer()
+    {
+        return pushConstants.instanceBuffer.get();
+    }
+
+    InstanceInfo getInstanceInfo(int instanceIndex)
+    {
+        return getInstanceBuffer()[instanceIndex];
+    }
+
+    ConstantBuffer<RenderPassData> getRenderPassData()
+    {
+        return pushConstants.renderPassData.get();
+    }
+    #endif
+
+#elif __SHADER_TARGET_STAGE == __SHADER_STAGE_MESH || defined EditorLinter //Shader stage is mesh
+    
+    //TODO: move into common file (MeshShaderAccessFix.hlsl)
+    // Storing/Passing/Returning buffers in mesh shaders is still broken..... 
+    //  https://github.com/microsoft/DirectXShaderCompiler/issues/6087
+    // So need ugly defines to access everything "in-line"
+    #define GetGlobalBuffer(BufferType, InnerType, BufferHandle) g_##BufferType##_##InnerType[BufferHandle.resourceHandle]
+    #define StrucBuffFromHandle(Type, Handle) g_StructuredBuffer_##Type[Handle.resourceHandle]
+    #define ByteBuffFromHandle(Handle) g_ByteAddressBuffer[Handle.resourceHandle]
+
+
+    // currently 0th buffer is hardcoded (c++ side) to be the render item buffer
+    #define getMeshDataBuffer() g_StructuredBuffer_MeshData[0]
+
+    MeshData getMeshData(InstanceInfo instanceInfo)
+    {
+        return getMeshDataBuffer()[instanceInfo.meshDataIndex];
+    }
+
+    #ifndef NO_DEFAULT_PUSH_CONSTANTS
+
+    #include "DefaultPushConstants.hlsl"
+    #define getInstanceBuffer() g_StructuredBuffer_InstanceInfo[pushConstants.instanceBuffer.resourceHandle]
+
+    InstanceInfo getInstanceInfo(int instanceIndex)
+    {
+        return getInstanceBuffer()[instanceIndex];
+    }
+    
+    ConstantBuffer<RenderPassData> getRenderPassData()
+    {
+        return pushConstants.renderPassData.get();
+    }
+    #endif
+
 #endif
 
 #endif

@@ -74,6 +74,8 @@ class VulkanDevice
     {
         std::string_view debugName;
         Span<uint32_t> vertexSpirv;
+        Span<uint32_t> taskSpirv;
+        Span<uint32_t> meshSpirv;
         Span<uint32_t> fragmentSpirv;
         //--
         // TODO: vertex inputs!
@@ -166,6 +168,8 @@ class VulkanDevice
         uint32_t vertexOffset,
         uint32_t firstInstance);
     void drawImGui(VkCommandBuffer cmd);
+    void
+    drawMeshlets(VkCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY = 1, uint32_t groupCountZ = 1);
 
     void presentSwapchain();
 
@@ -379,5 +383,8 @@ class VulkanDevice
     friend BindlessManager;
 };
 
+// TODO: volk?
 extern PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
 extern PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
+// Mesh Shading
+extern PFN_vkCmdDrawMeshTasksEXT vkCmdDrawMeshTasksEXTpfn;

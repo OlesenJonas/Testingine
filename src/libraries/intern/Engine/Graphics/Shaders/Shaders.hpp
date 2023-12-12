@@ -17,6 +17,8 @@ namespace Shaders
     enum class Stage
     {
         Vertex,
+        Task,
+        Mesh,
         Fragment,
         Compute,
     };

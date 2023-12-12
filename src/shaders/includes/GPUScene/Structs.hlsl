@@ -4,13 +4,27 @@
 #include "../VertexAttributes.hlsl"
 #include "../Bindless/Common.hlsl"
 
+struct MeshletDescriptor
+{
+    uint vertexBegin; // offset into vertexIndices
+    uint vertexCount; // number of vertices used
+    uint primBegin;   // offset into primitiveIndices
+    uint primCount;   // number of primitives (triangles) used
+};
+
 struct MeshData
 {
-    uint indexCount;
+    // uint indexCount;
     uint additionalUVCount;
-    Handle< StructuredBuffer<uint> > indexBuffer;
+    uint meshletCount;
+    // Handle< StructuredBuffer<uint> > indexBuffer;
     Handle< StructuredBuffer<float3> > positionBuffer;
     Handle< ByteAddressBuffer > attributesBuffer;
+    Handle< StructuredBuffer<uint> > meshletVertexIndices;
+    // Handle< ByteAddressBuffer > meshletPrimitiveIndices;
+    Handle< StructuredBuffer<uint> > meshletPrimitiveIndices;
+
+    Handle< StructuredBuffer<MeshletDescriptor> > meshletDescriptors;
 
     uint normalSize() { return sizeof(float3); }
     uint normalOffset() { return 0; }

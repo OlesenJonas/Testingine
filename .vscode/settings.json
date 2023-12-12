@@ -10,6 +10,7 @@
         "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
     },
     "hlsl.linter.defaultArgs": [
+        "-DEditorLinter",
         "-HV 2021",
         "-T",
         "lib_6_4",

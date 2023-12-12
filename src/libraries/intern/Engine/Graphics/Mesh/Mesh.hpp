@@ -56,17 +56,24 @@ struct Mesh
 
     static constexpr auto MAX_SUBMESHES = 6;
 
-    struct RenderData
+    struct RenderDataCPU
     {
         // This does not define GPU representation, change GPUMeshData instead!
-        uint32_t indexCount = 0;
+        // uint32_t indexCount = 0;
+        uint32_t meshletCount = 0;
         uint32_t additionalUVCount = 0;
-        Buffer::Handle indexBuffer = Buffer::Handle::Invalid();
+        // Buffer::Handle indexBuffer = Buffer::Handle::Invalid();
         Buffer::Handle positionBuffer = Buffer::Handle::Invalid();
         Buffer::Handle attributeBuffer = Buffer::Handle::Invalid();
+        Buffer::Handle meshletVertices = Buffer::Handle::Invalid();
+        Buffer::Handle meshletPrimitiveIndices = Buffer::Handle::Invalid();
+        Buffer::Handle meshletDescriptors = Buffer::Handle::Invalid();
 
         uint32_t gpuIndex = 0xFFFFFFFF;
     };
+
+    // for backwards compatibility
+    using RenderData [[deprecated("Use RenderDataCPU as name instead!")]] = RenderDataCPU;
 
     /*
         uint is GPU buffer index, TODO: wrap in type?

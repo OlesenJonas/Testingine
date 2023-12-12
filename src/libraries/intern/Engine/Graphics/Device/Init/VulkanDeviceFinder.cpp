@@ -5,14 +5,9 @@
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
-VulkanDeviceFinder::VulkanDeviceFinder(VkInstance instance) : instance(instance)
-{
-}
+VulkanDeviceFinder::VulkanDeviceFinder(VkInstance instance) : instance(instance) {}
 
-void VulkanDeviceFinder::setSurface(VkSurfaceKHR surface)
-{
-    this->surface = surface;
-}
+void VulkanDeviceFinder::setSurface(VkSurfaceKHR surface) { this->surface = surface; }
 void VulkanDeviceFinder::setValidationLayers(Span<const char* const> validationLayers)
 {
     enableValidationLayers = true;
@@ -135,9 +130,17 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
         .maintenance4 = VK_TRUE,
     };
 
+    VkPhysicalDeviceMeshShaderFeaturesEXT meshShadingFeatures = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+        .pNext = &maint4Features,
+        .taskShader = VK_TRUE,
+        .meshShader = VK_TRUE,
+        //...
+    };
+
     VkDeviceCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &maint4Features,
+        .pNext = &meshShadingFeatures,
     };
     createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
@@ -165,10 +168,7 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
     return device;
 }
 
-QueueFamilyIndices VulkanDeviceFinder::getQueueFamilyIndices()
-{
-    return queueFamilyIndices;
-}
+QueueFamilyIndices VulkanDeviceFinder::getQueueFamilyIndices() { return queueFamilyIndices; }
 bool VulkanDeviceFinder::isDeviceSuitable(VkPhysicalDevice device)
 {
     VkPhysicalDeviceProperties deviceProperties;
@@ -227,6 +227,8 @@ bool VulkanDeviceFinder::isDeviceSuitable(VkPhysicalDevice device)
 
         featuresSupported &= dynamicRenderingFeatures.dynamicRendering;
         featuresSupported &= shaderDrawParamFeatures.shaderDrawParameters;
+
+        // TODO: also check mesh shading support!
     }
 
     bool extensionsSupported = checkDeviceExtensionSupport(device);

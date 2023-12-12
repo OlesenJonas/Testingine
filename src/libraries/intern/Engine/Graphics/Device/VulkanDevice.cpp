@@ -22,6 +22,7 @@
 
 PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
 PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
+PFN_vkCmdDrawMeshTasksEXT vkCmdDrawMeshTasksEXTpfn;
 
 void VulkanDevice::init(GLFWwindow* window)
 {
@@ -98,6 +99,7 @@ void VulkanDevice::initVulkan()
 
     const std::vector<const char*> deviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_EXT_MESH_SHADER_EXTENSION_NAME,
     };
 
     VulkanDeviceFinder deviceFinder(instance);
@@ -117,6 +119,7 @@ void VulkanDevice::initVulkan()
         (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkCmdBeginDebugUtilsLabelEXT");
     pfnCmdEndDebugUtilsLabelEXT =
         (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkCmdEndDebugUtilsLabelEXT");
+    vkCmdDrawMeshTasksEXTpfn = (PFN_vkCmdDrawMeshTasksEXT)vkGetInstanceProcAddr(instance, "vkCmdDrawMeshTasksEXT");
 
     queueFamilyIndices = deviceFinder.getQueueFamilyIndices();
     graphicsAndComputeQueueFamily = queueFamilyIndices.graphicsAndComputeFamily.value();
@@ -989,55 +992,62 @@ void VulkanDevice::destroy(Handle<TextureView> handle)
 
 VkPipeline VulkanDevice::createGraphicsPipeline(const PipelineCreateInfo& createInfo)
 {
-    // (temp) Shader Modules ----------------
-    VkShaderModule vertSM;
-    VkShaderModuleCreateInfo vertSMCrInfo{
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .pNext = nullptr,
-        .codeSize = 4u * createInfo.vertexSpirv.size(), // size in bytes, but spirvBinary is uint32 vector!
-        .pCode = createInfo.vertexSpirv.data(),
+    constexpr size_t maxShaderStages = 3;
+    size_t stageIndex = 0;
+    VkShaderModule modules[maxShaderStages];
+    for(auto& module : modules)
+        module = VK_NULL_HANDLE;
+    VkPipelineShaderStageCreateInfo shaderStageCreateInfos[maxShaderStages];
+
+    Span<uint32_t> stageBinaries[4] = {
+        createInfo.vertexSpirv,
+        createInfo.taskSpirv,
+        createInfo.meshSpirv,
+        createInfo.fragmentSpirv,
     };
-    if(vkCreateShaderModule(device, &vertSMCrInfo, nullptr, &vertSM) != VK_SUCCESS)
+    constexpr VkShaderStageFlagBits stageFlagBits[4] = {
+        VK_SHADER_STAGE_VERTEX_BIT,
+        VK_SHADER_STAGE_TASK_BIT_EXT,
+        VK_SHADER_STAGE_MESH_BIT_EXT,
+        VK_SHADER_STAGE_FRAGMENT_BIT,
+    };
+    // TODO: force unroll?
+    for(int i = 0; i < ArraySize(stageBinaries); i++)
     {
-        assert(false);
+        if(stageBinaries[i].empty())
+        {
+            continue;
+        }
+        VkShaderModuleCreateInfo smCrInfo{
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .pNext = nullptr,
+            .codeSize = 4u * stageBinaries[i].size(), // size in bytes, but spirvBinary is uint32 vector!
+            .pCode = stageBinaries[i].data(),
+        };
+        if(vkCreateShaderModule(device, &smCrInfo, nullptr, &(modules[stageIndex])) != VK_SUCCESS)
+        {
+            assert(false);
+        }
+
+        shaderStageCreateInfos[stageIndex] = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = nullptr,
+
+            .stage = stageFlagBits[i],
+            .module = modules[stageIndex],
+            .pName = "main",
+        };
+
+        stageIndex++;
     }
 
-    VkShaderModule fragSM;
-    VkShaderModuleCreateInfo fragSMCrInfo{
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .pNext = nullptr,
-        .codeSize = 4u * createInfo.fragmentSpirv.size(), // size in bytes, but spirvBinary is uint32 vector!
-        .pCode = createInfo.fragmentSpirv.data(),
-    };
-    if(vkCreateShaderModule(device, &fragSMCrInfo, nullptr, &fragSM) != VK_SUCCESS)
-    {
-        assert(false);
-    }
+    const auto actualStageCount = stageIndex;
 
     // todo: check if pipeline with given parameters already exists, and just return that in case it does!
     //       Though im not sure if that should happen on this level, or as part of the application level
     //       Especially since it would require something like the spirv path to check equality
 
     // Creating the pipeline ---------------------------
-
-    const VkPipelineShaderStageCreateInfo shaderStageCrInfos[2] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .pNext = nullptr,
-
-            .stage = VK_SHADER_STAGE_VERTEX_BIT,
-            .module = vertSM,
-            .pName = "main",
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .pNext = nullptr,
-
-            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .module = fragSM,
-            .pName = "main",
-        },
-    };
 
     // TODO: parse/generate from CreateInfo
     // const VertexInputDescription vertexDescription = VertexInputDescription::getDefault();
@@ -1050,6 +1060,7 @@ VkPipeline VulkanDevice::createGraphicsPipeline(const PipelineCreateInfo& create
     //     .vertexAttributeDescriptionCount = (uint32_t)vertexDescription.attributes.size(),
     //     .pVertexAttributeDescriptions = vertexDescription.attributes.data(),
     // };
+    // Ignored if mesh shader stage is included
     const VkPipelineVertexInputStateCreateInfo vertexInputStateCrInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = nullptr,
@@ -1060,6 +1071,7 @@ VkPipeline VulkanDevice::createGraphicsPipeline(const PipelineCreateInfo& create
         .pVertexAttributeDescriptions = nullptr,
     };
 
+    // Ignored if mesh shader stage is included
     const VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCrInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .pNext = nullptr,
@@ -1167,8 +1179,8 @@ VkPipeline VulkanDevice::createGraphicsPipeline(const PipelineCreateInfo& create
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pNext = &pipelineRenderingCreateInfo,
 
-        .stageCount = 2,
-        .pStages = &shaderStageCrInfos[0],
+        .stageCount = static_cast<uint32_t>(actualStageCount),
+        .pStages = &shaderStageCreateInfos[0],
         .pVertexInputState = &vertexInputStateCrInfo,
         .pInputAssemblyState = &inputAssemblyStateCrInfo,
         .pViewportState = &viewportStateCrInfo,
@@ -1191,8 +1203,8 @@ VkPipeline VulkanDevice::createGraphicsPipeline(const PipelineCreateInfo& create
     }
     setDebugName(pipeline, createInfo.debugName.data());
 
-    vkDestroyShaderModule(device, vertSM, nullptr);
-    vkDestroyShaderModule(device, fragSM, nullptr);
+    for(auto& module : modules)
+        vkDestroyShaderModule(device, module, nullptr);
 
     return pipeline;
 }
@@ -1784,6 +1796,12 @@ void VulkanDevice::drawIndexed(
     uint32_t firstInstance)
 {
     vkCmdDrawIndexed(cmd, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+}
+
+void VulkanDevice::drawMeshlets(
+    VkCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+{
+    vkCmdDrawMeshTasksEXTpfn(cmd, groupCountX, groupCountY, groupCountZ);
 }
 
 void VulkanDevice::drawImGui(VkCommandBuffer cmd) { ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd); }

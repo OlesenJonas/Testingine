@@ -5,6 +5,8 @@ namespace Material
 {
     void setResource(Handle handle, std::string_view name, ResourceIndex index)
     {
+        if(!handle.isNonNull())
+            return; // TODO: warn
         const auto& parameterLUT = ResourceManager::impl()->get<Material::ParameterMap>(handle)->map;
         const auto& iterator = parameterLUT.find(name);
         if(iterator == parameterLUT.end())
@@ -26,6 +28,9 @@ namespace MaterialInstance
     // TODO: refactor to share code
     void setResource(Handle handle, std::string_view name, ResourceIndex index)
     {
+        if(!handle.isNonNull())
+            return; // TODO: warn
+
         Material::Handle parent = *ResourceManager::impl()->get<Material::Handle>(handle);
 
         const auto& parameterLUT = ResourceManager::impl()->get<Material::InstanceParameterMap>(parent)->map;

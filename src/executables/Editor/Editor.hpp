@@ -87,11 +87,15 @@ class Editor final : public Application
     // TODO: keep shader and c++ versions of structs synced
     struct GPUMeshData
     {
-        uint32_t indexCount;
-        uint32_t additionalUVCount;
-        ResourceIndex indexBuffer;
+        // uint32_t indexCount;
+        uint32_t additionalUVCount; // TODO: store full attribute stride directly?
+        uint32_t meshletCount;
+        // ResourceIndex indexBuffer;
         ResourceIndex positionBuffer;
         ResourceIndex attributeBuffer;
+        ResourceIndex meshletVertexIndices;
+        ResourceIndex meshletPrimitiveIndices;
+        ResourceIndex meshletDescriptors;
     };
     struct GPUMeshDataBuffer
     {
@@ -117,12 +121,15 @@ class Editor final : public Application
         uint32_t freeIndex = 0;
     } gpuInstanceInfoBuffer;
 
+    // TODO: from shader file
     struct GraphicsPushConstants
     {
         // Resolution, matrices (differs in eg. shadow and default pass)
         ResourceIndex renderInfoBuffer;
 
         ResourceIndex instanceBuffer;
+
+        uint32_t indexInInstanceBuffer;
     };
 
     struct PerFrameData

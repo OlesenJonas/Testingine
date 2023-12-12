@@ -10,10 +10,10 @@ struct VSOutput
 
 VSOutput main(VSInput input)
 {
-    const InstanceInfo instanceInfo = getInstanceInfo(input.baseInstance);
+    const InstanceInfo instanceInfo = getInstanceInfo(pushConstants.indexInInstanceBuffer);
     const MeshData meshData = getMeshData(instanceInfo);
 
-    const StructuredBuffer<uint> indexBuffer = meshData.indexBuffer.get();
+    const StructuredBuffer<uint> indexBuffer = meshData.meshletPrimitiveIndices.get(); //TODO: wrong to just use meshlet prims here
     const StructuredBuffer<float3> vertexPositions = meshData.positionBuffer.get();
     const ByteAddressBuffer vertexAttributes = meshData.attributesBuffer.get();
     

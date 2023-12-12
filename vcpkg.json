@@ -5,7 +5,8 @@
         "glfw3",
         "glm",
         "eastl",
-        "daw-json-link"
+        "daw-json-link",
+        "meshoptimizer"
     ],
     "builtin-baseline": "78784c0b0aa87ae63bce01c2c040ce1b3269ecd1"
 }

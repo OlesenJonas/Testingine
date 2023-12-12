@@ -8,6 +8,7 @@
 #include <Engine/Misc/PathHelpers.hpp>
 #include <TinyOBJ/tiny_obj_loader.h>
 #include <future>
+#include <meshoptimizer.h>
 #include <span>
 #include <tracy/TracyC.h>
 #include <vulkan/vulkan_core.h>
@@ -159,6 +160,38 @@ Mesh::Handle ResourceManager::createMesh(
         indices = trivialIndices;
     }
 
+    const size_t maxVerticesPerMeshlet = 64;
+    const size_t maxTrisPerMeshlet = 124;
+    const float coneWeight = 0.5f;
+    size_t maxMeshlets = meshopt_buildMeshletsBound(indices.size(), maxVerticesPerMeshlet, maxTrisPerMeshlet);
+    std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
+    std::vector<uint32_t> combinedMeshletVertexIndices(maxMeshlets * maxVerticesPerMeshlet);
+    std::vector<uint8_t> combinedMeshletPrimitiveIndices_u8(maxMeshlets * maxTrisPerMeshlet * 3);
+
+    size_t meshletCountActual = meshopt_buildMeshlets(
+        meshlets.data(),
+        combinedMeshletVertexIndices.data(),
+        combinedMeshletPrimitiveIndices_u8.data(),
+        indices.data(),
+        indices.size(),
+        &vertexPositions[0].x,
+        vertexPositions.size(),
+        sizeof(vertexPositions[0]),
+        maxVerticesPerMeshlet,
+        maxTrisPerMeshlet,
+        coneWeight);
+
+    // TODO: remove
+    std::vector<uint32_t> combinedMeshletPrimitiveIndices(combinedMeshletPrimitiveIndices_u8.size());
+    for(int i = 0; i < combinedMeshletPrimitiveIndices_u8.size(); i++)
+        combinedMeshletPrimitiveIndices[i] = combinedMeshletPrimitiveIndices_u8[i];
+
+    const meshopt_Meshlet& last = meshlets[meshletCountActual - 1];
+    combinedMeshletVertexIndices.resize(last.vertex_offset + last.vertex_count);
+    // TODO: understand why aligned to 4(?) (&~3)
+    combinedMeshletPrimitiveIndices.resize(last.triangle_offset + ((last.triangle_count * 3 + 3) & ~3));
+    meshlets.resize(meshletCountActual);
+
     Buffer::Handle positionBufferHandle = createBuffer(Buffer::CreateInfo{
         .debugName = (name + "_positionsBuffer"),
         .size = vertexPositions.size() * sizeof(glm::vec3),
@@ -177,6 +210,8 @@ Mesh::Handle ResourceManager::createMesh(
         .initialData = {(uint8_t*)vertexAttributes.data(), vertexAttributes.size()},
     });
 
+    /*
+    // Commit to mesh shading, no longer upload default vertex buffer
     Buffer::Handle indexBufferHandle = createBuffer(Buffer::CreateInfo{
         .debugName = (name + "_indexBuffer"),
         .size = indices.size() * sizeof(indices[0]),
@@ -185,15 +220,73 @@ Mesh::Handle ResourceManager::createMesh(
         .initialState = ResourceState::IndexBuffer,
         .initialData = {(uint8_t*)indices.data(), indices.size() * sizeof(indices[0])},
     });
+    */
+
+    Buffer::Handle meshletsVertexIndicesBuffer = createBuffer(Buffer::CreateInfo{
+        .debugName = (name + "_meshletVertexIndices"),
+        .size = combinedMeshletVertexIndices.size() * sizeof(combinedMeshletVertexIndices[0]),
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::Storage | ResourceState::TransferDst,
+        .initialState = ResourceState::Storage,
+        .initialData =
+            {(uint8_t*)combinedMeshletVertexIndices.data(),
+             combinedMeshletVertexIndices.size() * sizeof(combinedMeshletVertexIndices[0])},
+    });
+
+    Buffer::Handle meshletPrimitiveIndicesBuffer = createBuffer(Buffer::CreateInfo{
+        .debugName = (name + "_meshletPrimitiveIndices"),
+        .size = SizeInBytes(combinedMeshletPrimitiveIndices),
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::Storage | ResourceState::TransferDst,
+        .initialState = ResourceState::Storage,
+        .initialData =
+            {(uint8_t*)combinedMeshletPrimitiveIndices.data(), SizeInBytes(combinedMeshletPrimitiveIndices)},
+    });
+
+    // TODO: shader version of this
+    //       with functionality to assert that layout/size is equal
+    // TODO: also build culling info and store that!
+    struct MeshletDesc
+    {
+        uint32_t vertexBegin; // offset into vertexIndices
+        uint32_t vertexCount; // number of vertices used
+        uint32_t primBegin;   // offset into primitiveIndices
+        uint32_t primCount;   // number of primitives (triangles) used
+    };
+    std::vector<MeshletDesc> meshletDescriptors;
+    meshletDescriptors.resize(meshletCountActual);
+    for(int i = 0; i < meshletCountActual; i++)
+    {
+        const auto& meshletInfo = meshlets[i];
+        meshletDescriptors[i] = {
+            .vertexBegin = meshletInfo.vertex_offset,
+            .vertexCount = meshletInfo.vertex_count,
+            .primBegin = meshletInfo.triangle_offset,
+            .primCount = meshletInfo.triangle_count,
+        };
+    }
+
+    Buffer::Handle meshletDescsBuffer = createBuffer(Buffer::CreateInfo{
+        .debugName = (name + "_meshletDescriptors"),
+        .size = SizeInBytes(meshletDescriptors),
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::Storage | ResourceState::TransferDst,
+        .initialState = ResourceState::Storage,
+        .initialData = {(uint8_t*)meshletDescriptors.data(), SizeInBytes(meshletDescriptors)},
+    });
 
     Mesh::Handle newMeshHandle = meshPool.insert(
         name,
-        Mesh::RenderData{
-            .indexCount = uint32_t(indices.size()),
+        Mesh::RenderDataCPU{
+            // .indexCount = uint32_t(indices.size()),
+            .meshletCount = static_cast<uint32_t>(meshletCountActual),
             .additionalUVCount = vertexAttributesFormat.additionalUVCount,
-            .indexBuffer = indexBufferHandle,
+            // .indexBuffer = indexBufferHandle,
             .positionBuffer = positionBufferHandle,
             .attributeBuffer = attributesBufferHandle,
+            .meshletVertices = meshletsVertexIndicesBuffer,
+            .meshletPrimitiveIndices = meshletPrimitiveIndicesBuffer,
+            .meshletDescriptors = meshletDescsBuffer,
             .gpuIndex = 0xFFFFFFFF,
         });
 
@@ -212,10 +305,13 @@ void ResourceManager::destroy(Mesh::Handle handle)
     nameToMeshLUT.erase(iter);
 
     VulkanDevice* device = VulkanDevice::impl();
-    Mesh::RenderData& renderData = *get<Mesh::RenderData>(handle);
+    Mesh::RenderDataCPU& renderData = *get<Mesh::RenderDataCPU>(handle);
     device->destroy(renderData.positionBuffer);
     device->destroy(renderData.attributeBuffer);
-    device->destroy(renderData.indexBuffer);
+    // device->destroy(renderData.indexBuffer);
+    device->destroy(renderData.meshletVertices);
+    device->destroy(renderData.meshletPrimitiveIndices);
+    device->destroy(renderData.meshletDescriptors);
     meshPool.remove(handle);
 }
 
@@ -450,33 +546,62 @@ std::vector<Material::Handle> ResourceManager::createMaterials(Span<const Materi
             auto iterator = nameToMaterialLUT.find(createInfo.debugName);
             assert(iterator == nameToMaterialLUT.end());
 
-            std::future<std::vector<uint32_t>> vertexBinaryFuture = std::async( //
-                [&createInfo]()
-                {
-                    return compileHLSL(createInfo.vertexShader.sourcePath, Shaders::Stage::Vertex);
-                } //
-            );
+            bool usesMeshShader = !createInfo.meshShader.sourcePath.empty();
+            bool usesTaskShader = !createInfo.taskShader.sourcePath.empty();
+            std::future<std::vector<uint32_t>> vertexOrMeshFuture;
+            std::future<std::vector<uint32_t>> taskFuture;
+            assert(!taskFuture.valid());
+            if(!usesMeshShader)
+                vertexOrMeshFuture = std::async( //
+                    [&createInfo]()
+                    {
+                        return compileHLSL(createInfo.vertexShader.sourcePath, Shaders::Stage::Vertex);
+                    } //
+                );
+            else
+                vertexOrMeshFuture = std::async( //
+                    [&createInfo]()
+                    {
+                        return compileHLSL(createInfo.meshShader.sourcePath, Shaders::Stage::Mesh);
+                    } //
+                );
+            if(usesTaskShader)
+                taskFuture = std::async( //
+                    [&createInfo]()
+                    {
+                        return compileHLSL(createInfo.taskShader.sourcePath, Shaders::Stage::Task);
+                    } //
+                );
+
+            std::vector<uint32_t> vertexOrMeshBinary = vertexOrMeshFuture.get();
+            // TODO: any reason to also parse task shader?
+            std::vector<uint32_t> taskBinary;
+            if(usesTaskShader)
+                taskBinary = taskFuture.get();
             std::vector<uint32_t> fragmentBinary =
                 compileHLSL(createInfo.fragmentShader.sourcePath, Shaders::Stage::Fragment);
-            std::vector<uint32_t> vertexBinary = vertexBinaryFuture.get();
 
             // Parse Shader Interface -------------
 
-            Shaders::Reflection::Module vertModule{vertexBinary};
+            Shaders::Reflection::Module vertOrMeshModule{vertexOrMeshBinary};
             Shaders::Reflection::Module fragModule{fragmentBinary};
 
-            auto [parametersMap, parametersBufferSize] = vertModule.parseMaterialParams();
+            auto [parametersMap, parametersBufferSize] = vertOrMeshModule.parseMaterialParams();
             if(parametersBufferSize == 0)
                 CTie(parametersMap, parametersBufferSize) = fragModule.parseMaterialParams();
 
-            auto [instanceParametersMap, instanceParametersBufferSize] = vertModule.parseMaterialInstanceParams();
+            auto [instanceParametersMap, instanceParametersBufferSize] =
+                vertOrMeshModule.parseMaterialInstanceParams();
             if(instanceParametersBufferSize == 0)
                 CTie(instanceParametersMap, instanceParametersBufferSize) =
                     fragModule.parseMaterialInstanceParams();
 
+            Span<uint32_t> emptySpan;
             VkPipeline pipeline = VulkanDevice::impl()->createGraphicsPipeline(VulkanDevice::PipelineCreateInfo{
                 .debugName = createInfo.debugName,
-                .vertexSpirv = vertexBinary,
+                .vertexSpirv = usesMeshShader ? emptySpan : vertexOrMeshBinary,
+                .taskSpirv = usesTaskShader ? taskBinary : emptySpan,
+                .meshSpirv = usesMeshShader ? vertexOrMeshBinary : emptySpan,
                 .fragmentSpirv = fragmentBinary,
                 .colorFormats = createInfo.colorFormats,
                 .depthFormat = createInfo.depthFormat,

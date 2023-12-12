@@ -26,6 +26,7 @@ target_link_libraries(Engine PRIVATE daw::daw-json-link)
 target_link_libraries(Engine PRIVATE mikktspace)
 target_link_libraries(Engine PUBLIC DXCLatest)
 target_link_libraries(Engine PRIVATE fasttuple)
+target_link_libraries(Engine PRIVATE meshoptimizer::meshoptimizer)
 
 target_link_libraries(Engine PUBLIC TracyClient)
 target_compile_definitions(Engine PUBLIC TRACY_ENABLE)

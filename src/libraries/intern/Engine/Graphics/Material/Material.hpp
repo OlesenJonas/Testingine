@@ -18,6 +18,8 @@ namespace Material
     {
         std::string_view debugName;
         Shaders::StageCreateInfo vertexShader;
+        Shaders::StageCreateInfo taskShader;
+        Shaders::StageCreateInfo meshShader;
         Shaders::StageCreateInfo fragmentShader;
 
         // vertex input

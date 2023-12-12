@@ -1,4 +1,5 @@
 #include "HLSL.hpp"
+#include "Misc/Macros.hpp"
 
 // TODO: create a minimal header that defines just the windows types needed for DXC
 //       also: how to handle non-windows
@@ -77,6 +78,12 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
     {
     case Shaders::Stage::Vertex:
         targetProfile = L"vs_6_6";
+        break;
+    case Shaders::Stage::Task:
+        targetProfile = L"as_6_6"; // amplification
+        break;
+    case Shaders::Stage::Mesh:
+        targetProfile = L"ms_6_6";
         break;
     case Shaders::Stage::Fragment:
         targetProfile = L"ps_6_6";
@@ -161,6 +168,7 @@ std::vector<uint32_t> compileHLSL(std::string_view path, Shaders::Stage stage)
     if(FAILED(hrStatus))
     {
         wprintf(L"Compilation Failed\n");
+        BREAKPOINT;
         return {};
     }
 

@@ -4,6 +4,7 @@
 #include "Structs.hlsl"
 #include "../Bindless/Buffers.hlsl"
 
+ENABLE_BINDLESS_BUFFER_ACCESS(MeshletDescriptor)
 ENABLE_BINDLESS_BUFFER_ACCESS(MeshData);
 ENABLE_BINDLESS_BUFFER_ACCESS(InstanceInfo);
 
