@@ -15,13 +15,17 @@ struct VertexOut
     [[vk::location(6)]] int2 instanceAndMeshletIndex : BASE_INSTANCE;
 };
 
-[NumThreads(128, 1, 1)]
+#define MAX_VERTS 64
+#define MAX_TRIS 124
+#define GROUP_SIZE 32
+
+[NumThreads(GROUP_SIZE, 1, 1)]
 [OutputTopology("triangle")]
 void main(
     uint threadID : SV_GroupThreadID,
     uint groupID : SV_GroupID,
-    out indices uint3 tris[124],
-    out vertices VertexOut verts[64]
+    out vertices VertexOut verts[MAX_VERTS],
+    out indices uint3 tris[MAX_TRIS]
     // out primitives PrimitiveAttributes prims[MAX_OUTPUT_PRIMITIVES]
 )
 {
@@ -38,20 +42,26 @@ void main(
 
     SetMeshOutputCounts(m.vertexCount, m.primCount);
 
-    if (threadID < m.primCount)
+    const uint primLoops = (MAX_TRIS + GROUP_SIZE - 1) / GROUP_SIZE;
+    for (uint loop = 0; loop < primLoops; loop++)
     {
-        uint3 primIndices = 0;
-        primIndices[0] = meshletPrimitiveIndices[m.primBegin + threadID*3 + 0];
-        primIndices[1] = meshletPrimitiveIndices[m.primBegin + threadID*3 + 1];
-        primIndices[2] = meshletPrimitiveIndices[m.primBegin + threadID*3 + 2];
-        tris[threadID] = primIndices;
+        uint primIndex = threadID + loop*GROUP_SIZE;
+        //instead of branching clamp to max for better loads (see nvidia blogs, not tested if actually better)
+        primIndex = min(primIndex, m.primCount-1);
+        uint3 primIndices;
+        primIndices[0] = meshletPrimitiveIndices[m.primBegin + primIndex*3 + 0];
+        primIndices[1] = meshletPrimitiveIndices[m.primBegin + primIndex*3 + 1];
+        primIndices[2] = meshletPrimitiveIndices[m.primBegin + primIndex*3 + 2];
+        tris[primIndex] = primIndices;
     }
 
     ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
 
-    if (threadID < m.vertexCount)
+    const uint vertexLoops = (MAX_VERTS + GROUP_SIZE - 1) / GROUP_SIZE;
+    for (uint loop = 0; loop < vertexLoops; loop++)
     {
-        uint vertexIndex = meshletVertexIndices[m.vertexBegin + threadID];
+        uint threadOffset = threadID + loop*GROUP_SIZE;
+        uint vertexIndex = meshletVertexIndices[m.vertexBegin + threadOffset];
 
         const float4x4 projViewMatrix = renderPassData.projView;
         // const float4x4 projViewMatrix = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle].projView;
@@ -77,6 +87,6 @@ void main(
         const float3 vNormal = vertexAttributes.Load<float3>(vertexIndex * meshData.attribStride());
         vsOut.vNormalWS = normalize(mul(invTranspModelMatrix3, vNormal));
 
-        verts[threadID] = vsOut;
+        verts[threadOffset] = vsOut;
     }
 }
