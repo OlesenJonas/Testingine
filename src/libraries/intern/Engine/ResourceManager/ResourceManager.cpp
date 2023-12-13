@@ -182,9 +182,10 @@ Mesh::Handle ResourceManager::createMesh(
         coneWeight);
 
     // TODO: remove
-    std::vector<uint32_t> combinedMeshletPrimitiveIndices(combinedMeshletPrimitiveIndices_u8.size());
-    for(int i = 0; i < combinedMeshletPrimitiveIndices_u8.size(); i++)
-        combinedMeshletPrimitiveIndices[i] = combinedMeshletPrimitiveIndices_u8[i];
+    // std::vector<uint32_t> combinedMeshletPrimitiveIndices(combinedMeshletPrimitiveIndices_u8.size());
+    // for(int i = 0; i < combinedMeshletPrimitiveIndices_u8.size(); i++)
+    //     combinedMeshletPrimitiveIndices[i] = combinedMeshletPrimitiveIndices_u8[i];
+    auto& combinedMeshletPrimitiveIndices = combinedMeshletPrimitiveIndices_u8;
 
     const meshopt_Meshlet& last = meshlets[meshletCountActual - 1];
     combinedMeshletVertexIndices.resize(last.vertex_offset + last.vertex_count);

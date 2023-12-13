@@ -1,5 +1,6 @@
 #include "../includes/Bindless/Setup.hlsl"
 #include "../includes/GPUScene/Setup.hlsl"
+
 /*
     Not sure if semantic names are needed when compiling only to spirv
 */
@@ -48,11 +49,23 @@ void main(
         uint primIndex = threadID + loop*GROUP_SIZE;
         //instead of branching clamp to max for better loads (see nvidia blogs, not tested if actually better)
         primIndex = min(primIndex, m.primCount-1);
-        uint3 primIndices;
-        primIndices[0] = meshletPrimitiveIndices[m.primBegin + primIndex*3 + 0];
-        primIndices[1] = meshletPrimitiveIndices[m.primBegin + primIndex*3 + 1];
-        primIndices[2] = meshletPrimitiveIndices[m.primBegin + primIndex*3 + 2];
-        tris[primIndex] = primIndices;
+        
+        const uint primBaseU8Index = m.primBegin + primIndex*3u;
+        uint word = meshletPrimitiveIndices[primBaseU8Index >> 2u];
+        const uint bitStartInWord0 = (primBaseU8Index << 3u) & 0b11111u;
+        const uint bitsInWord0 = 32u - bitStartInWord0;
+        // move relevant bytes into lowest bits
+        word >>= bitStartInWord0;
+        // mask unused bits
+        word &= ~(0xFFFFFFFFu << bitsInWord0);
+        // move relevant bytes from next word into upper bits
+        word |= meshletPrimitiveIndices[(primBaseU8Index + 2) >> 2u] << bitsInWord0;
+
+        tris[primIndex] = uint3(
+            (word)          & 0xFFu,
+            (word >> 8u)    & 0xFFu,
+            (word >> 16u)   & 0xFFu
+        );
     }
 
     ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();

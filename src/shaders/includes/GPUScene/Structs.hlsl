@@ -22,7 +22,7 @@ struct MeshData
     Handle< ByteAddressBuffer > attributesBuffer;
     Handle< StructuredBuffer<uint> > meshletVertexIndices;
     // Handle< ByteAddressBuffer > meshletPrimitiveIndices;
-    Handle< StructuredBuffer<uint> > meshletPrimitiveIndices;
+    Handle< StructuredBuffer<uint> > meshletPrimitiveIndices; //in reality this is a uint8[]
 
     Handle< StructuredBuffer<MeshletDescriptor> > meshletDescriptors;
 

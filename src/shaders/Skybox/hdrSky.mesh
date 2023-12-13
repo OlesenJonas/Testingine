@@ -37,11 +37,22 @@ void main(
 
     if (threadID < m.primCount)
     {
-        uint3 primIndices = 0;
-        primIndices[0] = meshletPrimitiveIndices[m.primBegin + threadID*3 + 0];
-        primIndices[1] = meshletPrimitiveIndices[m.primBegin + threadID*3 + 1];
-        primIndices[2] = meshletPrimitiveIndices[m.primBegin + threadID*3 + 2];
-        tris[threadID] = primIndices;
+        const uint primBaseU8Index = m.primBegin + threadID*3u;
+        uint word = meshletPrimitiveIndices[primBaseU8Index >> 2u];
+        const uint bitStartInWord0 = (primBaseU8Index << 3u) & 0b11111u;
+        const uint bitsInWord0 = 32u - bitStartInWord0;
+        // move relevant bytes into lowest bits
+        word >>= bitStartInWord0;
+        // mask unused bits
+        word &= ~(0xFFFFFFFFu << bitsInWord0);
+        // move relevant bytes from next word into upper bits
+        word |= meshletPrimitiveIndices[(primBaseU8Index + 2) >> 2u] << bitsInWord0;
+
+        tris[threadID] = uint3(
+            (word)          & 0xFFu,
+            (word >> 8u)    & 0xFFu,
+            (word >> 16u)   & 0xFFu
+        );
     }
 
     if (threadID < m.vertexCount)
