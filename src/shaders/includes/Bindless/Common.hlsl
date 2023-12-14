@@ -18,7 +18,7 @@ struct Placeholder{};
 template<typename T>
 struct Handle
 {
-    uint resourceHandle;
+    uint resourceIndex;
 
     T get()
     {
@@ -27,14 +27,14 @@ struct Handle
 
     bool isNonNull() 
     {
-        return resourceHandle != 0xFFFFFFFF;
+        return resourceIndex != 0xFFFFFFFF;
     }
 };
 
 template<>
 struct Handle<Placeholder>
 {
-    uint resourceHandle;
+    uint resourceIndex;
 };
 
 #define DECLARE_RESOURCE_ARRAY_TEMPLATED(TYPE, TEMPLATE, SET, BINDING)      \
@@ -45,7 +45,7 @@ TYPE<TEMPLATE> g_##TYPE##_##TEMPLATE[];
 template <>                                                                 \
 TYPE<TEMPLATE> Handle< TYPE<TEMPLATE> >::get()                              \
 {                                                                           \
-    return g_##TYPE##_##TEMPLATE[resourceHandle];                           \
+    return g_##TYPE##_##TEMPLATE[resourceIndex];                           \
 }
 
 #endif 

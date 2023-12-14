@@ -13,10 +13,10 @@ ByteAddressBuffer g_ByteAddressBuffer[];
 template<>
 struct Handle< ByteAddressBuffer >
 {
-    uint resourceHandle;
+    uint resourceIndex;
     ByteAddressBuffer get()
     {
-        return g_ByteAddressBuffer[resourceHandle];
+        return g_ByteAddressBuffer[resourceIndex];
     }
 };
 

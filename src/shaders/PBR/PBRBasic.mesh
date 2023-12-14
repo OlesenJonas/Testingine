@@ -77,7 +77,7 @@ void main(
         uint vertexIndex = meshletVertexIndices[m.vertexBegin + threadOffset];
 
         const float4x4 projViewMatrix = renderPassData.projView;
-        // const float4x4 projViewMatrix = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceHandle].projView;
+        // const float4x4 projViewMatrix = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceIndex].projView;
         //todo: test mul-ing here already, like in GLSL version
         // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
 

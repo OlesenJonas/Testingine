@@ -43,9 +43,9 @@
     // Storing/Passing/Returning buffers in mesh shaders is still broken..... 
     //  https://github.com/microsoft/DirectXShaderCompiler/issues/6087
     // So need ugly defines to access everything "in-line"
-    #define GetGlobalBuffer(BufferType, InnerType, BufferHandle) g_##BufferType##_##InnerType[BufferHandle.resourceHandle]
-    #define StrucBuffFromHandle(Type, Handle) g_StructuredBuffer_##Type[Handle.resourceHandle]
-    #define ByteBuffFromHandle(Handle) g_ByteAddressBuffer[Handle.resourceHandle]
+    #define GetGlobalBuffer(BufferType, InnerType, BufferHandle) g_##BufferType##_##InnerType[BufferHandle.resourceIndex]
+    #define StrucBuffFromHandle(Type, Handle) g_StructuredBuffer_##Type[Handle.resourceIndex]
+    #define ByteBuffFromHandle(Handle) g_ByteAddressBuffer[Handle.resourceIndex]
 
 
     // currently 0th buffer is hardcoded (c++ side) to be the render item buffer
@@ -59,7 +59,7 @@
     #ifndef NO_DEFAULT_PUSH_CONSTANTS
 
     #include "DefaultPushConstants.hlsl"
-    #define getInstanceBuffer() g_StructuredBuffer_InstanceInfo[pushConstants.instanceBuffer.resourceHandle]
+    #define getInstanceBuffer() g_StructuredBuffer_InstanceInfo[pushConstants.instanceBuffer.resourceIndex]
 
     InstanceInfo getInstanceInfo(int instanceIndex)
     {
