@@ -30,7 +30,7 @@ void main(
     #define vertexAttributes ByteBuffFromHandle(meshData.attributesBuffer)
 
     MeshletDescriptor m = StrucBuffFromHandle(MeshletDescriptor, meshData.meshletDescriptors)[groupID];
-    #define meshletVertexIndices StrucBuffFromHandle(uint, meshData.meshletVertexIndices)
+    #define meshletUniqueVertexIndices StrucBuffFromHandle(uint, meshData.meshletUniqueVertexIndices)
     #define meshletPrimitiveIndices StrucBuffFromHandle(uint, meshData.meshletPrimitiveIndices)
 
     SetMeshOutputCounts(m.vertexCount, m.primCount);
@@ -57,7 +57,7 @@ void main(
 
     if (threadID < m.vertexCount)
     {
-        uint vertexIndex = meshletVertexIndices[m.vertexBegin + threadID];
+        uint vertexIndex = meshletUniqueVertexIndices[m.vertexBegin + threadID];
 
         VertexOut vertex = (VertexOut)0;
         vertex.instanceIndex = pushConstants.indexInInstanceBuffer;

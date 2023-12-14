@@ -225,8 +225,8 @@ Mesh::Handle ResourceManager::createMesh(
     });
     */
 
-    Buffer::Handle meshletsVertexIndicesBuffer = createBuffer(Buffer::CreateInfo{
-        .debugName = (name + "_meshletVertexIndices"),
+    Buffer::Handle meshletsUniqueVertexIndicesBuffer = createBuffer(Buffer::CreateInfo{
+        .debugName = (name + "_meshletUniqueVertexIndices"),
         .size = combinedMeshletVertexIndices.size() * sizeof(combinedMeshletVertexIndices[0]),
         .memoryType = Buffer::MemoryType::GPU,
         .allStates = ResourceState::Storage | ResourceState::TransferDst,
@@ -277,7 +277,7 @@ Mesh::Handle ResourceManager::createMesh(
             // .indexBuffer = indexBufferHandle,
             .positionBuffer = positionBufferHandle,
             .attributeBuffer = attributesBufferHandle,
-            .meshletVertices = meshletsVertexIndicesBuffer,
+            .meshletUniqueVertexIndices = meshletsUniqueVertexIndicesBuffer,
             .meshletPrimitiveIndices = meshletPrimitiveIndicesBuffer,
             .meshletDescriptors = meshletDescsBuffer,
             .gpuIndex = 0xFFFFFFFF,
@@ -302,7 +302,7 @@ void ResourceManager::destroy(Mesh::Handle handle)
     device->destroy(renderData.positionBuffer);
     device->destroy(renderData.attributeBuffer);
     // device->destroy(renderData.indexBuffer);
-    device->destroy(renderData.meshletVertices);
+    device->destroy(renderData.meshletUniqueVertexIndices);
     device->destroy(renderData.meshletPrimitiveIndices);
     device->destroy(renderData.meshletDescriptors);
     meshPool.remove(handle);

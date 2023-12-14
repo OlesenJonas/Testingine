@@ -38,7 +38,7 @@ void main(
     #define vertexAttributes ByteBuffFromHandle(meshData.attributesBuffer)
 
     MeshletDescriptor m = StrucBuffFromHandle(MeshletDescriptor, meshData.meshletDescriptors)[groupID];
-    #define meshletVertexIndices StrucBuffFromHandle(uint, meshData.meshletVertexIndices)
+    #define meshletUniqueVertexIndices StrucBuffFromHandle(uint, meshData.meshletUniqueVertexIndices)
     #define meshletPrimitiveIndices StrucBuffFromHandle(uint, meshData.meshletPrimitiveIndices)
 
     SetMeshOutputCounts(m.vertexCount, m.primCount);
@@ -74,7 +74,7 @@ void main(
     for (uint loop = 0; loop < vertexLoops; loop++)
     {
         uint threadOffset = threadID + loop*GROUP_SIZE;
-        uint vertexIndex = meshletVertexIndices[m.vertexBegin + threadOffset];
+        uint vertexIndex = meshletUniqueVertexIndices[m.vertexBegin + threadOffset];
 
         const float4x4 projViewMatrix = renderPassData.projView;
         // const float4x4 projViewMatrix = g_ConstantBuffer_RenderPassData[shaderInputs.renderPassData.resourceIndex].projView;

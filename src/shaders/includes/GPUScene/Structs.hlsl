@@ -24,9 +24,10 @@ struct MeshData
     // ResrcHandle< StructuredBuffer<uint> > indexBuffer;
     ResrcHandle< StructuredBuffer<float3> > positionBuffer;
     ResrcHandle< ByteAddressBuffer > attributesBuffer;
-    ResrcHandle< StructuredBuffer<uint> > meshletVertexIndices;
+    ResrcHandle< StructuredBuffer<uint> > meshletUniqueVertexIndices;
+    //in reality this is a uint8[], indices into meshletUniqueVertexIndices array
     // ResrcHandle< ByteAddressBuffer > meshletPrimitiveIndices;
-    ResrcHandle< StructuredBuffer<uint> > meshletPrimitiveIndices; //in reality this is a uint8[]
+    ResrcHandle< StructuredBuffer<uint> > meshletPrimitiveIndices;
 
     ResrcHandle< StructuredBuffer<MeshletDescriptor> > meshletDescriptors;
 

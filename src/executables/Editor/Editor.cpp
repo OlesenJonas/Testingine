@@ -90,7 +90,7 @@ Editor::Editor()
             // .indexBuffer = *rm.get<ResourceIndex>(renderData.indexBuffer),
             .positionBuffer = *rm.get<ResourceIndex>(renderData.positionBuffer),
             .attributesBuffer = *rm.get<ResourceIndex>(renderData.attributeBuffer),
-            .meshletVertexIndices = *rm.get<ResourceIndex>(renderData.meshletVertices),
+            .meshletUniqueVertexIndices = *rm.get<ResourceIndex>(renderData.meshletUniqueVertexIndices),
             .meshletPrimitiveIndices = *rm.get<ResourceIndex>(renderData.meshletPrimitiveIndices),
             .meshletDescriptors = *rm.get<ResourceIndex>(renderData.meshletDescriptors),
         };

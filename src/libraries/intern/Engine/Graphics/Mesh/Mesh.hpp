@@ -65,7 +65,7 @@ struct Mesh
         // Buffer::Handle indexBuffer = Buffer::Handle::Invalid();
         Buffer::Handle positionBuffer = Buffer::Handle::Invalid();
         Buffer::Handle attributeBuffer = Buffer::Handle::Invalid();
-        Buffer::Handle meshletVertices = Buffer::Handle::Invalid();
+        Buffer::Handle meshletUniqueVertexIndices = Buffer::Handle::Invalid();
         Buffer::Handle meshletPrimitiveIndices = Buffer::Handle::Invalid();
         Buffer::Handle meshletDescriptors = Buffer::Handle::Invalid();
 
