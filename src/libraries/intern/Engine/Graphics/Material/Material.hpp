@@ -67,6 +67,8 @@ namespace Material
     struct ReloadInfo
     {
         std::string vertexSource;
+        std::string taskSource;
+        std::string meshSource;
         std::string fragmentSource;
         std::vector<Texture::Format> colorFormats;
         Texture::Format depthFormat = Texture::Format::UNDEFINED;

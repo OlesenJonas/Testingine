@@ -493,6 +493,8 @@ Material::Handle ResourceManager::createMaterial(Material::CreateInfo&& crInfo)
         parametersBufferSize > 0, // dirty
         Material::ReloadInfo{
             .vertexSource{crInfo.vertexShader.sourcePath},
+            .taskSource{crInfo.taskShader.sourcePath},
+            .meshSource{crInfo.meshShader.sourcePath},
             .fragmentSource{crInfo.fragmentShader.sourcePath},
             .colorFormats{crInfo.colorFormats.begin(), crInfo.colorFormats.end()},
             .depthFormat = crInfo.depthFormat,
@@ -630,6 +632,8 @@ std::vector<Material::Handle> ResourceManager::createMaterials(Span<const Materi
             *get<bool>(ret[i]) = parametersBufferSize > 0; // dirty
             *get<Material::ReloadInfo>(ret[i]) = Material::ReloadInfo{
                 .vertexSource{createInfo.vertexShader.sourcePath},
+                .taskSource{createInfo.taskShader.sourcePath},
+                .meshSource{createInfo.meshShader.sourcePath},
                 .fragmentSource{createInfo.fragmentShader.sourcePath},
                 .colorFormats{createInfo.colorFormats.begin(), createInfo.colorFormats.end()},
                 .depthFormat = createInfo.depthFormat,
@@ -678,13 +682,24 @@ bool ResourceManager::reloadMaterial(Material::Handle handle)
 {
     auto* reloadInfo = get<Material::ReloadInfo>(handle);
 
-    std::vector<uint32_t> vertexBinary = compileHLSL(reloadInfo->vertexSource, Shaders::Stage::Vertex);
-    std::vector<uint32_t> fragmentBinary = compileHLSL(reloadInfo->fragmentSource, Shaders::Stage::Fragment);
-    if(vertexBinary.empty() || fragmentBinary.empty())
-        return false; // TODO: LOG: warn
+    bool hasMeshShader = !reloadInfo->meshSource.empty();
+    bool hasTaskShader = !reloadInfo->taskSource.empty();
 
-    Shaders::Reflection::Module vertModule{vertexBinary};
-    Shaders::Reflection::Module fragModule{fragmentBinary};
+    std::vector<uint32_t> binaries[3];
+    if(hasTaskShader)
+        binaries[0] = compileHLSL(reloadInfo->taskSource, Shaders::Stage::Task);
+    binaries[1] = hasMeshShader ? compileHLSL(reloadInfo->meshSource, Shaders::Stage::Mesh)
+                                : compileHLSL(reloadInfo->vertexSource, Shaders::Stage::Vertex);
+    binaries[2] = compileHLSL(reloadInfo->fragmentSource, Shaders::Stage::Fragment);
+
+    if(binaries[1].empty() || binaries[2].empty() || (hasTaskShader && binaries[0].empty()))
+    {
+        BREAKPOINT;
+        return false; // TODO: LOG: warn
+    }
+
+    Shaders::Reflection::Module vertModule{binaries[1]};
+    Shaders::Reflection::Module fragModule{binaries[2]};
     if(!vertModule.isInitialized() || !fragModule.isInitialized())
         return false;
 
@@ -710,11 +725,14 @@ bool ResourceManager::reloadMaterial(Material::Handle handle)
         return false;
     }
 
+    Span<uint32_t> emptySpan{nullptr, 0ull};
     auto* name = get<std::string>(handle);
     VkPipeline newPipeline = VulkanDevice::impl()->createGraphicsPipeline(VulkanDevice::PipelineCreateInfo{
         .debugName{*name},
-        .vertexSpirv = vertexBinary,
-        .fragmentSpirv = fragmentBinary,
+        .vertexSpirv = hasMeshShader ? emptySpan : binaries[1],
+        .taskSpirv = hasTaskShader ? binaries[0] : emptySpan,
+        .meshSpirv = hasMeshShader ? binaries[1] : emptySpan,
+        .fragmentSpirv = binaries[2],
         .colorFormats = reloadInfo->colorFormats,
         .depthFormat = reloadInfo->depthFormat,
         .stencilFormat = reloadInfo->stencilFormat,
