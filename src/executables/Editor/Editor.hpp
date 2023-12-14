@@ -84,19 +84,6 @@ class Editor final : public Application
         float pad;
     };
 
-    // TODO: keep shader and c++ versions of structs synced
-    struct GPUMeshData
-    {
-        // uint32_t indexCount;
-        uint32_t additionalUVCount; // TODO: store full attribute stride directly?
-        uint32_t meshletCount;
-        // ResourceIndex indexBuffer;
-        ResourceIndex positionBuffer;
-        ResourceIndex attributeBuffer;
-        ResourceIndex meshletVertexIndices;
-        ResourceIndex meshletPrimitiveIndices;
-        ResourceIndex meshletDescriptors;
-    };
     struct GPUMeshDataBuffer
     {
         const int limit = 10000;

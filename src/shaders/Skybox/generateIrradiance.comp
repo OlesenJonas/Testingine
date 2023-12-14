@@ -2,8 +2,8 @@
 #include "../includes/Bindless/Setup.hlsl"
 
 DefinePushConstants(
-    Handle< TextureCube<float4> > sourceTex;
-    Handle< RWTexture2DArray<float4> > irradianceTex;
+    ResrcHandle< TextureCube<float4> > sourceTex;
+    ResrcHandle< RWTexture2DArray<float4> > irradianceTex;
 );
 
 #define PI 3.141592653589793238462643383279502884197169399375105820974944

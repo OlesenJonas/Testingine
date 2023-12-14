@@ -31,6 +31,8 @@ target_link_libraries(Engine PRIVATE meshoptimizer::meshoptimizer)
 target_link_libraries(Engine PUBLIC TracyClient)
 target_compile_definitions(Engine PUBLIC TRACY_ENABLE)
 
+target_include_directories(Engine PUBLIC "${CMAKE_SOURCE_DIR}/src/shaders/")
+
 IF(VULKAN_ENABLE_VALIDATION)
     message(STATUS "Compiling with vulkan validation enabled")
     target_compile_definitions(Engine PUBLIC ENABLE_VULKAN_VALIDATION)

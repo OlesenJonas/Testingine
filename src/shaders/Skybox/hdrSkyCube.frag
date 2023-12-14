@@ -3,7 +3,7 @@
 #include "../includes/MaterialParams.hlsl"
 
 MaterialInstanceParameters(
-    Handle< TextureCube<float4> > cubeMap;
+    ResrcHandle< TextureCube<float4> > cubeMap;
 );
 
 struct VSOutput

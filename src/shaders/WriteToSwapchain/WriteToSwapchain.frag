@@ -2,7 +2,7 @@
 #include "../includes/Bindless/Setup.hlsl"
 
 DefinePushConstants(
-    Handle< Texture2D<float4> > inputTex;
+    ResrcHandle< Texture2D<float4> > inputTex;
 );
 
 struct VSOutput

@@ -9,7 +9,7 @@
 [[vk::binding(0, SAMPLED_IMG_SET)]]
 SamplerState g_samplerState[GLOBAL_SAMPLER_COUNT];
 template<>
-SamplerState Handle<SamplerState>::get()
+SamplerState ResrcHandle<SamplerState>::get()
 {
     return g_samplerState[resourceIndex];
 }

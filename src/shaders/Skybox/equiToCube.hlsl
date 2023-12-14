@@ -2,8 +2,8 @@
 #include "../includes/Bindless/Setup.hlsl"
 
 DefinePushConstants(
-    Handle< Texture2D<float4> > sourceTex;
-    Handle< RWTexture2DArray<float4> > targetTex;
+    ResrcHandle< Texture2D<float4> > sourceTex;
+    ResrcHandle< RWTexture2DArray<float4> > targetTex;
 );
 
 static const float2 invAtan = float2(0.1591, 0.3183);

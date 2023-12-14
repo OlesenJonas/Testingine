@@ -3,7 +3,7 @@
 #include "../includes/MaterialParams.hlsl"
 
 MaterialInstanceParameters(
-    Handle< Texture2D<float4> > equirectangularMap;
+    ResrcHandle< Texture2D<float4> > equirectangularMap;
 );
 
 static const float2 invAtan = float2(0.1591, 0.3183);

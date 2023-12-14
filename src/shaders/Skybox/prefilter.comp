@@ -2,8 +2,8 @@
 #include "../includes/Bindless/Setup.hlsl"
 
 DefinePushConstants(
-    Handle< TextureCube<float4> > sourceTex;
-    Handle< RWTexture2DArray<float4> > targetTex;
+    ResrcHandle< TextureCube<float4> > sourceTex;
+    ResrcHandle< RWTexture2DArray<float4> > targetTex;
     float roughness;
 );
 

@@ -13,6 +13,8 @@
 #include <tracy/TracyC.h>
 #include <vulkan/vulkan_core.h>
 
+#include "includes/GPUScene/Structs.hlsl"
+
 /*
     each "type implementation" is in the respective .cpp file
     ie: createBuffer in Buffer.cpp, createTexture in Texture.cpp ...
@@ -244,17 +246,7 @@ Mesh::Handle ResourceManager::createMesh(
             {(uint8_t*)combinedMeshletPrimitiveIndices.data(), SizeInBytes(combinedMeshletPrimitiveIndices)},
     });
 
-    // TODO: shader version of this
-    //       with functionality to assert that layout/size is equal
-    // TODO: also build culling info and store that!
-    struct MeshletDesc
-    {
-        uint32_t vertexBegin; // offset into vertexIndices
-        uint32_t vertexCount; // number of vertices used
-        uint32_t primBegin;   // offset into primitiveIndices
-        uint32_t primCount;   // number of primitives (triangles) used
-    };
-    std::vector<MeshletDesc> meshletDescriptors;
+    std::vector<MeshletDescriptor> meshletDescriptors;
     meshletDescriptors.resize(meshletCountActual);
     for(int i = 0; i < meshletCountActual; i++)
     {

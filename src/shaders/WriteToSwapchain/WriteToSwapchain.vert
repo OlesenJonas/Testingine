@@ -11,7 +11,7 @@ struct VSOutput
 };
 
 DefinePushConstants(
-    Handle< Texture2D<float4> > inputTex;
+    ResrcHandle< Texture2D<float4> > inputTex;
 );
 
 VSOutput main(uint vertexIndex : SV_VertexID)

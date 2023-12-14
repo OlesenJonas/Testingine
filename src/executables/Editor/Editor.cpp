@@ -16,6 +16,9 @@
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyC.h>
 
+#include "includes/GPUScene/Structs.hlsl"
+using GPUMeshData = MeshData;
+
 Editor::Editor()
     : Application(Application::CreateInfo{
           .name = "Testingine Editor",
@@ -82,11 +85,11 @@ Editor::Editor()
         renderData.gpuIndex = freeIndex;
         gpuPtr[freeIndex] = GPUMeshData{
             // .indexCount = renderData.indexCount,
-            .meshletCount = renderData.meshletCount,
             .additionalUVCount = renderData.additionalUVCount,
+            .meshletCount = renderData.meshletCount,
             // .indexBuffer = *rm.get<ResourceIndex>(renderData.indexBuffer),
             .positionBuffer = *rm.get<ResourceIndex>(renderData.positionBuffer),
-            .attributeBuffer = *rm.get<ResourceIndex>(renderData.attributeBuffer),
+            .attributesBuffer = *rm.get<ResourceIndex>(renderData.attributeBuffer),
             .meshletVertexIndices = *rm.get<ResourceIndex>(renderData.meshletVertices),
             .meshletPrimitiveIndices = *rm.get<ResourceIndex>(renderData.meshletPrimitiveIndices),
             .meshletDescriptors = *rm.get<ResourceIndex>(renderData.meshletDescriptors),

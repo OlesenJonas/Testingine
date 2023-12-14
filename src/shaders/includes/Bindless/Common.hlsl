@@ -11,12 +11,12 @@
 /*
     Since im using strongly types buffers, and not all structs may be defined
     in all shader stage files, this Placeholder is defined, enabling a neat way
-    of just writing Handle<Placeholder> ...
+    of just writing ResrcHandle<Placeholder> ...
 */
 struct Placeholder{};
 
 template<typename T>
-struct Handle
+struct ResrcHandle
 {
     uint resourceIndex;
 
@@ -32,7 +32,7 @@ struct Handle
 };
 
 template<>
-struct Handle<Placeholder>
+struct ResrcHandle<Placeholder>
 {
     uint resourceIndex;
 };
@@ -43,7 +43,7 @@ TYPE<TEMPLATE> g_##TYPE##_##TEMPLATE[];
 
 #define IMPLEMENT_HANDLE_GETTER(TYPE, TEMPLATE)                             \
 template <>                                                                 \
-TYPE<TEMPLATE> Handle< TYPE<TEMPLATE> >::get()                              \
+TYPE<TEMPLATE> ResrcHandle< TYPE<TEMPLATE> >::get()                              \
 {                                                                           \
     return g_##TYPE##_##TEMPLATE[resourceIndex];                           \
 }

@@ -13,31 +13,31 @@
 
 MaterialParameters(
     /* TODO: should be part of scene information, not material ? */
-    Handle< TextureCube<float4> > irradianceTex;
-    Handle< TextureCube<float4> > prefilterTex;
+    ResrcHandle< TextureCube<float4> > irradianceTex;
+    ResrcHandle< TextureCube<float4> > prefilterTex;
 
-    Handle< Texture2D<float2> > brdfLUT;
+    ResrcHandle< Texture2D<float2> > brdfLUT;
 );
 
 MaterialInstanceParameters(
     //TODO: check again, but im pretty sure these are all float4 textures
-    Handle< Texture2D<float4> > normalTexture;
+    ResrcHandle< Texture2D<float4> > normalTexture;
     uint normalUVSet;
 
-    Handle< Texture2D<float4> > baseColorTexture;
+    ResrcHandle< Texture2D<float4> > baseColorTexture;
     uint baseColorUVSet;
 
     float4 normalTexOffsetScale;
     float4 baseColorTexOffsetScale;
 
-    Handle< Texture2D<float4> > metalRoughTexture;
+    ResrcHandle< Texture2D<float4> > metalRoughTexture;
     uint metalRoughUVSet;
     float metallicFactor;
     float roughnessFactor;
 
     float4 metalRoughTexOffsetScale;
 
-    Handle< Texture2D<float4> > occlusionTexture;
+    ResrcHandle< Texture2D<float4> > occlusionTexture;
     uint occlusionUVSet;
     uint2 pad; //TODO
     float4 occlusionTexOffsetScale;

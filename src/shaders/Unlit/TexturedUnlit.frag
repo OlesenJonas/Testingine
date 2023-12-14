@@ -3,7 +3,7 @@
 #include "../includes/MaterialParams.hlsl"
 
 MaterialInstanceParameters(
-    Handle< Texture2D<float4> > texture;
+    ResrcHandle< Texture2D<float4> > texture;
 );
 
 struct VSOutput

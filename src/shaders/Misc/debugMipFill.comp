@@ -2,7 +2,7 @@
 #include "../includes/Bindless/Setup.hlsl"
 
 DefinePushConstants(
-    Handle< RWTexture2D<float4> > outTex;
+    ResrcHandle< RWTexture2D<float4> > outTex;
     uint level;
 );
 

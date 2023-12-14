@@ -8,9 +8,9 @@
 struct DefaultPushConstants
 {
     // Resolution, matrices (differs in eg. shadow and default pass)
-    Handle< ConstantBuffer<RenderPassData> > renderPassData;
+    ResrcHandle< ConstantBuffer<RenderPassData> > renderPassData;
     // Buffer with information about all instances that are being rendered
-    Handle< StructuredBuffer<InstanceInfo> > instanceBuffer;
+    ResrcHandle< StructuredBuffer<InstanceInfo> > instanceBuffer;
 
     uint indexInInstanceBuffer;
 };

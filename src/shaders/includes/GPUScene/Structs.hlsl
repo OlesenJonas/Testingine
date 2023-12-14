@@ -1,8 +1,12 @@
 #ifndef GPUSCENE_STRUCTS_HLSL
 #define GPUSCENE_STRUCTS_HLSL
 
-#include "../VertexAttributes.hlsl"
-#include "../Bindless/Common.hlsl"
+#include "../ToCPP.hpp"
+
+#ifndef __cplusplus
+    #include "../VertexAttributes.hlsl"
+    #include "../Bindless/Common.hlsl"
+#endif
 
 struct MeshletDescriptor
 {
@@ -17,14 +21,14 @@ struct MeshData
     // uint indexCount;
     uint additionalUVCount;
     uint meshletCount;
-    // Handle< StructuredBuffer<uint> > indexBuffer;
-    Handle< StructuredBuffer<float3> > positionBuffer;
-    Handle< ByteAddressBuffer > attributesBuffer;
-    Handle< StructuredBuffer<uint> > meshletVertexIndices;
-    // Handle< ByteAddressBuffer > meshletPrimitiveIndices;
-    Handle< StructuredBuffer<uint> > meshletPrimitiveIndices; //in reality this is a uint8[]
+    // ResrcHandle< StructuredBuffer<uint> > indexBuffer;
+    ResrcHandle< StructuredBuffer<float3> > positionBuffer;
+    ResrcHandle< ByteAddressBuffer > attributesBuffer;
+    ResrcHandle< StructuredBuffer<uint> > meshletVertexIndices;
+    // ResrcHandle< ByteAddressBuffer > meshletPrimitiveIndices;
+    ResrcHandle< StructuredBuffer<uint> > meshletPrimitiveIndices; //in reality this is a uint8[]
 
-    Handle< StructuredBuffer<MeshletDescriptor> > meshletDescriptors;
+    ResrcHandle< StructuredBuffer<MeshletDescriptor> > meshletDescriptors;
 
     uint normalSize() { return sizeof(float3); }
     uint normalOffset() { return 0; }
@@ -47,8 +51,8 @@ struct InstanceInfo
     float4x4 invTranspTransform;
     uint meshDataIndex;
     uint materialIndex;
-    Handle< Placeholder > materialParamsBuffer;
-    Handle< Placeholder > materialInstanceParamsBuffer;
+    ResrcHandle< Placeholder > materialParamsBuffer;
+    ResrcHandle< Placeholder > materialInstanceParamsBuffer;
 };
 
 #endif
