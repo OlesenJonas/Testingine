@@ -1,0 +1,15 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic : require
+
+layout(std140, binding = 0) buffer buff
+{
+   uint uints[ ];
+};
+
+layout (local_size_x = 64) in;
+
+void main() 
+{
+    uint group = gl_SubgroupID;
+	uints[group] = group;
+}

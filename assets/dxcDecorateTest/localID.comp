@@ -1,0 +1,7 @@
+RWStructuredBuffer<uint> buff : register(u0);
+
+[numthreads(64, 1, 1)]
+void main(uint3 localID : SV_GroupThreadID)
+{
+	buff[localID.x] = localID.x;
+}

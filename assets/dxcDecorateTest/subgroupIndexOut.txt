@@ -1,0 +1,49 @@
+; SPIR-V
+; Version: 1.6
+; Generator: Google spiregg; 0
+; Bound: 20
+; Schema: 0
+               OpCapability Shader
+               OpExtension "SPV_AMD_shader_explicit_vertex_parameter"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main" %buff %_Globals
+               OpExecutionMode %main LocalSize 64 1 1
+               OpSource HLSL 660
+               OpName %type_RWStructuredBuffer_uint "type.RWStructuredBuffer.uint"
+               OpName %buff "buff"
+               OpName %type__Globals "type.$Globals"
+               OpMemberName %type__Globals 0 "lane"
+               OpName %_Globals "$Globals"
+               OpName %main "main"
+               OpDecorate %_Globals BuiltIn BaryCoordSmoothCentroidAMD
+               OpDecorate %buff DescriptorSet 0
+               OpDecorate %buff Binding 0
+               OpDecorate %_Globals DescriptorSet 0
+               OpDecorate %_Globals Binding 1
+               OpDecorate %_runtimearr_uint ArrayStride 4
+               OpMemberDecorate %type_RWStructuredBuffer_uint 0 Offset 0
+               OpDecorate %type_RWStructuredBuffer_uint Block
+               OpMemberDecorate %type__Globals 0 Offset 0
+               OpDecorate %type__Globals Block
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+       %uint = OpTypeInt 32 0
+%_runtimearr_uint = OpTypeRuntimeArray %uint
+%type_RWStructuredBuffer_uint = OpTypeStruct %_runtimearr_uint
+%_ptr_StorageBuffer_type_RWStructuredBuffer_uint = OpTypePointer StorageBuffer %type_RWStructuredBuffer_uint
+%type__Globals = OpTypeStruct %uint
+%_ptr_Uniform_type__Globals = OpTypePointer Uniform %type__Globals
+       %void = OpTypeVoid
+         %13 = OpTypeFunction %void
+%_ptr_Uniform_uint = OpTypePointer Uniform %uint
+%_ptr_StorageBuffer_uint = OpTypePointer StorageBuffer %uint
+       %buff = OpVariable %_ptr_StorageBuffer_type_RWStructuredBuffer_uint StorageBuffer
+   %_Globals = OpVariable %_ptr_Uniform_type__Globals Uniform
+       %main = OpFunction %void None %13
+         %16 = OpLabel
+         %17 = OpAccessChain %_ptr_Uniform_uint %_Globals %int_0
+         %18 = OpLoad %uint %17
+         %19 = OpAccessChain %_ptr_StorageBuffer_uint %buff %int_0 %18
+               OpStore %19 %18
+               OpReturn
+               OpFunctionEnd

@@ -1,0 +1,39 @@
+; SPIR-V
+; Version: 1.6
+; Generator: Google spiregg; 0
+; Bound: 17
+; Schema: 0
+               OpCapability Shader
+               OpCapability GroupNonUniform
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main" %SubgroupLocalInvocationId %buff
+               OpExecutionMode %main LocalSize 64 1 1
+               OpSource HLSL 660
+               OpName %type_RWStructuredBuffer_uint "type.RWStructuredBuffer.uint"
+               OpName %buff "buff"
+               OpName %main "main"
+               OpDecorate %SubgroupLocalInvocationId BuiltIn SubgroupLocalInvocationId
+               OpDecorate %buff DescriptorSet 0
+               OpDecorate %buff Binding 0
+               OpDecorate %_runtimearr_uint ArrayStride 4
+               OpMemberDecorate %type_RWStructuredBuffer_uint 0 Offset 0
+               OpDecorate %type_RWStructuredBuffer_uint Block
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+       %uint = OpTypeInt 32 0
+%_runtimearr_uint = OpTypeRuntimeArray %uint
+%type_RWStructuredBuffer_uint = OpTypeStruct %_runtimearr_uint
+%_ptr_StorageBuffer_type_RWStructuredBuffer_uint = OpTypePointer StorageBuffer %type_RWStructuredBuffer_uint
+%_ptr_Input_uint = OpTypePointer Input %uint
+       %void = OpTypeVoid
+         %12 = OpTypeFunction %void
+%_ptr_StorageBuffer_uint = OpTypePointer StorageBuffer %uint
+       %buff = OpVariable %_ptr_StorageBuffer_type_RWStructuredBuffer_uint StorageBuffer
+%SubgroupLocalInvocationId = OpVariable %_ptr_Input_uint Input
+       %main = OpFunction %void None %12
+         %14 = OpLabel
+         %15 = OpLoad %uint %SubgroupLocalInvocationId
+         %16 = OpAccessChain %_ptr_StorageBuffer_uint %buff %int_0 %15
+               OpStore %16 %15
+               OpReturn
+               OpFunctionEnd

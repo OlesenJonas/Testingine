@@ -1,0 +1,8 @@
+RWStructuredBuffer<uint> buff : register(u0);
+
+[numthreads(64, 1, 1)]
+void main()
+{
+	uint lane = WaveGetLaneIndex();
+	buff[lane] = lane;
+}

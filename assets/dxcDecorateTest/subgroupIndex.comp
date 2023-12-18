@@ -1,0 +1,11 @@
+RWStructuredBuffer<uint> buff : register(u0);
+
+// https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#Decoration
+// https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#_builtin
+[numthreads(64, 1, 1)]
+void main(
+[[vk::ext_decorate(11 /*BuiltIn*/, 41/*SubgroupLocalInvocationID*/)]] int waveIndex : SV_GroupIndex
+)
+{
+	buff[waveIndex] = waveIndex;
+}
