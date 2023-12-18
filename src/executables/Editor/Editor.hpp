@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BatchManager/BatchManager.hpp"
 #include "Scene/Scene.hpp"
 #include <Datastructures/ThreadPool.hpp>
 #include <ECS/ECS.hpp>
@@ -102,11 +103,22 @@ class Editor final : public Application
     };
     struct InstanceInfoBuffer
     {
-        const int limit = 10000;
+        static constexpr int limit = 10000;
         Buffer::Handle buffer;
         // TODO: bitset and/or full pool logic instead
         uint32_t freeIndex = 0;
     } gpuInstanceInfoBuffer;
+
+    BatchManager batchManager;
+    // stores batch index for every instance in scene
+    // index into this buffer equals index into instance buffer!
+    Buffer::Handle batchIndicesBuffer;
+    std::array<BatchManager::BatchIndex, InstanceInfoBuffer::limit> batchIndicesBufferCPU;
+    // should be multiple of subgroup size for simplicity !
+    constexpr static uint32_t maxBatchCount = 128;
+    Buffer::Handle perBatchElementCountBuffer;
+    Handle<ComputeShader> countBatchElementsShader;
+    Handle<ComputeShader> batchCountPrefixSumShader;
 
     // TODO: from shader file
     struct GraphicsPushConstants

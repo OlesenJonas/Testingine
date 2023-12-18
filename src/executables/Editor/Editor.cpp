@@ -42,10 +42,10 @@ Editor::Editor()
     mainCamera =
         Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
 
-    createDefaultAssets();
-
     // Disable validation error breakpoints during init, synch errors arent correct
     gfxDevice.disableValidationErrorBreakpoint();
+
+    createDefaultAssets();
 
     // TODO: execute this while GPU is already doing work, instead of waiting for this *then* starting GPU
     Scene::load("C:/Users/jonas/Documents/Models/Sponza/out/Sponza.gltf", &ecs, scene.root);
@@ -99,6 +99,17 @@ Editor::Editor()
     gfxDevice.copyBuffer(mainCmdBuffer, meshDataAllocBuffer, gpuMeshDataBuffer.buffer);
     gfxDevice.destroy(meshDataAllocBuffer);
 
+    // Setup / prepade batchmanager and buffer
+    // auto i = batchManager.getBatchIndex(math1, meshh1);
+    batchIndicesBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "instancesBatchIndexBuffer",
+        .size = gpuInstanceInfoBuffer.limit * sizeof(uint32_t),
+        .memoryType = Buffer::MemoryType::GPU_BUT_CPU_VISIBLE,
+        .allStates = ResourceState::StorageCompute,
+        .initialState = ResourceState::StorageCompute,
+    });
+    memset(batchIndicesBufferCPU.data(), 0, SizeInBytes(batchIndicesBufferCPU));
+
     // create instance info for each object in scene
     Buffer::Handle instanceAllocBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
         .debugName = "tempInstanceInfoBuffer",
@@ -126,7 +137,7 @@ Editor::Editor()
 
                 auto* name = rm.get<std::string>(mesh);
 
-                auto freeIndex = gpuInstanceInfoBuffer.freeIndex++;
+                auto instanceBufferIndex = gpuInstanceInfoBuffer.freeIndex++;
                 const MaterialInstance::Handle matInst = meshRenderer->materialInstances[i];
                 const Buffer::Handle matInstParamBuffer = rm.get<Material::ParameterBuffer>(matInst)->deviceBuffer;
                 bool hasMatInstParameters = matInstParamBuffer.isNonNull();
@@ -134,7 +145,7 @@ Editor::Editor()
                 const Buffer::Handle matParamBuffer = rm.get<Material::ParameterBuffer>(mat)->deviceBuffer;
                 bool hasMatParameters = matParamBuffer.isNonNull();
 
-                gpuInstancePtr[freeIndex] = InstanceInfo{
+                gpuInstancePtr[instanceBufferIndex] = InstanceInfo{
                     .transform = transform->localToWorld,
                     .invTranspTransform = glm::inverseTranspose(transform->localToWorld),
                     .meshDataIndex = renderData.gpuIndex,
@@ -143,11 +154,72 @@ Editor::Editor()
                     .materialInstanceParamsBuffer =
                         hasMatInstParameters ? *rm.get<ResourceIndex>(matInstParamBuffer) : 0xFFFFFFFF,
                 };
-                meshRenderer->instanceBufferIndices[i] = freeIndex;
+                meshRenderer->instanceBufferIndices[i] = instanceBufferIndex;
+
+                batchIndicesBufferCPU[instanceBufferIndex] = batchManager.getBatchIndex(mat, mesh);
             }
         });
     gfxDevice.copyBuffer(mainCmdBuffer, instanceAllocBuffer, gpuInstanceInfoBuffer.buffer);
     gfxDevice.destroy(instanceAllocBuffer);
+
+    auto* batchIndicesBufferGPU = *rm.get<void*>(batchIndicesBuffer);
+    memcpy(batchIndicesBufferGPU, batchIndicesBufferCPU.data(), SizeInBytes(batchIndicesBufferCPU));
+
+    std::array<uint32_t, maxBatchCount> zeroArray = FilledArray<uint32_t, maxBatchCount>(0u);
+    perBatchElementCountBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "perBatchElementCounts",
+        .size = SizeInBytes(zeroArray),
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::Storage | ResourceState::TransferDst,
+        .initialState = ResourceState::Storage,
+        .initialData = {(uint8_t*)zeroArray.data(), SizeInBytes(zeroArray)},
+    });
+    struct CountBatchElementsPC
+    {
+        ResourceIndex batchIndicesBuffer;
+        ResourceIndex perBatchElementCountBuffer;
+        uint32_t totalInstances;
+    } countBatchElementsPC{
+        .batchIndicesBuffer = *rm.get<ResourceIndex>(batchIndicesBuffer),
+        .perBatchElementCountBuffer = *rm.get<ResourceIndex>(perBatchElementCountBuffer),
+        .totalInstances = gpuInstanceInfoBuffer.freeIndex,
+    };
+    ComputeShader* countingShader = resourceManager.get(countBatchElementsShader);
+    gfxDevice.setComputePipelineState(mainCmdBuffer, countingShader->pipeline);
+    gfxDevice.pushConstants(mainCmdBuffer, sizeof(countBatchElementsPC), &countBatchElementsPC);
+    gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(gpuInstanceInfoBuffer.freeIndex, 32u));
+
+    gfxDevice.insertBarriers(
+        mainCmdBuffer,
+        {
+            Barrier::FromBuffer{
+                .buffer = perBatchElementCountBuffer,
+                .stateBefore = ResourceState::StorageCompute,
+                .stateAfter = ResourceState::StorageCompute,
+            },
+        });
+
+    constexpr uint32_t MAX_COMP_WORKGROUP_THREADS = 1024; // TODO: get from device limits!
+    if(batchManager.getBatchCount() < MAX_COMP_WORKGROUP_THREADS)
+    {
+        struct BatchCountPrefixSumPC
+        {
+            ResourceIndex perBatchElementCountBuffer;
+            uint32_t batchCount;
+        } batchCountPrefixSumPC{
+            .perBatchElementCountBuffer = *rm.get<ResourceIndex>(perBatchElementCountBuffer),
+            .batchCount = batchManager.getBatchCount(),
+        };
+        ComputeShader* prefixSumShader = resourceManager.get(batchCountPrefixSumShader);
+        gfxDevice.setComputePipelineState(mainCmdBuffer, prefixSumShader->pipeline);
+        gfxDevice.pushConstants(mainCmdBuffer, sizeof(BatchCountPrefixSumPC), &batchCountPrefixSumPC);
+        gfxDevice.dispatchCompute(mainCmdBuffer, 1);
+    }
+    else
+    {
+        BREAKPOINT;
+    }
+
     TracyCZoneEnd(zoneGPUScene);
 
     // ------------------------------------------------------------------------------
@@ -417,13 +489,17 @@ void Editor::createDefaultComputeShaders()
         {.sourcePath = SHADERS_PATH "/Skybox/generateIrradiance.comp", .debugName = "generateIrradiance"},
         {.sourcePath = SHADERS_PATH "/Misc/debugMipFill.comp", .debugName = "debugMipFill"},
         {.sourcePath = SHADERS_PATH "/Skybox/prefilter.comp", .debugName = "prefilterEnvComp"},
-        {.sourcePath = SHADERS_PATH "/PBR/integrateBRDF.comp", .debugName = "integrateBRDFComp"} //
+        {.sourcePath = SHADERS_PATH "/PBR/integrateBRDF.comp", .debugName = "integrateBRDFComp"},
+        {.sourcePath = SHADERS_PATH "/GPURendering/CountBatchElements.comp", .debugName = "CountBatchElements"},
+        {.sourcePath = SHADERS_PATH "/GPURendering/PrefixSum.comp", .debugName = "PrefixSumSingle"} //
     });
     equiToCubeShader = shaders[0];
     irradianceCalcShader = shaders[1];
     debugMipFillShader = shaders[2];
     prefilterEnvShader = shaders[3];
     integrateBrdfShader = shaders[4];
+    countBatchElementsShader = shaders[5];
+    batchCountPrefixSumShader = shaders[6];
 }
 
 void Editor::createRendertargets()

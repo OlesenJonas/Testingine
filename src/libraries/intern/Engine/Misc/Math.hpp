@@ -6,7 +6,7 @@
 /*
  * returns the (up) rounded result of x/y without using floating point math
  */
-inline uint32_t UintDivAndCeil(uint32_t x, uint32_t y) // NOLINT
+inline constexpr uint32_t UintDivAndCeil(uint32_t x, uint32_t y) // NOLINT
 {
     return (x + y - 1) / y;
 }

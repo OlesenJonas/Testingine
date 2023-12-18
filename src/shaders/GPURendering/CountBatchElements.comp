@@ -1,0 +1,22 @@
+#define NO_DEFAULT_PUSH_CONSTANTS
+#include "../includes/Bindless/Setup.hlsl"
+
+DefinePushConstants(
+    ResrcHandle< StructuredBuffer<uint> > batchIndicesBuffer;
+    ResrcHandle< RWStructuredBuffer<uint> > perBatchElementCountBuffer;
+    uint totalInstances;
+);
+
+[numthreads(32, 1, 1)]
+void main(uint globalThreadID : SV_DispatchThreadID)
+{
+    if(globalThreadID >= pushConstants.totalInstances)
+        return;
+        
+    uint batchIndex = pushConstants.batchIndicesBuffer.get()[globalThreadID];
+    RWStructuredBuffer<uint> countBuffer = pushConstants.perBatchElementCountBuffer.get();
+    //todo consecutive instances likely share same index, so could try to use subgroup ops to reduce
+    //     number of atomic calls needed!
+    //  some combination of bitmask and findFirst?
+    InterlockedAdd(countBuffer[batchIndex], 1);
+}

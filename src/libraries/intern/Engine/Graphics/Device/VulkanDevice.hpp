@@ -134,7 +134,7 @@ class VulkanDevice
         size_t destOffset,
         size_t size);
 
-    void dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ);
+    void dispatchCompute(VkCommandBuffer cmd, uint32_t groupsX, uint32_t groupsY = 1, uint32_t groupsZ = 1);
 
     void
     beginRendering(VkCommandBuffer cmd, Span<const ColorTarget>&& colorTargets, const DepthTarget&& depthTarget);

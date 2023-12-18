@@ -31,7 +31,7 @@ struct Hierarchy
 template <typename T, size_t N>
 consteval auto FilledArray(T value)
 {
-    std::array<T, N> arr;
+    std::array<T, N> arr{};
     std::fill(arr.begin(), arr.end(), value);
     return arr;
 }

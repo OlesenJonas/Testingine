@@ -1,0 +1,60 @@
+#define NO_DEFAULT_PUSH_CONSTANTS
+#include "../includes/Bindless/Setup.hlsl"
+
+//TODO: test launching just one wave and doing loops vs launching all (as is the case now)
+
+DefinePushConstants(
+    ResrcHandle< RWStructuredBuffer<uint> > perBatchElementCountBuffer;
+    uint batchCount;
+);
+
+// TODO: get from device limits, set as spec constant
+#define MAX_COMP_WORKGROUP_THREADS 1024
+
+groupshared uint perWaveSums[MAX_COMP_WORKGROUP_THREADS / 32]; 
+
+[numthreads(MAX_COMP_WORKGROUP_THREADS, 1, 1)]
+void main(
+    uint globalThreadID : SV_DispatchThreadID,
+    [[vk::ext_decorate(11/*BuiltIn*/, 40/*SubgroupId*/)]] uint waveIndex : SV_GroupIndex
+)
+{
+    //TODO: clear all to 0 or just those that are needed? -> think about which are actually needed (hint: not all)
+    if(globalThreadID < MAX_COMP_WORKGROUP_THREADS / 32)
+        perWaveSums[globalThreadID] = 0u;
+
+    //TODO: which of these barriers actually need sync?
+    GroupMemoryBarrierWithGroupSync();
+
+    // "skip" waves that would consist only of inactive threads
+    if(waveIndex * WaveGetLaneCount() >= pushConstants.batchCount)
+        return;
+
+    // afaik ordering of threads in wave in relation to workgroup is not defined, so calculate own index here
+    uint globalIndexFromWave = WaveGetLaneCount() * waveIndex + WaveGetLaneIndex();
+
+    RWStructuredBuffer<uint> perBatchCounts = pushConstants.perBatchElementCountBuffer.get();
+    
+    // setup guarantees that size of perBatchCounts is integer multiple of wave size
+    // so dont need to bounds check
+    uint batchCount = perBatchCounts[globalIndexFromWave];
+    uint countSumUpTo = WavePrefixSum(batchCount);
+
+    if(WaveGetLaneIndex() == WaveGetLaneCount() - 1)
+    {
+        perWaveSums[waveIndex] = countSumUpTo + batchCount;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if(waveIndex == 0)
+    {
+        uint waveSum = perWaveSums[WaveGetLaneIndex()];
+        uint waveSumUpTo = WavePrefixSum(waveSum);
+        perWaveSums[WaveGetLaneIndex()] = waveSumUpTo;
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    perBatchCounts[globalIndexFromWave] = countSumUpTo + perWaveSums[waveIndex];
+}
