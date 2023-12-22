@@ -104,7 +104,8 @@ class Editor final : public Application
     struct InstanceInfoBuffer
     {
         static constexpr int limit = 10000;
-        Buffer::Handle buffer;
+        Buffer::Handle unsortedBuffer;
+        Buffer::Handle sortedBuffer;
         // TODO: bitset and/or full pool logic instead
         uint32_t freeIndex = 0;
     } gpuInstanceInfoBuffer;
@@ -112,6 +113,7 @@ class Editor final : public Application
     BatchManager batchManager;
     // stores batch index for every instance in scene
     // index into this buffer equals index into instance buffer!
+    // TODO: this is CPU sided, as soon as this changes it needs to buffered #frames in flight times!
     Buffer::Handle batchIndicesBuffer;
     std::array<BatchManager::BatchIndex, InstanceInfoBuffer::limit> batchIndicesBufferCPU;
     // should be multiple of subgroup size for simplicity !
@@ -119,6 +121,7 @@ class Editor final : public Application
     Buffer::Handle perBatchElementCountBuffer;
     Handle<ComputeShader> countBatchElementsShader;
     Handle<ComputeShader> batchCountPrefixSumShader;
+    Handle<ComputeShader> sortInstancesIntoBatchesShader;
 
     // TODO: from shader file
     struct GraphicsPushConstants

@@ -1,0 +1,30 @@
+#define NO_DEFAULT_PUSH_CONSTANTS
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
+
+DefinePushConstants(
+    ResrcHandle< StructuredBuffer<uint> > batchIndicesBuffer;
+    ResrcHandle< RWStructuredBuffer<uint> > perBatchOffsetBuffer;
+    ResrcHandle< StructuredBuffer<InstanceInfo> > unsortedInstancesBuffer;
+    ResrcHandle< RWStructuredBuffer<InstanceInfo> > sortedInstancesBuffer;
+    uint totalInstances;
+);
+
+[numthreads(32, 1, 1)]
+void main(uint globalThreadID : SV_DispatchThreadID)
+{
+    if(globalThreadID >= pushConstants.totalInstances)
+        return;
+        
+    uint batchIndex = pushConstants.batchIndicesBuffer.get()[globalThreadID];
+    StructuredBuffer<InstanceInfo> inInstances = pushConstants.unsortedInstancesBuffer.get();
+    RWStructuredBuffer<InstanceInfo> outInstances = pushConstants.sortedInstancesBuffer.get();
+    RWStructuredBuffer<uint> batchOffsets = pushConstants.perBatchOffsetBuffer.get();
+
+    //todo consecutive instances likely share same index, so could try to use subgroup ops to reduce
+    //     number of atomic calls needed!
+    //  some combination of bitmask and findFirst?
+    uint outIndex = 0;
+    InterlockedAdd(batchOffsets[batchIndex],1,outIndex);
+    outInstances[outIndex] = inInstances[globalThreadID];
+}
