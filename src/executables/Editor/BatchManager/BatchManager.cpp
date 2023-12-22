@@ -13,3 +13,5 @@ BatchManager::BatchIndex BatchManager::getBatchIndex(Material::Handle material, 
 
     return newIndex;
 }
+
+const BatchManager::BatchLUT_t& BatchManager::getLUT() { return LUT; }

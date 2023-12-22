@@ -4,8 +4,8 @@
 #include "Structs.hlsl"
 #include "BindlessDeclarations.hlsl"
 
-
-#if __SHADER_TARGET_STAGE != __SHADER_STAGE_MESH && !defined EditorLinter
+//need EditorLinter check since it always uses shader stage Library!
+#if __SHADER_TARGET_STAGE != __SHADER_STAGE_MESH && __SHADER_TARGET_STAGE != __SHADER_STAGE_AMPLIFICATION && !defined EditorLinter
 
     // currently 0th buffer is hardcoded (c++ side) to be the render item buffer
     StructuredBuffer<MeshData> getMeshDataBuffer()
@@ -37,7 +37,7 @@
     }
     #endif
 
-#elif __SHADER_TARGET_STAGE == __SHADER_STAGE_MESH || defined EditorLinter //Shader stage is mesh
+#elif __SHADER_TARGET_STAGE == __SHADER_STAGE_MESH || __SHADER_TARGET_STAGE == __SHADER_STAGE_AMPLIFICATION || defined EditorLinter //Shader stage is mesh
     
     //TODO: move into common file (MeshShaderAccessFix.hlsl)
     // Storing/Passing/Returning buffers in mesh shaders is still broken..... 
@@ -72,6 +72,8 @@
     }
     #endif
 
+#else
+    #error
 #endif
 
 #endif

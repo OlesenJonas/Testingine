@@ -1,0 +1,35 @@
+#define NO_DEFAULT_PUSH_CONSTANTS
+#include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
+
+DefinePushConstants(
+    ResrcHandle< Placeholder > renderInfoBuffer;
+    ResrcHandle< StructuredBuffer<uint> > perBatchOffsetBuffer;
+    ResrcHandle< StructuredBuffer<InstanceInfo> > sortedInstanceBuffer;
+    uint batchIndex;
+);
+
+struct Payload
+{
+    uint batchStartInInstanceBuffer;
+};
+
+groupshared Payload payload;
+
+[NumThreads(1, 1, 1)]
+void main()
+{
+    #define instanceBuffer StrucBuffFromHandle(InstanceInfo, pushConstants.sortedInstanceBuffer)
+    #define batchOffsetBuffer StrucBuffFromHandle(uint, pushConstants.perBatchOffsetBuffer)
+    // after sorting entries are shifted by 1 index
+    uint batchStartInInstanceBuffer = pushConstants.batchIndex == 0 ? 0 : batchOffsetBuffer[pushConstants.batchIndex-1];
+    
+    //access any instance to get access to meshlet count
+    const InstanceInfo aInstance = instanceBuffer[batchStartInInstanceBuffer];
+    const MeshData meshData = getMeshData(aInstance);
+    const uint meshletCount = meshData.meshletCount;
+
+    payload.batchStartInInstanceBuffer = batchStartInInstanceBuffer;
+
+    DispatchMesh(meshletCount, 1, 1, payload);
+}

@@ -72,7 +72,8 @@ class Editor final : public Application
     SkyboxTextures
     generateSkyboxTextures(uint32_t hdriCubeRes, uint32_t irradianceRes, uint32_t prefilteredEnvMapBaseSize);
 
-    VkCommandBuffer drawScene(int threadIndex);
+    VkCommandBuffer drawSceneNaive(int threadIndex);
+    VkCommandBuffer drawSceneBatchesBasic(int threadIndex);
     VkCommandBuffer drawUI(int threadIndex);
 
     // TODO: store somewhere else and keep synced with shader code version of struct

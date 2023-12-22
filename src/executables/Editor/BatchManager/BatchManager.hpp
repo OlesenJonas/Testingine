@@ -35,8 +35,10 @@ class BatchManager
             }
         };
     };
+    using BatchLUT_t = std::unordered_map<MatMeshPair, BatchIndex, MatMeshPair::Hash>;
+    const BatchLUT_t& getLUT();
 
   private:
-    std::unordered_map<MatMeshPair, BatchIndex, MatMeshPair::Hash> LUT;
+    BatchLUT_t LUT;
     BatchIndex freeIndex = (BatchIndex)0;
 };

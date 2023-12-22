@@ -1,5 +1,18 @@
+#define NO_DEFAULT_PUSH_CONSTANTS
 #include "../includes/Bindless/Setup.hlsl"
 #include "../includes/GPUScene/Setup.hlsl"
+
+DefinePushConstants(
+    ResrcHandle< ConstantBuffer<RenderPassData> > renderInfoBuffer;
+    ResrcHandle< StructuredBuffer<uint> > perBatchOffsetBuffer;
+    ResrcHandle< StructuredBuffer<InstanceInfo> > sortedInstanceBuffer;
+    uint batchIndex;
+);
+
+struct Payload
+{
+    uint batchStartInInstanceBuffer;
+};
 
 /*
     Not sure if semantic names are needed when compiling only to spirv
@@ -25,12 +38,17 @@ struct VertexOut
 void main(
     uint threadID : SV_GroupThreadID,
     uint groupID : SV_GroupID,
+    in payload Payload payload,
     out vertices VertexOut verts[MAX_VERTS],
     out indices uint3 tris[MAX_TRIS]
     // out primitives PrimitiveAttributes prims[MAX_OUTPUT_PRIMITIVES]
 )
 {
-    const InstanceInfo instanceInfo = getInstanceInfo(pushConstants.indexInInstanceBuffer);
+    #define instanceBuffer StrucBuffFromHandle(InstanceInfo, pushConstants.sortedInstanceBuffer)
+    #define batchOffsetBuffer StrucBuffFromHandle(uint, pushConstants.perBatchOffsetBuffer)
+    // after sorting entries are shifted by 1 index
+    uint batchStartInInstanceBuffer = pushConstants.batchIndex == 0 ? 0 : batchOffsetBuffer[pushConstants.batchIndex-1];
+    const InstanceInfo instanceInfo = instanceBuffer[batchStartInInstanceBuffer];
     const MeshData meshData = getMeshData(instanceInfo);
 
     #define vertexPositions StrucBuffFromHandle(float3, meshData.positionBuffer)
@@ -68,7 +86,7 @@ void main(
         );
     }
 
-    ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
+    ConstantBuffer<RenderPassData> renderPassData = pushConstants.renderInfoBuffer.get();
 
     const uint vertexLoops = (MAX_VERTS + GROUP_SIZE - 1) / GROUP_SIZE;
     for (uint loop = 0; loop < vertexLoops; loop++)
@@ -82,7 +100,7 @@ void main(
         // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
 
         VertexOut vsOut = (VertexOut)0;
-        vsOut.instanceAndMeshletIndex.x = pushConstants.indexInInstanceBuffer;
+        vsOut.instanceAndMeshletIndex.x = batchStartInInstanceBuffer;
         vsOut.instanceAndMeshletIndex.y = groupID;
 
         const float3 vertPos = vertexPositions[vertexIndex];

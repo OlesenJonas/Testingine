@@ -4,12 +4,19 @@
         https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#appendix-b-brdf-implementation
         https://github.com/KhronosGroup/glTF-Sample-Viewer
 */
-
+#define NO_DEFAULT_PUSH_CONSTANTS
 #include "../includes/Bindless/Setup.hlsl"
 #include "../includes/GPUScene/Setup.hlsl"
 #include "../includes/MaterialParams.hlsl"
 #include "../includes/NormalMapping.hlsl"
 #include "PBR.hlsl"
+
+DefinePushConstants(
+    ResrcHandle< ConstantBuffer<RenderPassData> > renderInfoBuffer;
+    ResrcHandle< StructuredBuffer<uint> > perBatchOffsetBuffer;
+    ResrcHandle< StructuredBuffer<InstanceInfo> > sortedInstanceBuffer;
+    uint batchIndex;
+);
 
 MaterialParameters(
     /* TODO: should be part of scene information, not material ? */
@@ -56,13 +63,13 @@ struct VSOutput
 
 float4 main(VSOutput input) : SV_TARGET
 {
-    const InstanceInfo instanceInfo = getInstanceInfo(input.instanceAndMeshletIndex.x);
+    const InstanceInfo instanceInfo = pushConstants.sortedInstanceBuffer.get()[input.instanceAndMeshletIndex.x];
     const MeshData meshData = getMeshDataBuffer()[instanceInfo.meshDataIndex];
 
     ConstantBuffer<MaterialParameters> params = getMaterialParameters(instanceInfo);
     ConstantBuffer<MaterialInstanceParameters> instanceParams = getMaterialInstanceParameters(instanceInfo);
 
-    ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
+    ConstantBuffer<RenderPassData> renderPassData = pushConstants.renderInfoBuffer.get();
     const float3 cameraPositionWS = renderPassData.cameraPositionWS;
 
     //Dont like this, optimally would have different shader variants were correct uvs are selected at compile time

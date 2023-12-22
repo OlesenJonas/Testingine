@@ -355,29 +355,29 @@ void Editor::createDefaultAssets()
     MaterialInstance::setResource(
         cubeSkyboxMatInst, "cubeMap", *resourceManager.get<ResourceIndex>(skyboxTextures.cubeMap));
 
-    auto skybox = scene.createEntity();
-    {
-        auto* meshRenderer = skybox.addComponent<MeshRenderer>();
-        meshRenderer->subMeshes[0] = resourceManager.getMesh("DefaultCube");
-        assert(!meshRenderer->subMeshes[1].isNonNull());
-        // renderInfo->materialInstance = equiSkyboxMatInst;
-        meshRenderer->materialInstances[0] = cubeSkyboxMatInst;
-    }
+    // auto skybox = scene.createEntity();
+    // {
+    //     auto* meshRenderer = skybox.addComponent<MeshRenderer>();
+    //     meshRenderer->subMeshes[0] = resourceManager.getMesh("DefaultCube");
+    //     assert(!meshRenderer->subMeshes[1].isNonNull());
+    //     // renderInfo->materialInstance = equiSkyboxMatInst;
+    //     meshRenderer->materialInstances[0] = cubeSkyboxMatInst;
+    // }
 
-    auto triangleObject = scene.createEntity();
-    {
-        auto* meshRenderer = triangleObject.addComponent<MeshRenderer>();
-        meshRenderer->subMeshes[0] = triangleMesh;
-        meshRenderer->materialInstances[0] = unlitMatInst;
-        auto* transform = triangleObject.getComponent<Transform>();
-        transform->position = glm::vec3{3.0f, 0.0f, 0.0f};
-        transform->calculateLocalTransformMatrix();
-        // dont like having to call this manually
-        transform->localToWorld = transform->localTransform;
+    // auto triangleObject = scene.createEntity();
+    // {
+    //     auto* meshRenderer = triangleObject.addComponent<MeshRenderer>();
+    //     meshRenderer->subMeshes[0] = triangleMesh;
+    //     meshRenderer->materialInstances[0] = unlitMatInst;
+    //     auto* transform = triangleObject.getComponent<Transform>();
+    //     transform->position = glm::vec3{3.0f, 0.0f, 0.0f};
+    //     transform->calculateLocalTransformMatrix();
+    //     // dont like having to call this manually
+    //     transform->localToWorld = transform->localTransform;
 
-        assert(meshRenderer->subMeshes[0].isNonNull());
-        assert(meshRenderer->materialInstances[0].isNonNull());
-    }
+    //     assert(meshRenderer->subMeshes[0].isNonNull());
+    //     assert(meshRenderer->materialInstances[0].isNonNull());
+    // }
 }
 
 void Editor::createDefaultSamplers()
@@ -504,6 +504,7 @@ void Editor::createDefaultMaterialAndInstances()
         },
         {
             .debugName = "PBRBasic",
+            .taskShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.task"},
             .meshShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.mesh"},
             .fragmentShader = {.sourcePath = SHADERS_PATH "/PBR/PBRBasic.frag"},
             .colorFormats = {offscreenRTFormat},
@@ -923,8 +924,10 @@ void Editor::update()
     void* renderPassDataPtr = *resourceManager.get<void*>(getCurrentFrameData().renderPassDataBuffer);
     memcpy(renderPassDataPtr, &renderPassData, sizeof(RenderPassData));
 
-    auto offscreenFuture =
-        threadPool.queueJob([editor = this](int threadIndex) { return editor->drawScene(threadIndex); });
+    // auto offscreenFuture =
+    // threadPool.queueJob([editor = this](int threadIndex) { return editor->drawSceneNaive(threadIndex); });
+    auto offscreenFuture = threadPool.queueJob([editor = this](int threadIndex)
+                                               { return editor->drawSceneBatchesBasic(threadIndex); });
     auto onscreenFuture =
         threadPool.queueJob([editor = this](int threadIndex) { return editor->drawUI(threadIndex); });
 
@@ -939,7 +942,7 @@ void Editor::update()
     FrameMark;
 }
 
-VkCommandBuffer Editor::drawScene(int threadIndex)
+VkCommandBuffer Editor::drawSceneNaive(int threadIndex)
 {
     ZoneScoped;
     VkCommandBuffer offscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
@@ -1016,6 +1019,66 @@ VkCommandBuffer Editor::drawScene(int threadIndex)
                 gfxDevice.drawMeshlets(offscreenCmdBuffer, meshletCount);
             }
         });
+
+    gfxDevice.endRendering(offscreenCmdBuffer);
+    gfxDevice.endCommandBuffer(offscreenCmdBuffer);
+
+    return offscreenCmdBuffer;
+};
+
+VkCommandBuffer Editor::drawSceneBatchesBasic(int threadIndex)
+{
+    ZoneScoped;
+    VkCommandBuffer offscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
+
+    gfxDevice.insertBarriers(
+        offscreenCmdBuffer,
+        {
+            Barrier::FromImage{
+                .texture = depthTexture,
+                .stateBefore = ResourceState::DepthStencilTarget,
+                .stateAfter = ResourceState::DepthStencilTarget,
+                .allowDiscardOriginal = true,
+            },
+            Barrier::FromImage{
+                .texture = offscreenTexture,
+                .stateBefore = ResourceState::SampleSourceGraphics,
+                .stateAfter = ResourceState::Rendertarget,
+                .allowDiscardOriginal = true,
+            },
+        });
+
+    gfxDevice.beginRendering(
+        offscreenCmdBuffer,
+        {ColorTarget{.texture = offscreenTexture, .loadOp = RenderTarget::LoadOp::Clear}},
+        DepthTarget{.texture = depthTexture, .loadOp = RenderTarget::LoadOp::Clear});
+
+    struct BatchRenderingPC
+    {
+        ResourceIndex renderInfoBuffer;
+        ResourceIndex perBatchOffsetBuffer;
+        ResourceIndex sortedInstanceBuffer;
+        uint32_t batchIndex;
+    } batchRenderingPC{
+        .renderInfoBuffer = *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer),
+        .perBatchOffsetBuffer = *resourceManager.get<ResourceIndex>(perBatchElementCountBuffer),
+        .sortedInstanceBuffer = *resourceManager.get<ResourceIndex>(gpuInstanceInfoBuffer.sortedBuffer),
+        .batchIndex = 0,
+    };
+
+    gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(batchRenderingPC), &batchRenderingPC);
+
+    for(const auto& [matMeshPair, index] : batchManager.getLUT())
+    {
+        const Mesh::Handle mesh = matMeshPair.mesh;
+        const Material::Handle mat = matMeshPair.mat;
+        batchRenderingPC.batchIndex = index;
+        gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, *resourceManager.get<VkPipeline>(mat));
+        gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(batchRenderingPC), &batchRenderingPC);
+        // start just one task shader (which in turn decides how many meshlets to render based on instance count)
+        //      no culling happening here
+        gfxDevice.drawMeshlets(offscreenCmdBuffer, 1);
+    }
 
     gfxDevice.endRendering(offscreenCmdBuffer);
     gfxDevice.endCommandBuffer(offscreenCmdBuffer);
