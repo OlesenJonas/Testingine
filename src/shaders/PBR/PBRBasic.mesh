@@ -37,7 +37,7 @@ struct VertexOut
 [OutputTopology("triangle")]
 void main(
     uint threadID : SV_GroupThreadID,
-    uint groupID : SV_GroupID,
+    uint2 groupID : SV_GroupID,
     in payload Payload payload,
     out vertices VertexOut verts[MAX_VERTS],
     out indices uint3 tris[MAX_TRIS]
@@ -46,16 +46,15 @@ void main(
 {
     #define instanceBuffer StrucBuffFromHandle(InstanceInfo, pushConstants.sortedInstanceBuffer)
     #define batchOffsetBuffer StrucBuffFromHandle(uint, pushConstants.perBatchOffsetBuffer)
-    // after sorting entries are shifted by 1 index
-    uint batchStartInInstanceBuffer = pushConstants.batchIndex == 0 ? 0 : batchOffsetBuffer[pushConstants.batchIndex-1];
-    const InstanceInfo instanceInfo = instanceBuffer[batchStartInInstanceBuffer];
+    uint instanceIndex = payload.batchStartInInstanceBuffer + groupID.y;
+    const InstanceInfo instanceInfo = instanceBuffer[instanceIndex];
     const MeshData meshData = getMeshData(instanceInfo);
 
     #define vertexPositions StrucBuffFromHandle(float3, meshData.positionBuffer)
     const float3 vertPos = vertexPositions[0];
     #define vertexAttributes ByteBuffFromHandle(meshData.attributesBuffer)
 
-    MeshletDescriptor m = StrucBuffFromHandle(MeshletDescriptor, meshData.meshletDescriptors)[groupID];
+    MeshletDescriptor m = StrucBuffFromHandle(MeshletDescriptor, meshData.meshletDescriptors)[groupID.x];
     #define meshletUniqueVertexIndices StrucBuffFromHandle(uint, meshData.meshletUniqueVertexIndices)
     #define meshletPrimitiveIndices StrucBuffFromHandle(uint, meshData.meshletPrimitiveIndices)
 
@@ -100,8 +99,8 @@ void main(
         // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
 
         VertexOut vsOut = (VertexOut)0;
-        vsOut.instanceAndMeshletIndex.x = batchStartInInstanceBuffer;
-        vsOut.instanceAndMeshletIndex.y = groupID;
+        vsOut.instanceAndMeshletIndex.x = instanceIndex;
+        vsOut.instanceAndMeshletIndex.y = groupID.x;
 
         const float3 vertPos = vertexPositions[vertexIndex];
         float4 worldPos = mul(instanceInfo.transform, float4(vertPos,1.0));

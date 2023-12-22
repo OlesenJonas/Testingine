@@ -23,6 +23,8 @@ void main()
     #define batchOffsetBuffer StrucBuffFromHandle(uint, pushConstants.perBatchOffsetBuffer)
     // after sorting entries are shifted by 1 index
     uint batchStartInInstanceBuffer = pushConstants.batchIndex == 0 ? 0 : batchOffsetBuffer[pushConstants.batchIndex-1];
+    // delta from next one to this one is amount of instances
+    uint instanceCount = batchOffsetBuffer[pushConstants.batchIndex] - batchStartInInstanceBuffer;
     
     //access any instance to get access to meshlet count
     const InstanceInfo aInstance = instanceBuffer[batchStartInInstanceBuffer];
@@ -31,5 +33,5 @@ void main()
 
     payload.batchStartInInstanceBuffer = batchStartInInstanceBuffer;
 
-    DispatchMesh(meshletCount, 1, 1, payload);
+    DispatchMesh(meshletCount, instanceCount, 1, payload);
 }
