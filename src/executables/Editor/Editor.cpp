@@ -156,7 +156,28 @@ Editor::Editor()
                 };
                 meshRenderer->instanceBufferIndices[i] = instanceBufferIndex;
 
-                batchIndicesBufferCPU[instanceBufferIndex] = batchManager.getBatchIndex(mat, mesh);
+                batchManager.createBatch(mat, mesh);
+            }
+        });
+    // TODO: better way than 2nd loop?
+    //          could "createBatch" earlier, during mesh load already
+    ecs.forEach<MeshRenderer, Transform>(
+        [&](MeshRenderer* meshRenderer, Transform* transform)
+        {
+            for(int i = 0; i < Mesh::MAX_SUBMESHES; i++)
+            {
+                const Mesh::Handle mesh = meshRenderer->subMeshes[i];
+                if(!mesh.isNonNull())
+                {
+                    break;
+                }
+                assert(resourceManager.getMeshPool().isHandleValid(mesh));
+                const MaterialInstance::Handle matInst = meshRenderer->materialInstances[i];
+                const Material::Handle mat = *rm.get<Material::Handle>(matInst);
+
+                assert(meshRenderer->instanceBufferIndices[i] != 0xFFFFFFFF);
+                batchIndicesBufferCPU[meshRenderer->instanceBufferIndices[i]] =
+                    batchManager.getBatchIndex(mat, mesh);
             }
         });
     gfxDevice.copyBuffer(mainCmdBuffer, instanceAllocBuffer, gpuInstanceInfoBuffer.unsortedBuffer);
@@ -1098,11 +1119,10 @@ VkCommandBuffer Editor::drawSceneBatches(int threadIndex)
 
     gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(batchRenderingPC), &batchRenderingPC);
 
-    for(const auto& [matMeshPair, index] : batchManager.getLUT())
+    for(int i = 0; i < batchManager.getBatchList().size(); i++)
     {
-        const Mesh::Handle mesh = matMeshPair.mesh;
-        const Material::Handle mat = matMeshPair.mat;
-        batchRenderingPC.batchIndex = index;
+        const auto& [mat, mesh] = batchManager.getBatchList()[i];
+        batchRenderingPC.batchIndex = i;
         gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, *resourceManager.get<VkPipeline>(mat));
         gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(batchRenderingPC), &batchRenderingPC);
         // start just one task shader (which in turn decides how many meshlets to render based on instance count)
@@ -1110,7 +1130,7 @@ VkCommandBuffer Editor::drawSceneBatches(int threadIndex)
         // gfxDevice.drawMeshlets(offscreenCmdBuffer, 1);
         constexpr auto paddedCmdSize = 4 * sizeof(uint32_t);
         gfxDevice.drawMeshTasksIndirect(
-            offscreenCmdBuffer, indirectTaskCommandsBuffer, index * paddedCmdSize, paddedCmdSize, 1);
+            offscreenCmdBuffer, indirectTaskCommandsBuffer, i * paddedCmdSize, paddedCmdSize, 1);
     }
 
     gfxDevice.endRendering(offscreenCmdBuffer);

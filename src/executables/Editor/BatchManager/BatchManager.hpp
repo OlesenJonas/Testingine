@@ -12,33 +12,21 @@ class BatchManager
 {
   public:
     using BatchIndex = uint32_t;
+    using MatMeshTuple = CTuple<Material::Handle, Mesh::Handle>;
+    using BatchList = std::vector<MatMeshTuple>;
 
-    BatchManager() = default;
+    // returns ​true if the first argument is less than (i.e. is ordered before) the second
+    static bool tupleLess(const MatMeshTuple& left, const MatMeshTuple& right);
 
-    inline BatchIndex getBatchCount() const { return freeIndex; }
-    BatchIndex getBatchIndex(Material::Handle material, Mesh::Handle mesh);
+    BatchManager();
 
-    struct MatMeshPair
-    {
-        Material::Handle mat;
-        Mesh::Handle mesh;
-
-        static_assert(sizeof(Material::Handle) == sizeof(uint32_t));
-
-        bool operator==(const MatMeshPair&) const = default;
-
-        struct Hash
-        {
-            [[nodiscard]] inline uint64_t operator()(const MatMeshPair& pair) const
-            {
-                return ((uint64_t)pair.mat.hash() << 32u) + pair.mesh.hash();
-            }
-        };
-    };
-    using BatchLUT_t = std::unordered_map<MatMeshPair, BatchIndex, MatMeshPair::Hash>;
-    const BatchLUT_t& getLUT();
+    inline BatchIndex getBatchCount() const { return batches.size(); }
+    void createBatch(Material::Handle material, Mesh::Handle mesh);
+    BatchIndex getBatchIndex(Material::Handle mat, Mesh::Handle mesh) const;
 
   private:
-    BatchLUT_t LUT;
-    BatchIndex freeIndex = (BatchIndex)0;
+    BatchList batches;
+
+  public:
+    const BatchList& getBatchList() const;
 };
