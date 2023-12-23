@@ -189,7 +189,15 @@ Editor::Editor()
     gfxDevice.pushConstants(mainCmdBuffer, sizeof(countBatchElementsPC), &countBatchElementsPC);
     gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(gpuInstanceInfoBuffer.freeIndex, 32u));
 
-    // prefix sum batch counts
+    // prefix sum batch counts (and write indirect commands while at it)
+
+    indirectTaskCommandsBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
+        .debugName = "indirectTaskCommandsBuffer",
+        .size = maxBatchCount * (4 * sizeof(uint32_t)),
+        .memoryType = Buffer::MemoryType::GPU,
+        .allStates = ResourceState::Storage | ResourceState::IndirectArgument,
+        .initialState = ResourceState::Storage,
+    });
 
     gfxDevice.insertBarriers(
         mainCmdBuffer,
@@ -208,9 +216,11 @@ Editor::Editor()
         {
             ResourceIndex perBatchElementCountBuffer;
             uint32_t batchCount;
+            ResourceIndex indirectTaskCommandsBuffer;
         } batchCountPrefixSumPC{
             .perBatchElementCountBuffer = *rm.get<ResourceIndex>(perBatchElementCountBuffer),
             .batchCount = batchManager.getBatchCount(),
+            .indirectTaskCommandsBuffer = *rm.get<ResourceIndex>(indirectTaskCommandsBuffer),
         };
         ComputeShader* prefixSumShader = resourceManager.get(batchCountPrefixSumShader);
         gfxDevice.setComputePipelineState(mainCmdBuffer, prefixSumShader->pipeline);
@@ -258,7 +268,17 @@ Editor::Editor()
     gfxDevice.pushConstants(mainCmdBuffer, sizeof(sortInstancesPC), &sortInstancesPC);
     gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(gpuInstanceInfoBuffer.freeIndex, 32u));
 
-    // TODO: barrier: transition en enable use as indirect buffer
+    // TODO: more barrierst needed, check all buffers again
+
+    gfxDevice.insertBarriers(
+        mainCmdBuffer,
+        {
+            Barrier::FromBuffer{
+                .buffer = indirectTaskCommandsBuffer,
+                .stateBefore = ResourceState::StorageCompute,
+                .stateAfter = ResourceState::IndirectArgument,
+            },
+        });
 
     TracyCZoneEnd(zoneGPUScene);
 
@@ -926,8 +946,8 @@ void Editor::update()
 
     // auto offscreenFuture =
     // threadPool.queueJob([editor = this](int threadIndex) { return editor->drawSceneNaive(threadIndex); });
-    auto offscreenFuture = threadPool.queueJob([editor = this](int threadIndex)
-                                               { return editor->drawSceneBatchesBasic(threadIndex); });
+    auto offscreenFuture =
+        threadPool.queueJob([editor = this](int threadIndex) { return editor->drawSceneBatches(threadIndex); });
     auto onscreenFuture =
         threadPool.queueJob([editor = this](int threadIndex) { return editor->drawUI(threadIndex); });
 
@@ -1026,7 +1046,7 @@ VkCommandBuffer Editor::drawSceneNaive(int threadIndex)
     return offscreenCmdBuffer;
 };
 
-VkCommandBuffer Editor::drawSceneBatchesBasic(int threadIndex)
+VkCommandBuffer Editor::drawSceneBatches(int threadIndex)
 {
     ZoneScoped;
     VkCommandBuffer offscreenCmdBuffer = gfxDevice.beginCommandBuffer(threadIndex);
@@ -1077,7 +1097,10 @@ VkCommandBuffer Editor::drawSceneBatchesBasic(int threadIndex)
         gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(batchRenderingPC), &batchRenderingPC);
         // start just one task shader (which in turn decides how many meshlets to render based on instance count)
         //      no culling happening here
-        gfxDevice.drawMeshlets(offscreenCmdBuffer, 1);
+        // gfxDevice.drawMeshlets(offscreenCmdBuffer, 1);
+        constexpr auto paddedCmdSize = 4 * sizeof(uint32_t);
+        gfxDevice.drawMeshTasksIndirect(
+            offscreenCmdBuffer, indirectTaskCommandsBuffer, index * paddedCmdSize, paddedCmdSize, 1);
     }
 
     gfxDevice.endRendering(offscreenCmdBuffer);

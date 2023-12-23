@@ -23,6 +23,7 @@
 PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
 PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
 PFN_vkCmdDrawMeshTasksEXT vkCmdDrawMeshTasksEXTpfn;
+PFN_vkCmdDrawMeshTasksIndirectEXT vkCmdDrawMeshTasksIndirectEXTpfn;
 
 void VulkanDevice::init(GLFWwindow* window)
 {
@@ -120,6 +121,8 @@ void VulkanDevice::initVulkan()
     pfnCmdEndDebugUtilsLabelEXT =
         (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(instance, "vkCmdEndDebugUtilsLabelEXT");
     vkCmdDrawMeshTasksEXTpfn = (PFN_vkCmdDrawMeshTasksEXT)vkGetInstanceProcAddr(instance, "vkCmdDrawMeshTasksEXT");
+    vkCmdDrawMeshTasksIndirectEXTpfn =
+        (PFN_vkCmdDrawMeshTasksIndirectEXT)vkGetInstanceProcAddr(instance, "vkCmdDrawMeshTasksIndirectEXT");
 
     queueFamilyIndices = deviceFinder.getQueueFamilyIndices();
     graphicsAndComputeQueueFamily = queueFamilyIndices.graphicsAndComputeFamily.value();
@@ -1802,6 +1805,12 @@ void VulkanDevice::drawMeshlets(
     VkCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
 {
     vkCmdDrawMeshTasksEXTpfn(cmd, groupCountX, groupCountY, groupCountZ);
+}
+
+void VulkanDevice::drawMeshTasksIndirect(
+    VkCommandBuffer cmd, Buffer::Handle buffer, size_t byteOffset, uint32_t byteStride, uint32_t drawCount)
+{
+    vkCmdDrawMeshTasksIndirectEXTpfn(cmd, *get<VkBuffer>(buffer), byteOffset, drawCount, byteStride);
 }
 
 void VulkanDevice::drawImGui(VkCommandBuffer cmd) { ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd); }

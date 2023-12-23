@@ -170,6 +170,8 @@ class VulkanDevice
     void drawImGui(VkCommandBuffer cmd);
     void
     drawMeshlets(VkCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY = 1, uint32_t groupCountZ = 1);
+    void drawMeshTasksIndirect(
+        VkCommandBuffer cmd, Buffer::Handle buffer, size_t byteOffset, uint32_t byteStride, uint32_t drawCount);
 
     void presentSwapchain();
 
@@ -388,3 +390,4 @@ extern PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
 extern PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
 // Mesh Shading
 extern PFN_vkCmdDrawMeshTasksEXT vkCmdDrawMeshTasksEXTpfn;
+extern PFN_vkCmdDrawMeshTasksIndirectEXT vkCmdDrawMeshTasksIndirectEXTpfn;

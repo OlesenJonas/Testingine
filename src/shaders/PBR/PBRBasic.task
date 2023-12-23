@@ -11,27 +11,27 @@ DefinePushConstants(
 
 struct Payload
 {
-    uint batchStartInInstanceBuffer;
+    uint instanceIndex;
 };
 
 groupshared Payload payload;
 
 [NumThreads(1, 1, 1)]
-void main()
+void main(
+    uint2 groupID : SV_GroupID
+)
 {
     #define instanceBuffer StrucBuffFromHandle(InstanceInfo, pushConstants.sortedInstanceBuffer)
     #define batchOffsetBuffer StrucBuffFromHandle(uint, pushConstants.perBatchOffsetBuffer)
     // after sorting entries are shifted by 1 index
     uint batchStartInInstanceBuffer = pushConstants.batchIndex == 0 ? 0 : batchOffsetBuffer[pushConstants.batchIndex-1];
-    // delta from next one to this one is amount of instances
-    uint instanceCount = batchOffsetBuffer[pushConstants.batchIndex] - batchStartInInstanceBuffer;
     
     //access any instance to get access to meshlet count
     const InstanceInfo aInstance = instanceBuffer[batchStartInInstanceBuffer];
     const MeshData meshData = getMeshData(aInstance);
     const uint meshletCount = meshData.meshletCount;
 
-    payload.batchStartInInstanceBuffer = batchStartInInstanceBuffer;
+    payload.instanceIndex = batchStartInInstanceBuffer + groupID.y;
 
-    DispatchMesh(meshletCount, instanceCount, 1, payload);
+    DispatchMesh(meshletCount, 1, 1, payload);
 }

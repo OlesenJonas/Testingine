@@ -3,9 +3,19 @@
 
 //TODO: test launching just one wave and doing loops vs launching all (as is the case now)
 
+struct DrawMeshTasksIndirectCommand
+{
+    uint    x;
+    uint    y;
+    uint    z;
+    uint  pad;
+};
+ENABLE_BINDLESS_BUFFER_ACCESS(DrawMeshTasksIndirectCommand)
+
 DefinePushConstants(
     ResrcHandle< RWStructuredBuffer<uint> > perBatchElementCountBuffer;
     uint batchCount;
+    ResrcHandle< RWStructuredBuffer<DrawMeshTasksIndirectCommand> > indirectTaskCommands;
 );
 
 // TODO: get from device limits, set as spec constant
@@ -38,6 +48,14 @@ void main(
     // setup guarantees that size of perBatchCounts is integer multiple of wave size
     // so dont need to bounds check
     uint batchCount = perBatchCounts[globalIndexFromWave];
+    RWStructuredBuffer<DrawMeshTasksIndirectCommand> indirectCommands = pushConstants.indirectTaskCommands.get();
+    DrawMeshTasksIndirectCommand cmd;
+    cmd.x = 1;
+    cmd.y = batchCount;
+    cmd.z = 1;
+    cmd.pad = globalIndexFromWave;
+    indirectCommands[globalIndexFromWave] = cmd;
+
     uint countSumUpTo = WavePrefixSum(batchCount);
 
     if(WaveGetLaneIndex() == WaveGetLaneCount() - 1)

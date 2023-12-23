@@ -11,7 +11,7 @@ DefinePushConstants(
 
 struct Payload
 {
-    uint batchStartInInstanceBuffer;
+    uint instanceIndex;
 };
 
 /*
@@ -46,8 +46,7 @@ void main(
 {
     #define instanceBuffer StrucBuffFromHandle(InstanceInfo, pushConstants.sortedInstanceBuffer)
     #define batchOffsetBuffer StrucBuffFromHandle(uint, pushConstants.perBatchOffsetBuffer)
-    uint instanceIndex = payload.batchStartInInstanceBuffer + groupID.y;
-    const InstanceInfo instanceInfo = instanceBuffer[instanceIndex];
+    const InstanceInfo instanceInfo = instanceBuffer[payload.instanceIndex];
     const MeshData meshData = getMeshData(instanceInfo);
 
     #define vertexPositions StrucBuffFromHandle(float3, meshData.positionBuffer)
@@ -99,7 +98,7 @@ void main(
         // const mat4 transformMatrix = getBuffer(RenderPassData, bindlessIndices.renderPassDataBuffer).projView * modelMatrix;
 
         VertexOut vsOut = (VertexOut)0;
-        vsOut.instanceAndMeshletIndex.x = instanceIndex;
+        vsOut.instanceAndMeshletIndex.x = payload.instanceIndex;
         vsOut.instanceAndMeshletIndex.y = groupID.x;
 
         const float3 vertPos = vertexPositions[vertexIndex];

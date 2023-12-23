@@ -73,7 +73,7 @@ class Editor final : public Application
     generateSkyboxTextures(uint32_t hdriCubeRes, uint32_t irradianceRes, uint32_t prefilteredEnvMapBaseSize);
 
     VkCommandBuffer drawSceneNaive(int threadIndex);
-    VkCommandBuffer drawSceneBatchesBasic(int threadIndex);
+    VkCommandBuffer drawSceneBatches(int threadIndex);
     VkCommandBuffer drawUI(int threadIndex);
 
     // TODO: store somewhere else and keep synced with shader code version of struct
@@ -120,6 +120,7 @@ class Editor final : public Application
     // should be multiple of subgroup size for simplicity !
     constexpr static uint32_t maxBatchCount = 128;
     Buffer::Handle perBatchElementCountBuffer;
+    Buffer::Handle indirectTaskCommandsBuffer;
     Handle<ComputeShader> countBatchElementsShader;
     Handle<ComputeShader> batchCountPrefixSumShader;
     Handle<ComputeShader> sortInstancesIntoBatchesShader;
