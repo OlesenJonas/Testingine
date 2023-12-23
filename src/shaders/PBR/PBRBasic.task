@@ -11,12 +11,14 @@ DefinePushConstants(
 
 struct Payload
 {
+    //TODO: instead of just offset, cull and send list of meshlets that survived
+    uint meshletOffset;
     uint instanceIndex;
 };
 
 groupshared Payload payload;
 
-[NumThreads(1, 1, 1)]
+[NumThreads(32, 1, 1)]
 void main(
     uint2 groupID : SV_GroupID
 )
@@ -25,13 +27,18 @@ void main(
     #define batchOffsetBuffer StrucBuffFromHandle(uint, pushConstants.perBatchOffsetBuffer)
     // after sorting entries are shifted by 1 index
     uint batchStartInInstanceBuffer = pushConstants.batchIndex == 0 ? 0 : batchOffsetBuffer[pushConstants.batchIndex-1];
-    
+
     //access any instance to get access to meshlet count
     const InstanceInfo aInstance = instanceBuffer[batchStartInInstanceBuffer];
     const MeshData meshData = getMeshData(aInstance);
     const uint meshletCount = meshData.meshletCount;
 
+    //TODO: cull meshlets
+    payload.meshletOffset = groupID.x * 32;
     payload.instanceIndex = batchStartInInstanceBuffer + groupID.y;
 
-    DispatchMesh(meshletCount, 1, 1, payload);
+    uint meshletsLeft = meshletCount - payload.meshletOffset; 
+    uint actualMeshCount = min(meshletsLeft, 32u);
+
+    DispatchMesh(32, 1, 1, payload);
 }

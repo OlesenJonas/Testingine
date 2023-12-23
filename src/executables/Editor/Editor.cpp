@@ -174,23 +174,6 @@ Editor::Editor()
         .initialState = ResourceState::Storage,
         .initialData = {(uint8_t*)zeroArray.data(), SizeInBytes(zeroArray)},
     });
-    struct CountBatchElementsPC
-    {
-        ResourceIndex batchIndicesBuffer;
-        ResourceIndex perBatchElementCountBuffer;
-        uint32_t totalInstances;
-    } countBatchElementsPC{
-        .batchIndicesBuffer = *rm.get<ResourceIndex>(batchIndicesBuffer),
-        .perBatchElementCountBuffer = *rm.get<ResourceIndex>(perBatchElementCountBuffer),
-        .totalInstances = gpuInstanceInfoBuffer.freeIndex,
-    };
-    ComputeShader* countingShader = resourceManager.get(countBatchElementsShader);
-    gfxDevice.setComputePipelineState(mainCmdBuffer, countingShader->pipeline);
-    gfxDevice.pushConstants(mainCmdBuffer, sizeof(countBatchElementsPC), &countBatchElementsPC);
-    gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(gpuInstanceInfoBuffer.freeIndex, 32u));
-
-    // prefix sum batch counts (and write indirect commands while at it)
-
     indirectTaskCommandsBuffer = resourceManager.createBuffer(Buffer::CreateInfo{
         .debugName = "indirectTaskCommandsBuffer",
         .size = maxBatchCount * (4 * sizeof(uint32_t)),
@@ -198,12 +181,39 @@ Editor::Editor()
         .allStates = ResourceState::Storage | ResourceState::IndirectArgument,
         .initialState = ResourceState::Storage,
     });
+    struct CountBatchElementsPC
+    {
+        ResourceIndex unsortedInstanceInfoBuffer;
+        ResourceIndex meshDataBuffer;
+        ResourceIndex batchIndicesBuffer;
+        ResourceIndex perBatchElementCountBuffer;
+        ResourceIndex indirectTaskCommandsBuffer;
+        uint32_t totalInstances;
+    } countBatchElementsPC{
+        .unsortedInstanceInfoBuffer = *rm.get<ResourceIndex>(gpuInstanceInfoBuffer.unsortedBuffer),
+        .meshDataBuffer = *rm.get<ResourceIndex>(gpuMeshDataBuffer.buffer),
+        .batchIndicesBuffer = *rm.get<ResourceIndex>(batchIndicesBuffer),
+        .perBatchElementCountBuffer = *rm.get<ResourceIndex>(perBatchElementCountBuffer),
+        .indirectTaskCommandsBuffer = *rm.get<ResourceIndex>(indirectTaskCommandsBuffer),
+        .totalInstances = gpuInstanceInfoBuffer.freeIndex,
+    };
+    ComputeShader* countingShader = resourceManager.get(countBatchElementsShader);
+    gfxDevice.setComputePipelineState(mainCmdBuffer, countingShader->pipeline);
+    gfxDevice.pushConstants(mainCmdBuffer, sizeof(countBatchElementsPC), &countBatchElementsPC);
+    gfxDevice.dispatchCompute(mainCmdBuffer, UintDivAndCeil(gpuInstanceInfoBuffer.freeIndex, 32u));
+
+    // prefix sum batch counts (and write indirect command instance count while at it)
 
     gfxDevice.insertBarriers(
         mainCmdBuffer,
         {
             Barrier::FromBuffer{
                 .buffer = perBatchElementCountBuffer,
+                .stateBefore = ResourceState::StorageCompute,
+                .stateAfter = ResourceState::StorageCompute,
+            },
+            Barrier::FromBuffer{
+                .buffer = indirectTaskCommandsBuffer,
                 .stateBefore = ResourceState::StorageCompute,
                 .stateAfter = ResourceState::StorageCompute,
             },

@@ -1,11 +1,26 @@
 #define NO_DEFAULT_PUSH_CONSTANTS
 #include "../includes/Bindless/Setup.hlsl"
+#include "../includes/GPUScene/Setup.hlsl"
+
+struct DrawMeshTasksIndirectCommand
+{
+    uint    x;
+    uint    y;
+    uint    z;
+    uint  pad;
+};
+ENABLE_BINDLESS_BUFFER_ACCESS(DrawMeshTasksIndirectCommand)
 
 DefinePushConstants(
+    ResrcHandle< StructuredBuffer<InstanceInfo> > unsortedInstancesBuffer;
+    ResrcHandle< StructuredBuffer<MeshData> > meshDataBuffer;
     ResrcHandle< StructuredBuffer<uint> > batchIndicesBuffer;
     ResrcHandle< RWStructuredBuffer<uint> > perBatchElementCountBuffer;
+    ResrcHandle< RWStructuredBuffer<DrawMeshTasksIndirectCommand> > indirectTaskCommandsBuffer;
     uint totalInstances;
 );
+
+//TODO: cull instances
 
 [numthreads(32, 1, 1)]
 void main(uint globalThreadID : SV_DispatchThreadID)
@@ -15,6 +30,13 @@ void main(uint globalThreadID : SV_DispatchThreadID)
         
     uint batchIndex = pushConstants.batchIndicesBuffer.get()[globalThreadID];
     RWStructuredBuffer<uint> countBuffer = pushConstants.perBatchElementCountBuffer.get();
+
+    StructuredBuffer<InstanceInfo> instanceBuffer = pushConstants.unsortedInstancesBuffer.get();
+    StructuredBuffer<MeshData> meshDataBuffer = pushConstants.meshDataBuffer.get();
+    RWStructuredBuffer<DrawMeshTasksIndirectCommand> indirectCmdsBuffer = pushConstants.indirectTaskCommandsBuffer.get();
+    indirectCmdsBuffer[batchIndex].x = 
+        (meshDataBuffer[instanceBuffer[globalThreadID].meshDataIndex].meshletCount + 32 - 1) / 32;
+
     //todo consecutive instances likely share same index, so could try to use subgroup ops to reduce
     //     number of atomic calls needed!
     //  some combination of bitmask and findFirst?

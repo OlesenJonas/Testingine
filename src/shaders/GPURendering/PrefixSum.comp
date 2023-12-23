@@ -50,7 +50,6 @@ void main(
     uint batchCount = perBatchCounts[globalIndexFromWave];
     RWStructuredBuffer<DrawMeshTasksIndirectCommand> indirectCommands = pushConstants.indirectTaskCommands.get();
     DrawMeshTasksIndirectCommand cmd;
-    cmd.x = 1;
     cmd.y = batchCount;
     cmd.z = 1;
     cmd.pad = globalIndexFromWave;
