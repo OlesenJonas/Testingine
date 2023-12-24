@@ -1119,19 +1119,44 @@ VkCommandBuffer Editor::drawSceneBatches(int threadIndex)
 
     gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(batchRenderingPC), &batchRenderingPC);
 
-    for(int i = 0; i < batchManager.getBatchList().size(); i++)
+    constexpr auto paddedCmdSize = 4 * sizeof(uint32_t);
+    uint32_t consecBatches = 1;
+    uint32_t startBatchIndex = 0;
+    Material::Handle material = batchManager.getBatchList()[0].Get<Material::Handle>();
+    for(int i = 1; i < batchManager.getBatchList().size(); i++)
     {
-        const auto& [mat, mesh] = batchManager.getBatchList()[i];
-        batchRenderingPC.batchIndex = i;
-        gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, *resourceManager.get<VkPipeline>(mat));
-        gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(batchRenderingPC), &batchRenderingPC);
-        // start just one task shader (which in turn decides how many meshlets to render based on instance count)
-        //      no culling happening here
-        // gfxDevice.drawMeshlets(offscreenCmdBuffer, 1);
-        constexpr auto paddedCmdSize = 4 * sizeof(uint32_t);
-        gfxDevice.drawMeshTasksIndirect(
-            offscreenCmdBuffer, indirectTaskCommandsBuffer, i * paddedCmdSize, paddedCmdSize, 1);
+        const Material::Handle newMat = batchManager.getBatchList()[i].Get<Material::Handle>();
+        if(newMat != material)
+        {
+            gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, *resourceManager.get<VkPipeline>(material));
+            batchRenderingPC.batchIndex = startBatchIndex;
+            gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(batchRenderingPC), &batchRenderingPC);
+            gfxDevice.drawMeshTasksIndirect(
+                offscreenCmdBuffer,
+                indirectTaskCommandsBuffer,
+                startBatchIndex * paddedCmdSize,
+                paddedCmdSize,
+                consecBatches);
+
+            consecBatches = 1;
+            startBatchIndex = i;
+            material = newMat;
+        }
+        else
+        {
+            consecBatches++;
+        }
     }
+    // draw last batch
+    gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, *resourceManager.get<VkPipeline>(material));
+    batchRenderingPC.batchIndex = startBatchIndex;
+    gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(batchRenderingPC), &batchRenderingPC);
+    gfxDevice.drawMeshTasksIndirect(
+        offscreenCmdBuffer,
+        indirectTaskCommandsBuffer,
+        startBatchIndex * paddedCmdSize,
+        paddedCmdSize,
+        consecBatches);
 
     gfxDevice.endRendering(offscreenCmdBuffer);
     gfxDevice.endCommandBuffer(offscreenCmdBuffer);

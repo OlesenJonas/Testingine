@@ -6,7 +6,7 @@ DefinePushConstants(
     ResrcHandle< ConstantBuffer<RenderPassData> > renderInfoBuffer;
     ResrcHandle< StructuredBuffer<uint> > perBatchOffsetBuffer;
     ResrcHandle< StructuredBuffer<InstanceInfo> > sortedInstanceBuffer;
-    uint batchIndex;
+    uint startBatchIndex;
 );
 
 struct Payload

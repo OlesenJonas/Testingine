@@ -69,7 +69,9 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    VkPhysicalDeviceFeatures deviceFeatures{};
+    VkPhysicalDeviceFeatures deviceFeatures{
+        .multiDrawIndirect = VK_TRUE,
+    };
 
     // TODO: if the amount of requested core features grows, switch to
     //   https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkPhysicalDeviceVulkan13Features.html
@@ -200,8 +202,14 @@ bool VulkanDeviceFinder::isDeviceSuitable(VkPhysicalDevice device)
         VkPhysicalDeviceFeatures2 deviceFeatures{
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
             .pNext = &shaderDrawParamFeatures,
+            .features =
+                {
+                    .multiDrawIndirect = VK_TRUE,
+                },
         };
         vkGetPhysicalDeviceFeatures2(device, &deviceFeatures);
+        featuresSupported &= deviceFeatures.features.multiDrawIndirect;
+
         featuresSupported &= scalarBlockLayoutFeatures.scalarBlockLayout;
 
         featuresSupported &= descIndexingFeatures.shaderUniformTexelBufferArrayDynamicIndexing;

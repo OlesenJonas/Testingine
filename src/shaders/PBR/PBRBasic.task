@@ -6,7 +6,7 @@ DefinePushConstants(
     ResrcHandle< Placeholder > renderInfoBuffer;
     ResrcHandle< StructuredBuffer<uint> > perBatchOffsetBuffer;
     ResrcHandle< StructuredBuffer<InstanceInfo> > sortedInstanceBuffer;
-    uint batchIndex;
+    uint startBatchIndex;
 );
 
 struct Payload
@@ -20,13 +20,16 @@ groupshared Payload payload;
 
 [NumThreads(32, 1, 1)]
 void main(
-    uint2 groupID : SV_GroupID
+    uint2 groupID : SV_GroupID,
+    [[vk::builtin("DrawIndex")]]
+    uint drawIndex : DRAW_INDEX
 )
 {
     #define instanceBuffer StrucBuffFromHandle(InstanceInfo, pushConstants.sortedInstanceBuffer)
     #define batchOffsetBuffer StrucBuffFromHandle(uint, pushConstants.perBatchOffsetBuffer)
+    uint batchIndex = pushConstants.startBatchIndex + drawIndex;
     // after sorting entries are shifted by 1 index
-    uint batchStartInInstanceBuffer = pushConstants.batchIndex == 0 ? 0 : batchOffsetBuffer[pushConstants.batchIndex-1];
+    uint batchStartInInstanceBuffer = batchIndex == 0 ? 0 : batchOffsetBuffer[batchIndex-1];
 
     //access any instance to get access to meshlet count
     const InstanceInfo aInstance = instanceBuffer[batchStartInInstanceBuffer];
