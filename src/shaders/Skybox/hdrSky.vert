@@ -30,8 +30,8 @@ VSOutput main(VSInput input)
 
     const ConstantBuffer<RenderPassData> renderPassData = getRenderPassData();
 
-    const float4x4 projMatrix = renderPassData.proj;
-    const float4x4 viewMatrix = renderPassData.view;
+    const float4x4 projMatrix = renderPassData.drawCam.proj;
+    const float4x4 viewMatrix = renderPassData.drawCam.view;
     //remove translation component from view matrix
     const float4x4 viewMatrixNoTranslate = float4x4(
         viewMatrix[0].xyz,0.0,

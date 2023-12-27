@@ -71,6 +71,7 @@ VkDevice VulkanDeviceFinder::createLogicalDevice()
 
     VkPhysicalDeviceFeatures deviceFeatures{
         .multiDrawIndirect = VK_TRUE,
+        .fillModeNonSolid = VK_TRUE,
     };
 
     // TODO: if the amount of requested core features grows, switch to
@@ -202,13 +203,10 @@ bool VulkanDeviceFinder::isDeviceSuitable(VkPhysicalDevice device)
         VkPhysicalDeviceFeatures2 deviceFeatures{
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
             .pNext = &shaderDrawParamFeatures,
-            .features =
-                {
-                    .multiDrawIndirect = VK_TRUE,
-                },
         };
         vkGetPhysicalDeviceFeatures2(device, &deviceFeatures);
         featuresSupported &= deviceFeatures.features.multiDrawIndirect;
+        featuresSupported &= deviceFeatures.features.fillModeNonSolid;
 
         featuresSupported &= scalarBlockLayoutFeatures.scalarBlockLayout;
 

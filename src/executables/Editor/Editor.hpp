@@ -30,8 +30,10 @@ class Editor final : public Application
     ECS ecs;
     Scene scene;
 
-    // TODO: not sure if camera should be part of just Editor, or Application is general
-    Camera mainCamera;
+    Camera mainCam;
+    Camera debugCam;
+    bool inDebugView = false;
+    VkPipeline frustumVisPSO;
 
     Texture::Format depthFormat = Texture::Format::D32_FLOAT;
     Texture::Handle depthTexture;
@@ -77,13 +79,24 @@ class Editor final : public Application
     VkCommandBuffer drawUI(int threadIndex);
 
     // TODO: store somewhere else and keep synced with shader code version of struct
-    struct RenderPassData
+    struct CameraMatrices
     {
         glm::mat4 view;
+        glm::mat4 invView;
         glm::mat4 proj;
+        glm::mat4 invProj;
         glm::mat4 projView;
-        glm::vec3 cameraPositionWS;
+
+        glm::vec3 positionWS;
         float pad;
+        glm::vec4 pad1;
+        glm::vec4 pad2;
+        glm::vec4 pad3;
+    };
+    struct RenderPassData
+    {
+        CameraMatrices mainCam;
+        CameraMatrices drawCam; // can be debug, or main
     };
 
     struct GPUMeshDataBuffer

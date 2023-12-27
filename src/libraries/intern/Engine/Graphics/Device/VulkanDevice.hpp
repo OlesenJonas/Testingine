@@ -77,9 +77,12 @@ class VulkanDevice
         Span<uint32_t> taskSpirv;
         Span<uint32_t> meshSpirv;
         Span<uint32_t> fragmentSpirv;
-        //--
-        // TODO: vertex inputs!
-        //--
+        enum struct PolygonMode
+        {
+            Lines,
+            Triangle,
+        };
+        PolygonMode polygonMode = PolygonMode::Triangle;
         Span<const Texture::Format> colorFormats;
         Texture::Format depthFormat = Texture::Format::UNDEFINED;
         Texture::Format stencilFormat = Texture::Format::UNDEFINED;

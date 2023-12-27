@@ -1079,7 +1079,9 @@ VkPipeline VulkanDevice::createGraphicsPipeline(const PipelineCreateInfo& create
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .pNext = nullptr,
 
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .topology = createInfo.polygonMode == PipelineCreateInfo::PolygonMode::Lines
+                        ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST
+                        : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .primitiveRestartEnable = VK_FALSE,
     };
 
@@ -1090,7 +1092,8 @@ VkPipeline VulkanDevice::createGraphicsPipeline(const PipelineCreateInfo& create
         .depthClampEnable = VK_FALSE,
         .rasterizerDiscardEnable = VK_FALSE,
 
-        .polygonMode = VK_POLYGON_MODE_FILL,
+        .polygonMode = createInfo.polygonMode == PipelineCreateInfo::PolygonMode::Lines ? VK_POLYGON_MODE_LINE
+                                                                                        : VK_POLYGON_MODE_FILL,
 
         .cullMode = VK_CULL_MODE_NONE,
         .frontFace = VK_FRONT_FACE_CLOCKWISE,

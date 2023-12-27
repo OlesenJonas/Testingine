@@ -4,6 +4,7 @@
 void Editor::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
     auto* editor = static_cast<Editor*>(glfwGetWindowUserPointer(window));
+    Camera& activeCam = editor->inDebugView ? editor->debugCam : editor->mainCam;
 
     // IsWindowHovered enough? or ImGui::getIO().WantCapture[Mouse/Key]
     if(ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow | ImGuiHoveredFlags_AllowWhenBlockedByPopup))
@@ -18,12 +19,12 @@ void Editor::mouseButtonCallback(GLFWwindow* window, int button, int action, int
     if(button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
     {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        editor->mainCamera.setMode(Camera::Mode::FLY);
+        activeCam.setMode(Camera::Mode::FLY);
     }
     if(button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
     {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-        editor->mainCamera.setMode(Camera::Mode::ORBIT);
+        activeCam.setMode(Camera::Mode::ORBIT);
     }
     if(button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
@@ -44,17 +45,18 @@ void Editor::keyCallback(GLFWwindow* window, int key, int scancode, int action, 
 void Editor::scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
     auto* editor = static_cast<Editor*>(glfwGetWindowUserPointer(window));
+    Camera& activeCam = editor->inDebugView ? editor->debugCam : editor->mainCam;
     // IsWindowHovered enough? or ImGui::getIO().WantCapture[Mouse/Key]
     if(!ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow))
     {
-        if(editor->mainCamera.getMode() == Camera::Mode::ORBIT)
+        if(activeCam.getMode() == Camera::Mode::ORBIT)
         {
-            editor->mainCamera.changeRadius(yoffset < 0);
+            activeCam.changeRadius(yoffset < 0);
         }
-        else if(editor->mainCamera.getMode() == Camera::Mode::FLY)
+        else if(activeCam.getMode() == Camera::Mode::FLY)
         {
             float factor = (yoffset > 0) ? 1.1f : 1 / 1.1f;
-            editor->mainCamera.setFlySpeed(editor->mainCamera.getFlySpeed() * factor);
+            activeCam.setFlySpeed(activeCam.getFlySpeed() * factor);
         }
     }
 }

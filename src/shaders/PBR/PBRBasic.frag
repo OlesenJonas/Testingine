@@ -70,7 +70,7 @@ float4 main(VSOutput input) : SV_TARGET
     ConstantBuffer<MaterialInstanceParameters> instanceParams = getMaterialInstanceParameters(instanceInfo);
 
     ConstantBuffer<RenderPassData> renderPassData = pushConstants.renderInfoBuffer.get();
-    const float3 cameraPositionWS = renderPassData.cameraPositionWS;
+    const float3 cameraPositionWS = renderPassData.drawCam.positionWS;
 
     //Dont like this, optimally would have different shader variants were correct uvs are selected at compile time
     float2 uvs[3] = {input.vTexCoord0,input.vTexCoord1,input.vTexCoord2};

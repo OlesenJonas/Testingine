@@ -67,8 +67,8 @@ void main(
         //todo: dont just scale up by some large number, instead make forcing depth to 1.0 work!
         float4 worldPos = float4(500*vertPos,1.0);
 
-        const float4x4 projMatrix = renderPassData.proj;
-        const float4x4 viewMatrix = renderPassData.view;
+        const float4x4 projMatrix = renderPassData.drawCam.proj;
+        const float4x4 viewMatrix = renderPassData.drawCam.view;
         //remove translation component from view matrix
         const float4x4 viewMatrixNoTranslate = float4x4(
             viewMatrix[0].xyz,0.0,

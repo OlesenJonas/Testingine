@@ -62,7 +62,7 @@ void main(
     {
         uint vertexIndex = meshletUniqueVertexIndices[m.vertexBegin + threadID];
 
-        const float4x4 projViewMatrix = renderPassData.projView;
+        const float4x4 projViewMatrix = renderPassData.drawCam.projView;
 
         VertexOut vsOut = (VertexOut)0;
         vsOut.instanceIndex = pushConstants.indexInInstanceBuffer;

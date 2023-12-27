@@ -5,6 +5,7 @@
 #include <Engine/Graphics/Barrier/Barrier.hpp>
 #include <Engine/Graphics/Mesh/Cube.hpp>
 #include <Engine/Graphics/Mesh/Fullscreen.hpp>
+#include <Engine/Graphics/Shaders/HLSL.hpp>
 #include <Engine/Misc/Math.hpp>
 #include <ImGui/imgui.h>
 #include <ImGui/imgui_impl_glfw.h>
@@ -39,8 +40,24 @@ Editor::Editor()
     ThreadPool::nameCurrentThread("Main Thread");
     threadPool.start(4);
 
-    mainCamera =
-        Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
+    mainCam = Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
+    debugCam = Camera{static_cast<float>(mainWindow.width) / static_cast<float>(mainWindow.height), 0.1f, 1000.0f};
+
+    {
+        std::vector<uint32_t> vertexBinary =
+            compileHLSL(SHADERS_PATH "/Misc/FrustumVis.vert", Shaders::Stage::Vertex);
+        std::vector<uint32_t> fragmentBinary =
+            compileHLSL(SHADERS_PATH "/Misc/FrustumVis.frag", Shaders::Stage::Fragment);
+
+        frustumVisPSO = gfxDevice.createGraphicsPipeline(VulkanDevice::PipelineCreateInfo{
+            .debugName = "PipelineVisPSO",
+            .vertexSpirv = vertexBinary,
+            .fragmentSpirv = fragmentBinary,
+            .polygonMode = VulkanDevice::PipelineCreateInfo::PolygonMode::Lines,
+            .colorFormats = {offscreenRTFormat},
+            .depthFormat = depthFormat,
+        });
+    }
 
     // Disable validation error breakpoints during init, synch errors arent correct
     gfxDevice.disableValidationErrorBreakpoint();
@@ -917,6 +934,8 @@ Editor::~Editor()
     // TODO: need a fancy way of ensuring that this is always called in applications
     //       Cant use base class destructor since that will only be called *after*wards
     gfxDevice.waitForWorkFinished();
+
+    gfxDevice.destroy(frustumVisPSO);
 }
 
 void Editor::run()
@@ -945,11 +964,19 @@ void Editor::update()
     inputManager.update(mainWindow.glfwWindow);
     if(!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
     {
-        mainCamera.update(mainWindow.glfwWindow, &inputManager);
+        if(inDebugView)
+            debugCam.update(mainWindow.glfwWindow, &inputManager);
+        else
+            mainCam.update(mainWindow.glfwWindow, &inputManager);
     }
     // Not sure about the order of UI & engine code
 
     ImGui::ShowDemoWindow();
+    {
+        ImGui::Begin("Settings", nullptr);
+        ImGui::Checkbox("Use debug cam", &inDebugView);
+        ImGui::End();
+    }
     ImGui::Render();
 
     // --------------- Rendering code -----------------------------
@@ -968,10 +995,24 @@ void Editor::update()
 
     // update renderPassData
     RenderPassData renderPassData;
-    renderPassData.proj = mainCamera.getProj();
-    renderPassData.view = mainCamera.getView();
-    renderPassData.projView = mainCamera.getProjView();
-    renderPassData.cameraPositionWS = mainCamera.getPosition();
+    renderPassData.mainCam = CameraMatrices{
+        .view = mainCam.getView(),
+        .invView = mainCam.getInvView(),
+        .proj = mainCam.getProj(),
+        .invProj = mainCam.getInvProj(),
+        .projView = mainCam.getProjView(),
+        .positionWS = mainCam.getPosition(),
+    };
+    renderPassData.drawCam = !inDebugView ? renderPassData.mainCam
+                                          : renderPassData.drawCam = CameraMatrices{
+                                                .view = debugCam.getView(),
+                                                .invView = debugCam.getInvView(),
+                                                .proj = debugCam.getProj(),
+                                                .invProj = debugCam.getInvProj(),
+                                                .projView = debugCam.getProjView(),
+                                                .positionWS = debugCam.getPosition(),
+                                            };
+
     void* renderPassDataPtr = *resourceManager.get<void*>(getCurrentFrameData().renderPassDataBuffer);
     memcpy(renderPassDataPtr, &renderPassData, sizeof(RenderPassData));
 
@@ -1157,6 +1198,16 @@ VkCommandBuffer Editor::drawSceneBatches(int threadIndex)
         startBatchIndex * paddedCmdSize,
         paddedCmdSize,
         consecBatches);
+
+    if(inDebugView)
+    {
+        // draw frustum frustumVisPSO
+        gfxDevice.setGraphicsPipelineState(offscreenCmdBuffer, frustumVisPSO);
+        ResourceIndex renderPassDataBuffer =
+            *resourceManager.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer);
+        gfxDevice.pushConstants(offscreenCmdBuffer, sizeof(ResourceIndex), &renderPassDataBuffer);
+        gfxDevice.draw(offscreenCmdBuffer, 24, 1, 0, 0);
+    }
 
     gfxDevice.endRendering(offscreenCmdBuffer);
     gfxDevice.endCommandBuffer(offscreenCmdBuffer);
