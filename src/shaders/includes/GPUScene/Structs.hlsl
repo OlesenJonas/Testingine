@@ -14,6 +14,7 @@ struct MeshletDescriptor
     uint vertexCount; // number of vertices used
     uint primBegin;   // offset into primitiveIndices
     uint primCount;   // number of primitives (triangles) used
+    float4 boundingSphere; //position in local coords + radius
 };
 
 struct MeshData
@@ -50,6 +51,7 @@ struct InstanceInfo
 {
     float4x4 transform;
     float4x4 invTranspTransform;
+    float4 boundingSphere; //in world space, center + radius
     uint meshDataIndex;
     uint materialIndex;
     ResrcHandle< Placeholder > materialParamsBuffer;

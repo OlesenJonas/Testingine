@@ -1,9 +1,10 @@
 #define NO_DEFAULT_PUSH_CONSTANTS
 #include "../includes/Bindless/Setup.hlsl"
 #include "../includes/GPUScene/Setup.hlsl"
+#include "../includes/Culling.hlsl"
 
 DefinePushConstants(
-    ResrcHandle< Placeholder > renderInfoBuffer;
+    ResrcHandle< ConstantBuffer<RenderPassData> > renderPassData;
     ResrcHandle< StructuredBuffer<uint> > perBatchOffsetBuffer;
     ResrcHandle< StructuredBuffer<InstanceInfo> > sortedInstanceBuffer;
     uint startBatchIndex;
@@ -11,9 +12,8 @@ DefinePushConstants(
 
 struct Payload
 {
-    //TODO: instead of just offset, cull and send list of meshlets that survived
-    uint meshletOffset;
     uint instanceIndex;
+    uint meshletIndices[32];
 };
 
 groupshared Payload payload;
@@ -27,21 +27,66 @@ void main(
 {
     #define instanceBuffer StrucBuffFromHandle(InstanceInfo, pushConstants.sortedInstanceBuffer)
     #define batchOffsetBuffer StrucBuffFromHandle(uint, pushConstants.perBatchOffsetBuffer)
-    uint batchIndex = pushConstants.startBatchIndex + drawIndex;
+    const uint batchIndex = pushConstants.startBatchIndex + drawIndex;
     // after sorting entries are shifted by 1 index
-    uint batchStartInInstanceBuffer = batchIndex == 0 ? 0 : batchOffsetBuffer[batchIndex-1];
+    const uint batchStartInInstanceBuffer = batchIndex == 0 ? 0 : batchOffsetBuffer[batchIndex-1];
+    const uint instanceIndex = batchStartInInstanceBuffer + groupID.y;
 
     //access any instance to get access to meshlet count
-    const InstanceInfo aInstance = instanceBuffer[batchStartInInstanceBuffer];
-    const MeshData meshData = getMeshData(aInstance);
+    const InstanceInfo instance = instanceBuffer[instanceIndex];
+    const MeshData meshData = getMeshData(instance);
     const uint meshletCount = meshData.meshletCount;
 
-    //TODO: cull meshlets
-    payload.meshletOffset = groupID.x * 32;
-    payload.instanceIndex = batchStartInInstanceBuffer + groupID.y;
+    const uint groupMeshletOffset = groupID.x * 32u;
+    const uint meshletIndexToCheck = groupMeshletOffset + WaveGetLaneIndex();
 
-    uint meshletsLeft = meshletCount - payload.meshletOffset; 
-    uint actualMeshCount = min(meshletsLeft, 32u);
+    bool visible = false;
+    
+    if(meshletIndexToCheck < meshletCount)
+    {
+        visible = true;
 
-    DispatchMesh(32, 1, 1, payload);
+        ConstantBuffer<RenderPassData> renderPassData = pushConstants.renderPassData.get();
+        const float4x4 m = renderPassData.mainCam.projView;
+        float4 frustumPlanes[6];
+        getFrustumPlanes(m, frustumPlanes);
+
+        const float4x4 instanceTransform = instance.transform;
+        #define MeshletDescriptorsBuffer StrucBuffFromHandle(MeshletDescriptor, meshData.meshletDescriptors)
+        const MeshletDescriptor meshletDesc = MeshletDescriptorsBuffer[meshletIndexToCheck];
+        float4 boundingSphereWorld = float4(
+            mul(instanceTransform, float4(meshletDesc.boundingSphere.xyz,1.0)).xyz,
+            meshletDesc.boundingSphere.w
+        );
+        //scale bounding sphere radius uniformly by max scale, find max scale from longest row
+        // (mat * (1,0,0) returns 0th column of matrix and length of that gives scale of local x)
+        float maxLength = 0.0;
+        float4 col = float4(instanceTransform._m00,instanceTransform._m10,instanceTransform._m20,instanceTransform._m30);
+        maxLength = max(maxLength, length(col));
+        col = float4(instanceTransform._m01,instanceTransform._m11,instanceTransform._m21,instanceTransform._m31);
+        maxLength = max(maxLength, length(col));
+        col = float4(instanceTransform._m02,instanceTransform._m12,instanceTransform._m22,instanceTransform._m32);
+        maxLength = max(maxLength, length(col));
+        boundingSphereWorld.w *= maxLength;
+        
+        //can ignore scale for now, since all transform have scale == 1,1,1!
+        //TODO: still: implement
+
+        [unroll]
+        for(int i=0; i<6; i++)
+        {
+            const float distToPlane = dot(float4(boundingSphereWorld.xyz,1), frustumPlanes[i]);
+            visible &= distToPlane > -boundingSphereWorld.w;
+        }
+    }
+
+    if(visible)
+    {
+        uint index = WavePrefixCountBits(visible);
+        payload.meshletIndices[index] = meshletIndexToCheck;
+    }
+    payload.instanceIndex = instanceIndex;
+
+    uint visibleCount = WaveActiveCountBits(visible);
+    DispatchMesh(visibleCount, 1, 1, payload);
 }

@@ -4,7 +4,8 @@
 void Editor::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
     auto* editor = static_cast<Editor*>(glfwGetWindowUserPointer(window));
-    Camera& activeCam = editor->inDebugView ? editor->debugCam : editor->mainCam;
+    Camera& activeCam = (!editor->inDebugView || editor->inDebugView && editor->controlMainCam) ? editor->mainCam
+                                                                                                : editor->debugCam;
 
     // IsWindowHovered enough? or ImGui::getIO().WantCapture[Mouse/Key]
     if(ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow | ImGuiHoveredFlags_AllowWhenBlockedByPopup))
@@ -45,7 +46,8 @@ void Editor::keyCallback(GLFWwindow* window, int key, int scancode, int action, 
 void Editor::scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
     auto* editor = static_cast<Editor*>(glfwGetWindowUserPointer(window));
-    Camera& activeCam = editor->inDebugView ? editor->debugCam : editor->mainCam;
+    Camera& activeCam = (!editor->inDebugView || editor->inDebugView && editor->controlMainCam) ? editor->mainCam
+                                                                                                : editor->debugCam;
     // IsWindowHovered enough? or ImGui::getIO().WantCapture[Mouse/Key]
     if(!ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow))
     {

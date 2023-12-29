@@ -162,38 +162,14 @@ Mesh::Handle ResourceManager::createMesh(
         indices = trivialIndices;
     }
 
-    const size_t maxVerticesPerMeshlet = 64;
-    const size_t maxTrisPerMeshlet = 124;
-    const float coneWeight = 0.5f;
-    size_t maxMeshlets = meshopt_buildMeshletsBound(indices.size(), maxVerticesPerMeshlet, maxTrisPerMeshlet);
-    std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
-    std::vector<uint32_t> combinedMeshletVertexIndices(maxMeshlets * maxVerticesPerMeshlet);
-    std::vector<uint8_t> combinedMeshletPrimitiveIndices_u8(maxMeshlets * maxTrisPerMeshlet * 3);
-
-    size_t meshletCountActual = meshopt_buildMeshlets(
-        meshlets.data(),
-        combinedMeshletVertexIndices.data(),
-        combinedMeshletPrimitiveIndices_u8.data(),
-        indices.data(),
-        indices.size(),
-        &vertexPositions[0].x,
-        vertexPositions.size(),
-        sizeof(vertexPositions[0]),
-        maxVerticesPerMeshlet,
-        maxTrisPerMeshlet,
-        coneWeight);
-
-    // TODO: remove
-    // std::vector<uint32_t> combinedMeshletPrimitiveIndices(combinedMeshletPrimitiveIndices_u8.size());
-    // for(int i = 0; i < combinedMeshletPrimitiveIndices_u8.size(); i++)
-    //     combinedMeshletPrimitiveIndices[i] = combinedMeshletPrimitiveIndices_u8[i];
-    auto& combinedMeshletPrimitiveIndices = combinedMeshletPrimitiveIndices_u8;
-
-    const meshopt_Meshlet& last = meshlets[meshletCountActual - 1];
-    combinedMeshletVertexIndices.resize(last.vertex_offset + last.vertex_count);
-    // TODO: understand why aligned to 4(?) (&~3)
-    combinedMeshletPrimitiveIndices.resize(last.triangle_offset + ((last.triangle_count * 3 + 3) & ~3));
-    meshlets.resize(meshletCountActual);
+    float maxDist = 0.0f;
+    for(const auto& pos : vertexPositions)
+    {
+        // assume every bounding sphere is centered around 0,0,0
+        // TODO: dont
+        float length = glm::length(pos);
+        maxDist = glm::max(length, maxDist);
+    }
 
     Buffer::Handle positionBufferHandle = createBuffer(Buffer::CreateInfo{
         .debugName = (name + "_positionsBuffer"),
@@ -225,6 +201,33 @@ Mesh::Handle ResourceManager::createMesh(
     });
     */
 
+    const size_t maxVerticesPerMeshlet = 64;
+    const size_t maxTrisPerMeshlet = 124;
+    const float coneWeight = 0.5f;
+    size_t maxMeshlets = meshopt_buildMeshletsBound(indices.size(), maxVerticesPerMeshlet, maxTrisPerMeshlet);
+    std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
+    std::vector<uint32_t> combinedMeshletVertexIndices(maxMeshlets * maxVerticesPerMeshlet);
+    std::vector<uint8_t> combinedMeshletPrimitiveIndices(maxMeshlets * maxTrisPerMeshlet * 3);
+
+    size_t meshletCountActual = meshopt_buildMeshlets(
+        meshlets.data(),
+        combinedMeshletVertexIndices.data(),
+        combinedMeshletPrimitiveIndices.data(),
+        indices.data(),
+        indices.size(),
+        &vertexPositions[0].x,
+        vertexPositions.size(),
+        sizeof(vertexPositions[0]),
+        maxVerticesPerMeshlet,
+        maxTrisPerMeshlet,
+        coneWeight);
+
+    const meshopt_Meshlet& last = meshlets[meshletCountActual - 1];
+    combinedMeshletVertexIndices.resize(last.vertex_offset + last.vertex_count);
+    // TODO: understand why aligned to 4(?) (&~3)
+    combinedMeshletPrimitiveIndices.resize(last.triangle_offset + ((last.triangle_count * 3 + 3) & ~3));
+    meshlets.resize(meshletCountActual);
+
     Buffer::Handle meshletsUniqueVertexIndicesBuffer = createBuffer(Buffer::CreateInfo{
         .debugName = (name + "_meshletUniqueVertexIndices"),
         .size = combinedMeshletVertexIndices.size() * sizeof(combinedMeshletVertexIndices[0]),
@@ -251,11 +254,22 @@ Mesh::Handle ResourceManager::createMesh(
     for(int i = 0; i < meshletCountActual; i++)
     {
         const auto& meshletInfo = meshlets[i];
+
+        meshopt_Bounds meshletBounds = meshopt_computeMeshletBounds(
+            &combinedMeshletVertexIndices[meshletInfo.vertex_offset],
+            &combinedMeshletPrimitiveIndices[meshletInfo.triangle_offset],
+            meshletInfo.triangle_count,
+            &(vertexPositions[0].x),
+            vertexPositions.size(),
+            sizeof(vertexPositions[0]));
+
         meshletDescriptors[i] = {
             .vertexBegin = meshletInfo.vertex_offset,
             .vertexCount = meshletInfo.vertex_count,
             .primBegin = meshletInfo.triangle_offset,
             .primCount = meshletInfo.triangle_count,
+            .boundingSphere = glm::vec4(
+                meshletBounds.center[0], meshletBounds.center[1], meshletBounds.center[2], meshletBounds.radius),
         };
     }
 
@@ -274,6 +288,7 @@ Mesh::Handle ResourceManager::createMesh(
             // .indexCount = uint32_t(indices.size()),
             .meshletCount = static_cast<uint32_t>(meshletCountActual),
             .additionalUVCount = vertexAttributesFormat.additionalUVCount,
+            .boundingSphereRadius = maxDist,
             // .indexBuffer = indexBufferHandle,
             .positionBuffer = positionBufferHandle,
             .attributeBuffer = attributesBufferHandle,

@@ -21,10 +21,16 @@ void main(uint globalThreadID : SV_DispatchThreadID)
     RWStructuredBuffer<InstanceInfo> outInstances = pushConstants.sortedInstancesBuffer.get();
     RWStructuredBuffer<uint> batchOffsets = pushConstants.perBatchOffsetBuffer.get();
 
-    //todo consecutive instances likely share same index, so could try to use subgroup ops to reduce
-    //     number of atomic calls needed!
-    //  some combination of bitmask and findFirst?
-    uint outIndex = 0;
-    InterlockedAdd(batchOffsets[batchIndex],1,outIndex);
-    outInstances[outIndex] = inInstances[globalThreadID];
+    const InstanceInfo instanceInfo = inInstances[globalThreadID];
+    // use bounding sphere radius' sign bit to encode if instance is visible
+    const bool visible = asuint(instanceInfo.boundingSphere.w) & (1u << 31u);
+    if(visible)
+    {
+        //todo consecutive instances likely share same index, so could try to use subgroup ops to reduce
+        //     number of atomic calls needed!
+        //  some combination of bitmask and findFirst?
+        uint outIndex = 0;
+        InterlockedAdd(batchOffsets[batchIndex],1,outIndex);
+        outInstances[outIndex] = instanceInfo;
+    }
 }

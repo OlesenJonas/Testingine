@@ -62,6 +62,7 @@ struct Mesh
         // uint32_t indexCount = 0;
         uint32_t meshletCount = 0;
         uint32_t additionalUVCount = 0;
+        float boundingSphereRadius = 0.0f;
         // Buffer::Handle indexBuffer = Buffer::Handle::Invalid();
         Buffer::Handle positionBuffer = Buffer::Handle::Invalid();
         Buffer::Handle attributeBuffer = Buffer::Handle::Invalid();

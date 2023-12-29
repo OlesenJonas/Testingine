@@ -64,6 +64,29 @@ Editor::Editor()
 
     createDefaultAssets();
 
+    // update renderPassData
+    RenderPassData renderPassData;
+    renderPassData.mainCam = CameraMatrices{
+        .view = mainCam.getView(),
+        .invView = mainCam.getInvView(),
+        .proj = mainCam.getProj(),
+        .invProj = mainCam.getInvProj(),
+        .projView = mainCam.getProjView(),
+        .positionWS = mainCam.getPosition(),
+    };
+    renderPassData.drawCam = !inDebugView ? renderPassData.mainCam
+                                          : renderPassData.drawCam = CameraMatrices{
+                                                .view = debugCam.getView(),
+                                                .invView = debugCam.getInvView(),
+                                                .proj = debugCam.getProj(),
+                                                .invProj = debugCam.getInvProj(),
+                                                .projView = debugCam.getProjView(),
+                                                .positionWS = debugCam.getPosition(),
+                                            };
+
+    void* renderPassDataPtr = *resourceManager.get<void*>(getCurrentFrameData().renderPassDataBuffer);
+    memcpy(renderPassDataPtr, &renderPassData, sizeof(RenderPassData));
+
     // TODO: execute this while GPU is already doing work, instead of waiting for this *then* starting GPU
     Scene::load("C:/Users/jonas/Documents/Models/Sponza/out/Sponza.gltf", &ecs, scene.root);
 
@@ -162,9 +185,17 @@ Editor::Editor()
                 const Buffer::Handle matParamBuffer = rm.get<Material::ParameterBuffer>(mat)->deviceBuffer;
                 bool hasMatParameters = matParamBuffer.isNonNull();
 
+                glm::vec3 boundingSphereCenter = transform->localToWorld * glm::vec4(0, 0, 0, 1);
+                const float xScale = glm::length(glm::column(transform->localToWorld, 0));
+                const float yScale = glm::length(glm::column(transform->localToWorld, 1));
+                const float zScale = glm::length(glm::column(transform->localToWorld, 2));
+                const float maxScale = glm::max(xScale, glm::max(yScale, zScale));
+                const float boundingSphereRadius = renderData.boundingSphereRadius * maxScale;
+
                 gpuInstancePtr[instanceBufferIndex] = InstanceInfo{
                     .transform = transform->localToWorld,
                     .invTranspTransform = glm::inverseTranspose(transform->localToWorld),
+                    .boundingSphere = glm::vec4(boundingSphereCenter, boundingSphereRadius),
                     .meshDataIndex = renderData.gpuIndex,
                     .materialIndex = 0xFFFFFFFF, // TODO: correct value
                     .materialParamsBuffer = hasMatParameters ? *rm.get<ResourceIndex>(matParamBuffer) : 0xFFFFFFFF,
@@ -221,6 +252,7 @@ Editor::Editor()
     });
     struct CountBatchElementsPC
     {
+        ResourceIndex renderPassDataBuffer;
         ResourceIndex unsortedInstanceInfoBuffer;
         ResourceIndex meshDataBuffer;
         ResourceIndex batchIndicesBuffer;
@@ -228,6 +260,7 @@ Editor::Editor()
         ResourceIndex indirectTaskCommandsBuffer;
         uint32_t totalInstances;
     } countBatchElementsPC{
+        .renderPassDataBuffer = *rm.get<ResourceIndex>(getCurrentFrameData().renderPassDataBuffer),
         .unsortedInstanceInfoBuffer = *rm.get<ResourceIndex>(gpuInstanceInfoBuffer.unsortedBuffer),
         .meshDataBuffer = *rm.get<ResourceIndex>(gpuMeshDataBuffer.buffer),
         .batchIndicesBuffer = *rm.get<ResourceIndex>(batchIndicesBuffer),
@@ -964,17 +997,20 @@ void Editor::update()
     inputManager.update(mainWindow.glfwWindow);
     if(!ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
     {
-        if(inDebugView)
-            debugCam.update(mainWindow.glfwWindow, &inputManager);
-        else
+        if(!inDebugView || (inDebugView && controlMainCam))
             mainCam.update(mainWindow.glfwWindow, &inputManager);
+        else
+            debugCam.update(mainWindow.glfwWindow, &inputManager);
     }
     // Not sure about the order of UI & engine code
 
     ImGui::ShowDemoWindow();
     {
         ImGui::Begin("Settings", nullptr);
-        ImGui::Checkbox("Use debug cam", &inDebugView);
+        if(ImGui::Checkbox("Use debug cam", &inDebugView))
+            controlMainCam = false;
+        if(inDebugView)
+            ImGui::Checkbox("Mouse controls main cam", &controlMainCam);
         ImGui::End();
     }
     ImGui::Render();

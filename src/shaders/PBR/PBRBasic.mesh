@@ -11,8 +11,8 @@ DefinePushConstants(
 
 struct Payload
 {
-    uint meshletOffset;
     uint instanceIndex;
+    uint meshletIndices[32];
 };
 
 /*
@@ -54,7 +54,7 @@ void main(
     const float3 vertPos = vertexPositions[0];
     #define vertexAttributes ByteBuffFromHandle(meshData.attributesBuffer)
 
-    MeshletDescriptor m = StrucBuffFromHandle(MeshletDescriptor, meshData.meshletDescriptors)[groupID.x + payload.meshletOffset];
+    MeshletDescriptor m = StrucBuffFromHandle(MeshletDescriptor, meshData.meshletDescriptors)[payload.meshletIndices[groupID.x]];
     #define meshletUniqueVertexIndices StrucBuffFromHandle(uint, meshData.meshletUniqueVertexIndices)
     #define meshletPrimitiveIndices StrucBuffFromHandle(uint, meshData.meshletPrimitiveIndices)
 

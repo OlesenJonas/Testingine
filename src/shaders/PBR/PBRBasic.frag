@@ -151,7 +151,7 @@ float4 main(VSOutput input) : SV_TARGET
     //todo: factor out into shadePointLightPBR(...) 
     //for each point light
     {
-        const float3 lightPosWS = float3(2,2,2);
+        const float3 lightPosWS = float3(0,2,0);
         const float3 lightColor = float3(23.47, 21.31, 20.79);
         
         const float3 Lunnorm = lightPosWS - input.vPositionWS;

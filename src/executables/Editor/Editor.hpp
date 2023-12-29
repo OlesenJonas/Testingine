@@ -33,6 +33,7 @@ class Editor final : public Application
     Camera mainCam;
     Camera debugCam;
     bool inDebugView = false;
+    bool controlMainCam = false;
     VkPipeline frustumVisPSO;
 
     Texture::Format depthFormat = Texture::Format::D32_FLOAT;
@@ -110,6 +111,7 @@ class Editor final : public Application
     {
         glm::mat4 transform;
         glm::mat4 invTranspTransform;
+        glm::vec4 boundingSphere;
         uint32_t meshDataIndex;
         uint32_t materialIndex;
         ResourceIndex materialParamsBuffer;
